@@ -11,8 +11,8 @@ const capabilities = computed(() => [
     num: '01',
     title: t('多模型路由', 'Multi-Provider LLM Routing'),
     desc: t(
-      '通过 Profile YAML 在 DeepSeek、Qwen、Kimi、Ollama 之间切换，零代码修改。显式 Provider 映射，不靠 Spring 容器类型扫描。',
-      'Switch between DeepSeek, Qwen, Kimi, and Ollama via Profile YAML — no code changes. Explicit provider mapping, no Spring container type scanning.'
+      '通过 Profile YAML 在 DeepSeek、Qwen、Kimi、Ollama 之间切换，零代码修改。Agent 不感知具体厂商，显式 Provider 映射保证路由正确。',
+      'Switch between DeepSeek, Qwen, Kimi, and Ollama via Profile YAML — no code changes. Agents are provider-agnostic; explicit mapping ensures correct routing.'
     ),
     code: `# .oryxos/profiles/ops-agent.yaml
 provider:
@@ -29,8 +29,8 @@ provider:
     num: '02',
     title: t('自实现 ReAct 循环', 'Self-implemented ReAct Loop'),
     desc: t(
-      '完整掌控 Reason → Act → Observe 循环，不依赖 Spring AI Agent 抽象。Tool 调用、审计写入全由 ToolExecutor 控制。',
-      'Full control over Reason → Act → Observe. No Spring AI Agent abstractions. Tool dispatch and audit writes are owned by ToolExecutor.'
+      '完整掌控 Reason → Act → Observe 循环，循环行为完全可控，不依赖 Spring AI Agent 抽象。Tool 调用、审计写入全由 ToolExecutor 控制。',
+      'Full control over Reason → Act → Observe — the loop is fully controllable, with no Spring AI Agent abstractions. Tool dispatch and audit writes are owned by ToolExecutor.'
     ),
     code: `User message
   → PromptBuilder: system + memory + history + tools
@@ -44,10 +44,10 @@ provider:
   },
   {
     num: '03',
-    title: t('三层记忆系统', 'Three-layer Memory'),
+    title: t('分层记忆系统', 'Layered Memory System'),
     desc: t(
-      '会话记忆、长期记忆（MEMORY.md）、情景记忆（路线图）。长期记忆自动注入每次 system prompt，Agent 跨会话保持一致。',
-      'Session memory, long-term memory (MEMORY.md), and episodic memory (roadmap). Long-term memory is auto-injected into every system prompt.'
+      '会话记忆 + 长期记忆（MEMORY.md 关键词检索）。长期记忆自动注入每次 system prompt，Agent 跨会话保持一致，后续可无缝升级向量检索。',
+      'Session memory plus long-term memory (MEMORY.md with keyword search). Auto-injected into every system prompt so agents stay consistent across sessions — with a clear upgrade path to vector search.'
     ),
     code: `# Agent saves a preference
 Tool: save_memory
@@ -105,6 +105,43 @@ const scenarios = computed(() => [
   },
 ])
 
+const roadmapPhases = computed(() => [
+  {
+    phase: t('阶段一', 'Phase 1'),
+    status: t('当前', 'CURRENT'),
+    active: true,
+    title: t('单节点运行内核', 'Single-node Runtime Kernel'),
+    items: [
+      t('5 大核心能力', '5 core capabilities'),
+      t('多 Agent 并存', 'Multi-agent on one node'),
+      t('REST API 暴露', 'REST API exposure'),
+      t('MCP 工具协议', 'MCP tool protocol'),
+    ],
+  },
+  {
+    phase: t('阶段二', 'Phase 2'),
+    status: t('规划中', 'PLANNED'),
+    active: false,
+    title: t('分布式基础', 'Distributed Foundation'),
+    items: [
+      t('无状态节点设计', 'Stateless node design'),
+      t('外部状态存储', 'External state store'),
+      t('多副本水平扩展', 'Multi-replica horizontal scale'),
+    ],
+  },
+  {
+    phase: t('阶段三', 'Phase 3'),
+    status: t('愿景', 'VISION'),
+    active: false,
+    title: t('跨节点 A2A 协作', 'Cross-node A2A Collaboration'),
+    items: [
+      t('Agent 发现与注册', 'Agent discovery & registry'),
+      t('跨 Agent 任务委托', 'Cross-agent task delegation'),
+      t('A2A 协议标准化', 'A2A protocol standard'),
+    ],
+  },
+])
+
 const flowColumns = computed(() => [
   {
     id: 'channels',
@@ -140,18 +177,18 @@ const flowColumns = computed(() => [
     <section class="hero">
       <div class="hero-inner">
         <p class="hero-eyebrow">
-          <span class="eyebrow-comment">// </span>{{ t('企业级 Agent OS · Java 21 · 私有部署', 'enterprise agent OS · Java 21 · self-hosted') }}
+          <span class="eyebrow-comment">// </span>{{ t('分布式 AI Agent OS · Java 21 · Apache 2.0', 'distributed AI agent OS · Java 21 · Apache 2.0') }}
         </p>
 
         <h1 class="hero-headline">
-          <span class="headline-white">{{ t('在你自己的', 'Run AI Agents') }}</span><br>
-          <span class="headline-amber">{{ t('基础设施上运行 AI Agent', 'On Your Own Infra') }}</span>
+          <span class="headline-white">{{ t('让一群 Agent', 'Run AI Agents') }}</span><br>
+          <span class="headline-amber">{{ t('像进程跑在操作系统上', 'Like Processes on an OS') }}</span>
         </h1>
 
         <p class="hero-sub">
           {{ t(
-            'OryxOS 是基于 Java 21 实现的企业级 Agent OS — 装在你自己的 K8s 或服务器上，作为统一底座运行多个业务 Agent，共享渠道接入、模型路由、工具调用、记忆系统和沙箱执行能力。',
-            'OryxOS is an enterprise Agent OS built on Java 21 — deploy it on your own K8s or servers as a unified platform for multiple business agents sharing channel access, LLM routing, tool execution, memory, and sandboxing.'
+            'OryxOS 是基于 Java 21 构建的分布式 AI Agent OS。私有部署在你自己的 K8s 或服务器上，让一群业务 Agent 像进程跑在操作系统上一样，可靠地运行和协同。',
+            'OryxOS is a distributed AI Agent OS built on Java 21. Deploy it on your own infra — agents run and collaborate like processes on an OS, sharing channels, LLM routing, tools, memory, and sandboxed execution.'
           ) }}
         </p>
 
@@ -247,8 +284,13 @@ const flowColumns = computed(() => [
       <div class="section-inner">
         <div class="section-header">
           <span class="section-label">{{ t('运行原理', 'HOW IT WORKS') }}</span>
-          <h2 class="section-h2 dark">{{ t('一个平台，所有 Agent。', 'One platform. Every agent.') }}</h2>
+          <h2 class="section-h2 dark">{{ t('Runtime 跑一个，OS 管一群。', 'Runtime for one. OS for many.') }}</h2>
         </div>
+
+        <p class="how-sub">{{ t(
+          'Agent Runtime 只负责运行单个 Agent；Agent OS 管理一群 Agent 的生命周期、渠道接入、LLM 路由、记忆隔离与跨节点协同。OryxOS 是后者。',
+          'An Agent Runtime runs one agent. An Agent OS manages a fleet — lifecycle, channels, LLM routing, memory isolation, and cross-node coordination. OryxOS is the latter.'
+        ) }}</p>
 
         <div class="flow">
           <div v-for="col in flowColumns" :key="col.id" class="flow-col" :class="{ 'flow-col--highlight': col.highlight }">
@@ -300,14 +342,37 @@ const flowColumns = computed(() => [
       </div>
     </section>
 
+    <!-- ── ROADMAP ── -->
+    <section class="section section-dark section-roadmap">
+      <div class="section-inner">
+        <div class="section-header">
+          <span class="section-label">{{ t('路线图', 'ROADMAP') }}</span>
+          <h2 class="section-h2">{{ t('慢就是快，分阶段克制。', 'Built to grow. Phase by phase.') }}</h2>
+        </div>
+
+        <div class="roadmap-grid">
+          <div v-for="p in roadmapPhases" :key="p.phase" class="roadmap-card" :class="{ 'roadmap-card--active': p.active }">
+            <div class="roadmap-top">
+              <span class="roadmap-phase">{{ p.phase }}</span>
+              <span class="roadmap-status" :class="{ 'roadmap-status--active': p.active }">{{ p.status }}</span>
+            </div>
+            <h3 class="roadmap-title">{{ p.title }}</h3>
+            <ul class="roadmap-items">
+              <li v-for="item in p.items" :key="item" class="roadmap-item">{{ item }}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ── CTA ── -->
     <section class="section section-cta">
       <div class="section-inner">
         <div class="cta-grid">
           <div class="cta-left">
             <span class="section-label label-dark">{{ t('立即开始', 'GET STARTED') }}</span>
-            <h2 class="cta-h2">{{ t('三步启动', 'Start in three steps') }}</h2>
-            <p class="cta-sub">{{ t('初始化工作区、配置 LLM Provider、开始对话。5 分钟搭起你的第一个企业 Agent。', 'Initialize the workspace, configure an LLM provider, and start chatting. Your first enterprise agent in under 5 minutes.') }}</p>
+            <h2 class="cta-h2">{{ t('从一个 Agent 到一群 Agent 的运行底座。', 'From one agent to a fleet.') }}</h2>
+            <p class="cta-sub">{{ t('初始化工作区、配置 LLM Provider、开始对话。5 分钟搭起你的第一个 Agent，随时扩展到一群。', 'Initialize the workspace, configure an LLM provider, and start chatting. Your first agent in under 5 minutes — scale to a fleet whenever you\'re ready.') }}</p>
             <div class="cta-btns">
               <a class="btn-dark" :href="t('/zh/docs/what', '/docs/what')">{{ t('查看文档', 'Read the Docs') }}</a>
               <a class="btn-dark-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">GitHub</a>
@@ -342,7 +407,7 @@ const flowColumns = computed(() => [
       <div class="footer-inner">
         <div class="footer-brand">
           <span class="footer-logo">Oryx<strong>OS</strong></span>
-          <span class="footer-tagline">{{ t('企业级 Agent OS · 私有部署', 'Enterprise Agent OS · Self-hosted') }}</span>
+          <span class="footer-tagline">{{ t('分布式 AI Agent OS · 私有部署', 'Distributed AI Agent OS · Self-hosted') }}</span>
         </div>
         <div class="footer-links">
           <a :href="t('/zh/docs/what', '/docs/what')" class="footer-link">{{ t('文档', 'Docs') }}</a>
@@ -916,5 +981,117 @@ a { text-decoration: none; }
 @media (max-width: 480px) {
   .hero-ctas { flex-direction: column; align-items: center; }
   .btn-primary, .btn-ghost { width: 200px; justify-content: center; }
+}
+
+/* ────────────────────────────────────────────────
+   HOW IT WORKS — SUB PARAGRAPH
+──────────────────────────────────────────────── */
+.how-sub {
+  font-size: 14px;
+  line-height: 1.75;
+  color: #666666;
+  text-align: center;
+  max-width: 680px;
+  margin: -32px auto 48px;
+}
+
+/* ────────────────────────────────────────────────
+   ROADMAP
+──────────────────────────────────────────────── */
+.section-roadmap { border-top: 1px solid #1e1e1e; }
+
+.roadmap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: #1e1e1e;
+  border: 1px solid #1e1e1e;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.roadmap-card {
+  background: #111111;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  border-left: 3px solid transparent;
+  transition: background 0.2s;
+}
+
+.roadmap-card--active {
+  border-left-color: #f97316;
+  background: #141414;
+}
+
+.roadmap-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.roadmap-phase {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f97316;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.roadmap-status {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #444444;
+  padding: 3px 8px;
+  border: 1px solid #333333;
+  border-radius: 4px;
+}
+
+.roadmap-status--active {
+  color: #f97316;
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.08);
+}
+
+.roadmap-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fafafa;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.roadmap-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.roadmap-item {
+  font-size: 13px;
+  color: #666666;
+  line-height: 1.5;
+  padding-left: 16px;
+  position: relative;
+}
+
+.roadmap-item::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: #333333;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+@media (max-width: 900px) {
+  .roadmap-grid { grid-template-columns: 1fr; }
 }
 </style>

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Enterprise Agent OS — run multiple AI agents on your own infrastructure</strong>
+  <strong>Distributed AI Agent OS — let agents run and collaborate like processes on an OS</strong>
 </p>
 
 <p align="center">
@@ -15,41 +15,71 @@
 
 ---
 
-OryxOS is a self-hosted Enterprise Agent OS built on **Java 21 + Spring Boot 3**. Deploy it on your own Kubernetes cluster or servers as a unified platform for multiple business AI agents — sharing channels, LLM routing, tool execution, memory systems, and sandboxed execution.
+OryxOS is an open-source **Distributed AI Agent OS** built on Java 21. One config defines one Agent; one platform runs a fleet. Deploy privately on your own K8s or servers — agents run and collaborate like processes on an OS, sharing channels, LLM routing, tools, memory, and sandboxed execution.
 
-No vendor lock-in. No data leaving your environment.
+> Long-term vision: enter the Apache Software Foundation as a top-level project.
+
+## Why OryxOS
+
+The Agent ecosystem has mature frameworks — but almost all are Python-based, cloud-coupled, or developer prototypes. For enterprises where Java is the backend standard and private deployment is a compliance requirement, there is no native, production-ready Agent OS in the Java ecosystem. OryxOS fills this gap.
+
+More fundamentally: **the bottleneck for reliable agents in production is not the model — it's the runtime environment.** Whether an agent can actually work depends on having a reliable foundation: the right context, controlled tools, isolated and auditable execution, and reliable message delivery for cross-node coordination. OryxOS is not another agent — it is the OS-level foundation that lets a fleet of agents run reliably.
+
+### Agent OS vs Agent Runtime
+
+| | Agent Runtime | Agent OS |
+| --- | --- | --- |
+| Scope | Runs **one** agent | Manages a **fleet** of agents |
+| Analogy | A process execution environment | An OS managing processes, scheduling, and shared services |
+| Provides | Model calls, tool execution, context, loop | Lifecycle, channels, memory, governance, cross-node coordination |
+
+OryxOS is the latter.
 
 ## Features
 
-**🔀 Zero-code LLM Provider Switching**
-Switch between DeepSeek, Qwen, Kimi, OpenAI, or any local Ollama model by editing one line in a YAML Profile — no code changes, no redeployment. Each agent can independently use a different provider and model.
+**🤖 Config = Agent**
+One Profile YAML defines one Agent — no code required. Multiple agents co-exist on the same instance, each with its own model, tools, memory, and channel config.
 
-**🔄 Self-implemented ReAct Loop**
-OryxOS owns the full Reason → Act → Observe cycle. It does not delegate to Spring AI's agent abstractions — `ToolExecutor` dispatches every tool call, enforces sandbox whitelists, writes audit records, and feeds results back into the loop. You get complete visibility and control.
+**☕ Java Native**
+Built on Java 21 with virtual threads. Single executable JAR, single binary deployment. Reuses existing Java ops toolchain — no Python runtime, no Node.js.
 
-**🧠 Three-layer Persistent Memory**
-Agents remember across sessions. Session memory keeps the current conversation; long-term memory (`MEMORY.md`) is automatically injected into every system prompt so preferences and facts persist indefinitely; episodic memory is on the roadmap. `save_memory` and `recall_memory` tools let agents write and search their own memory.
+**🔒 Private & Compliant**
+Runs on your own K8s, VM, or bare metal. Data never leaves your environment. No cloud lock-in. Credentials go through your enterprise key management — never written to disk.
 
-**📋 Built-in Audit Trail**
-Every tool call and every LLM request is written to `tool_invocations` and `llm_calls` tables in SQLite from day one — not as an afterthought. Production incidents are fully traceable without log parsing.
+**🛡️ Security as Foundation**
+Tool calls pass through file-path, command, and domain whitelists. Sandbox isolation enforced. Full audit trail from day one — every tool invocation and LLM call is persisted, not just logged.
 
-**🔌 Extensible Tool & MCP Ecosystem**
-Seven built-in tools (file read/write, shell, HTTP, memory) cover common needs out of the box. For everything else: point to any community MCP server in `mcp_servers.yaml` with zero Java code, or register a Spring `@Tool` bean for in-process execution. New channels and tools are added as independent Maven modules — `oryxos-core` stays untouched.
+**🔌 Open Standards**
+Tools via MCP. Agent-to-agent collaboration via A2A. Skills via SKILL.md. OryxOS interoperates with the ecosystem rather than inventing new protocols.
 
 ## Architecture
 
 <p align="center">
-  <img src="docs/images/architecture.svg" alt="OryxOS Architecture" width="100%"/>
+  <img src="docs/images/architecture.png" alt="OryxOS Architecture" width="100%"/>
 </p>
 
-## Why OryxOS
+## Five Core Capabilities
 
-| Pain point | OryxOS answer |
+| Capability | Description |
 | --- | --- |
-| Hardcoded LLM endpoints — code changes to switch models | Profile YAML: one line to switch provider, zero code |
-| Agents forget everything between sessions | Three-layer memory; long-term MEMORY.md auto-injected into every prompt |
-| No audit trail — production incidents untraceable | `tool_invocations` + `llm_calls` tables written from day one |
-| Every team rebuilds the same agent infrastructure | Unified platform — multiple agents share channels and tools |
+| **LLM Routing** | Provider abstraction unifies mainstream models. Agents are provider-agnostic. Switch at runtime with zero code change via Profile YAML. Local inference supported. |
+| **ReAct Loop** | Self-implemented reasoning engine — no external framework. LLM decides whether and which tool to call; OryxOS executes, feeds the result back; LLM decides the next step. Loop is fully controllable. |
+| **Memory** | Cross-conversation state persistence. Session memory + long-term memory (file-based, keyword search, vector retrieval upgrade path). Auto-injected into every system prompt. |
+| **Tool System** | Built-in file, shell, and HTTP tools. Three-tier extension: zero-code SKILL.md + community MCP server → light-code custom MCP server → heavy-code native `@Tool` method. |
+| **REST API** | All capabilities exposed via REST. Any language can integrate. Business systems connect via HTTP. |
+
+## Roadmap
+
+**Phase 1 — Single-node Runtime Kernel** *(current)*
+Five core capabilities operational: config-as-agent, multi-agent coexistence, REST API, MCP integration. Goal: single-node running and managing a fleet of agents — actually usable.
+
+**Phase 2 — Distributed Foundation** *(planned)*
+Stateless instances, externalized state, multi-replica deployment. Supports larger scale and high availability.
+
+**Phase 3 — Cross-node Agent Collaboration** *(vision)*
+Introduce agent communication infrastructure. Integrate A2A protocol. Cross-node agent discovery, delegation, and reliable async coordination.
+
+*Horizontal capabilities added across phases: multi-tenancy, SSO, full audit, tool policies, observability, web management console.*
 
 ## Module Structure
 
@@ -66,7 +96,7 @@ oryxos/
 └── oryxos-boot          # Spring Boot main class, auto-configuration, dependency aggregation
 ```
 
-Modules are decoupled through interfaces. Adding a new Channel or Tool only requires a new module — `oryxos-core` stays untouched.
+Modules are decoupled through interfaces. Adding a new Channel or Tool requires only a new module — `oryxos-core` stays untouched.
 
 ## Quick Start
 
@@ -89,25 +119,6 @@ java -jar oryxos-boot/target/oryxos-boot-*.jar chat --profile default
 
 # Or launch the REST API
 java -jar oryxos-boot/target/oryxos-boot-*.jar serve --port 8080
-```
-
-## CLI Reference
-
-```bash
-oryxos init                      # Initialize .oryxos/ workspace
-oryxos status                    # Show configuration and runtime status
-oryxos chat [--profile <name>]   # Interactive multi-turn chat
-oryxos serve [--port 8080]       # Launch HTTP API server
-oryxos gateway                   # Daemon mode (multi-channel)
-
-oryxos profile list
-oryxos profile create <name>
-oryxos profile show <name>
-oryxos profile delete <name>
-
-oryxos provider list
-oryxos tool list
-oryxos session list
 ```
 
 ## Agent Profile
@@ -152,44 +163,15 @@ All endpoints are prefixed with `/api/v1`:
 | `GET` | `/health` | Health check |
 | `GET` | `/info` | Runtime info + provider status |
 
-## ReAct Loop
+## Design Principles
 
-```text
-User message
-  → PromptBuilder: system prompt (identity + bootstrap + SKILL.md)
-                 + long-term memory (MEMORY.md)
-                 + conversation history (max_history_turns)
-                 + available tools (function calling format)
-  → ProviderService: ChatModel.call()
-  → [No tool call]  → return final response
-  → [Tool call]     → SandboxChecker whitelist validation
-                    → ToolExecutor (built-in in-process / MCP via JSON-RPC)
-                    → write tool_invocations audit table
-                    → append result → loop (max_iterations)
-```
-
-## Built-in Tools
-
-| Tool | Description |
-| --- | --- |
-| `read_file` | Read files; path whitelist enforced |
-| `write_file` | Write files; path whitelist enforced |
-| `list_dir` | List directories; path whitelist enforced |
-| `shell` | Execute shell commands; command whitelist + timeout |
-| `http_get` | HTTP GET; domain whitelist enforced |
-| `http_post` | HTTP POST; domain whitelist enforced |
-| `save_memory` | Append to MEMORY.md (long-term memory) |
-| `recall_memory` | Keyword search in MEMORY.md |
-
-## Supported LLM Providers
-
-| Provider | Example models |
-| --- | --- |
-| `deepseek` | deepseek-chat, deepseek-coder |
-| `qwen` | qwen-max, qwen-plus |
-| `kimi` | moonshot-v1-8k, moonshot-v1-32k |
-| `openai` | gpt-4o, gpt-4o-mini |
-| `ollama` | qwen2.5:7b, llama3, any local model |
+- **Platform before Agent** — the most important deliverable is not a powerful Agent, but the environment that lets any Agent run reliably
+- **Self-implement the core** — reasoning loop is self-implemented; protocol adapters reuse mature libraries; no reinventing the wheel
+- **Config = Agent** — an Agent is defined by configuration, not code
+- **Open standards** — MCP for tools, A2A for collaboration, open formats for skills
+- **Stateless instances** — state externalized from the start; the prerequisite for scaling to distributed
+- **Security as foundation** — controlled tool sources, least privilege, mandatory sandbox, credentials never persisted, full audit trail from day one
+- **Phased and disciplined** — build the minimal complete runtime kernel first; every architecture upgrade is proven by real usage data
 
 ## Tech Stack
 
@@ -206,4 +188,4 @@ User message
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[Apache License 2.0](LICENSE) · [oryx-labs](https://github.com/oryx-labs) · Goal: Apache Software Foundation top-level project
