@@ -8,52 +8,57 @@ const t = (zh, en) => isZh.value ? zh : en
 
 const capabilities = computed(() => [
   {
-    icon: '🔀',
+    num: '01',
     title: t('多模型路由', 'Multi-Provider LLM Routing'),
-    subtitle: t('DeepSeek · Qwen · Kimi · OpenAI · Ollama · vLLM', 'DeepSeek · Qwen · Kimi · OpenAI · Ollama · vLLM'),
+    desc: t(
+      '通过 Profile YAML 在 DeepSeek、Qwen、Kimi、Ollama 之间切换，零代码修改。显式 Provider 映射，不靠 Spring 容器类型扫描。',
+      'Switch between DeepSeek, Qwen, Kimi, and Ollama via Profile YAML — no code changes. Explicit provider mapping, no Spring container type scanning.'
+    ),
     code: `# .oryxos/profiles/ops-agent.yaml
 provider:
   name: deepseek
   model: deepseek-chat
   api_key: \${DEEPSEEK_API_KEY}
 
-# Switch provider at runtime — no code change
-provider:
-  name: qwen
-  model: qwen-max
-
-# Local model — data never leaves
+# Switch to local model — data never leaves
 provider:
   name: ollama
   model: qwen2.5:7b`,
   },
   {
-    icon: '🔄',
+    num: '02',
     title: t('自实现 ReAct 循环', 'Self-implemented ReAct Loop'),
-    subtitle: t('Reason → Act → Observe → 循环', 'Reason → Act → Observe → repeat'),
+    desc: t(
+      '完整掌控 Reason → Act → Observe 循环，不依赖 Spring AI Agent 抽象。Tool 调用、审计写入全由 ToolExecutor 控制。',
+      'Full control over Reason → Act → Observe. No Spring AI Agent abstractions. Tool dispatch and audit writes are owned by ToolExecutor.'
+    ),
     code: `User message
   → PromptBuilder: system + memory + history + tools
-  → ProviderService: ChatModel.call()
-  → [Tool call?] → ToolExecutor → SandboxChecker
+  → ProviderService.call()
+  → [Tool call?]
+      → SandboxChecker whitelist
+      → ToolExecutor.execute()
       → write tool_invocations audit
-      → append result → loop (max_iterations)
-  → [Final reply] → return to user`,
+      → append result → loop
+  → [Final reply] → return`,
   },
   {
-    icon: '🧠',
+    num: '03',
     title: t('三层记忆系统', 'Three-layer Memory'),
-    subtitle: t('会话记忆 · 长期记忆 · 情景记忆（路线图）', 'Session · Long-term · Episodic (roadmap)'),
-    code: `# Agent saves a preference to long-term memory
+    desc: t(
+      '会话记忆、长期记忆（MEMORY.md）、情景记忆（路线图）。长期记忆自动注入每次 system prompt，Agent 跨会话保持一致。',
+      'Session memory, long-term memory (MEMORY.md), and episodic memory (roadmap). Long-term memory is auto-injected into every system prompt.'
+    ),
+    code: `# Agent saves a preference
 Tool: save_memory
-Input: {"content": "User prefers Spring Boot over Spring MVC"}
+Input: {"content": "Prefers Spring Boot over MVC"}
 
-# Agent recalls on next session
+# Auto-injected into next session's prompt
+# Persisted in .oryxos/memory/MEMORY.md
+
 Tool: recall_memory
 Input: {"query": "user preferences"}
-Output: "User prefers Spring Boot over Spring MVC"
-
-# Persisted in .oryxos/memory/MEMORY.md
-# Injected into every system prompt automatically`,
+Output: "Prefers Spring Boot over MVC"`,
   },
 ])
 
@@ -61,22 +66,22 @@ const scenarios = computed(() => [
   {
     num: '01',
     title: t('运维助手', 'DevOps Agent'),
-    desc: t('读日志、执行 Shell、监控服务，跨对话记住你的运维偏好。', 'Reads logs, runs shell commands, monitors services. Remembers your infra preferences across sessions.'),
+    desc: t('读日志、执行 Shell、监控服务，跨对话记住你的运维偏好。', 'Reads logs, runs shell commands, monitors services. Remembers infra preferences across sessions.'),
   },
   {
     num: '02',
     title: t('零代码 PR 日报', 'Zero-code PR Digest'),
-    desc: t('写一个 SKILL.md 接入 GitHub MCP server，Agent 自动生成每日 PR 摘要，零 Java 代码。', 'Write a SKILL.md and point to a GitHub MCP server — Agent generates daily PR summaries with no Java code.'),
+    desc: t('写一个 SKILL.md 接入 GitHub MCP server，自动生成每日 PR 摘要，零 Java 代码。', 'Write a SKILL.md and connect a GitHub MCP server — daily PR summaries with no Java code.'),
   },
   {
     num: '03',
-    title: t('客服助手', 'Customer Service Agent'),
-    desc: t('通过 REST API 接入客服渠道，记住历史交互，必要时触发人工升级。', 'Handles customer queries via REST API, recalls past interactions, escalates when needed.'),
+    title: t('客服助手', 'Customer Service'),
+    desc: t('通过 REST API 接入客服渠道，记住历史交互，必要时触发人工升级。', 'Handles queries via REST API, recalls past interactions, escalates when needed.'),
   },
   {
     num: '04',
     title: t('知识管理助手', 'Knowledge Management'),
-    desc: t('索引内部文档，回答问题，将学到的事实写入长期记忆。', 'Indexes internal docs, answers questions, saves learned facts to long-term memory.'),
+    desc: t('索引内部文档，回答问题，将学到的事实写入长期记忆。', 'Indexes internal docs, answers questions, persists learned facts to long-term memory.'),
   },
   {
     num: '05',
@@ -86,7 +91,7 @@ const scenarios = computed(() => [
   {
     num: '06',
     title: t('HR 助手', 'HR Assistant'),
-    desc: t('回答 HR 问题、安排面试、检索政策文档，通过 REST API 集成企业系统。', 'Answers HR queries, schedules interviews, retrieves policy docs — all via REST API integration.'),
+    desc: t('回答 HR 问题、安排面试、检索政策文档，通过 REST API 集成企业系统。', 'Answers HR queries, schedules interviews, retrieves policy docs via REST API.'),
   },
   {
     num: '07',
@@ -96,500 +101,820 @@ const scenarios = computed(() => [
   {
     num: '08',
     title: t('多 Agent 协作', 'Multi-Agent Collaboration'),
-    desc: t('多个 Agent 共享同一个 OryxOS 实例，各自拥有独立的 Profile、工具和记忆。', 'Multiple agents share the same OryxOS instance, each with its own profile, tools, and memory.'),
+    desc: t('多个 Agent 共享同一个 OryxOS 实例，各自拥有独立的 Profile、工具和记忆。', 'Multiple agents share one OryxOS instance, each with its own profile, tools, and memory.'),
   },
 ])
 
-const modules = [
-  { name: 'oryxos-core', desc: t('核心抽象：OryxTool 接口、Session、ReActLoop、PromptBuilder、ToolExecutor', 'Core abstractions: OryxTool interface, Session, ReActLoop, PromptBuilder, ToolExecutor') },
-  { name: 'oryxos-provider', desc: t('Provider 路由：ProviderService、Function Calling 适配、多 Provider 显式映射', 'Provider routing: ProviderService, Function Calling adapter, explicit multi-provider map') },
-  { name: 'oryxos-memory', desc: t('记忆系统：MemoryService、LongTermMemory、MemoryTools（save/recall）', 'Memory system: MemoryService, LongTermMemory, MemoryTools (save/recall)') },
-  { name: 'oryxos-tool', desc: t('工具体系：内置 Tool、MCP Client、ToolRegistry、SandboxChecker', 'Tool system: built-in tools, MCP Client, ToolRegistry, SandboxChecker') },
-  { name: 'oryxos-channel-cli', desc: t('CLI Channel：oryxos chat 交互实现', 'CLI Channel: oryxos chat interactive implementation') },
-  { name: 'oryxos-web', desc: t('Web 服务：10 个 REST 端点、ApiController、GlobalExceptionHandler', 'Web service: 10 REST endpoints, ApiController, GlobalExceptionHandler') },
-  { name: 'oryxos-storage', desc: t('持久化：SQLite、SessionRepository、ToolInvocationRepository', 'Persistence: SQLite, SessionRepository, ToolInvocationRepository') },
-  { name: 'oryxos-cli', desc: t('命令行入口：Picocli 主入口、12 个子命令、ConfigLoader', 'CLI entry: Picocli main, 12 sub-commands, ConfigLoader') },
-  { name: 'oryxos-boot', desc: t('启动模块：Spring Boot 主类、自动配置、依赖聚合', 'Boot module: Spring Boot main class, auto-config, dependency aggregation') },
-]
+const flowColumns = computed(() => [
+  {
+    id: 'channels',
+    label: t('接入渠道', 'Channels'),
+    nodes: ['CLI (oryxos chat)', 'REST API', 'Gateway (daemon)'],
+    highlight: false,
+  },
+  {
+    id: 'react',
+    label: t('ReAct 引擎', 'ReAct Engine'),
+    nodes: ['PromptBuilder', 'ProviderService', 'ToolExecutor'],
+    highlight: true,
+  },
+  {
+    id: 'capabilities',
+    label: t('能力层', 'Capabilities'),
+    nodes: [t('工具体系 (7+)', 'Tool System (7+)'), t('记忆系统', 'Memory System'), 'MCP Client'],
+    highlight: false,
+  },
+  {
+    id: 'storage',
+    label: t('持久化', 'Storage'),
+    nodes: ['SQLite (sessions)', 'tool_invocations', 'llm_calls'],
+    highlight: false,
+  },
+])
 </script>
 
 <template>
-  <div class="oryxos-page">
+  <div class="home">
 
     <!-- ── HERO ── -->
-    <section class="oryxos-hero">
-      <div class="oryxos-hero-inner">
-        <div class="oryxos-badge">
-          <span class="oryxos-badge-dot"></span>
-          {{ t('企业级 Agent OS · Java 21 · Spring Boot 3', 'Enterprise Agent OS · Java 21 · Spring Boot 3') }}
-        </div>
-
-        <h1 class="oryxos-title">
-          <span class="oryxos-title-name">OryxOS</span>
-        </h1>
-
-        <p class="oryxos-title-sub">{{ t('运行在你自己基础设施上的企业级 Agent OS', 'Run multiple AI agents on your own infrastructure') }}</p>
-
-        <p class="oryxos-hero-desc">
-          {{ t('OryxOS 是基于 Java 21 实现的企业级 Agent OS，装在你自己的 K8s 或服务器上，作为统一底座运行多个业务 Agent，共享渠道接入、模型路由、工具调用、记忆系统和沙箱执行能力。', 'OryxOS is an enterprise Agent OS built on Java 21. Deploy it on your own K8s or servers as a unified platform for multiple business agents — sharing channel access, LLM routing, tool execution, memory systems, and sandbox capabilities.') }}
+    <section class="hero">
+      <div class="hero-inner">
+        <p class="hero-eyebrow">
+          <span class="eyebrow-comment">// </span>{{ t('企业级 Agent OS · Java 21 · 私有部署', 'enterprise agent OS · Java 21 · self-hosted') }}
         </p>
 
-        <div class="oryxos-hero-actions">
-          <a class="oryxos-btn-primary" :href="t('/zh/docs/what', '/docs/what')">
-            {{ t('快速开始', 'Get Started') }} →
+        <h1 class="hero-headline">
+          <span class="headline-white">{{ t('在你自己的', 'Run AI Agents') }}</span><br>
+          <span class="headline-amber">{{ t('基础设施上运行 AI Agent', 'On Your Own Infra') }}</span>
+        </h1>
+
+        <p class="hero-sub">
+          {{ t(
+            'OryxOS 是基于 Java 21 实现的企业级 Agent OS — 装在你自己的 K8s 或服务器上，作为统一底座运行多个业务 Agent，共享渠道接入、模型路由、工具调用、记忆系统和沙箱执行能力。',
+            'OryxOS is an enterprise Agent OS built on Java 21 — deploy it on your own K8s or servers as a unified platform for multiple business agents sharing channel access, LLM routing, tool execution, memory, and sandboxing.'
+          ) }}
+        </p>
+
+        <div class="hero-ctas">
+          <a class="btn-primary" :href="t('/zh/docs/what', '/docs/what')">
+            {{ t('快速开始', 'Get Started') }}
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h10M8 3l4 4-4 4"/></svg>
           </a>
-          <a class="oryxos-btn-ghost" :href="t('/zh/docs/react-loop', '/docs/react-loop')">
-            {{ t('架构设计', 'Architecture') }}
-          </a>
-          <a class="oryxos-btn-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">
+          <a class="btn-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.745 0 .268.18.58.688.482A10.019 10.019 0 0022 12c0-5.523-4.477-10-10-10z"/></svg>
             GitHub
           </a>
         </div>
 
-        <div class="oryxos-hero-note">
-          {{ t('Java 21 Virtual Thread · Spring Boot 3 · SQLite · Spring AI Alibaba · Picocli · SnakeYAML', 'Java 21 Virtual Thread · Spring Boot 3 · SQLite · Spring AI Alibaba · Picocli · SnakeYAML') }}
-        </div>
-      </div>
-    </section>
-
-    <!-- ── PROBLEM ── -->
-    <section class="oryxos-section">
-      <div class="oryxos-section-inner">
-        <div class="oryxos-problem">
-          <div class="oryxos-problem-text">
-            <h2 class="oryxos-section-title">{{ t('企业 Agent 的痛点', 'Enterprise Agent Pain Points') }}</h2>
-            <p>{{ t('每个企业在落地 AI Agent 时，都会遇到同样的问题。', 'Every enterprise faces the same challenges when deploying AI agents.') }}</p>
-            <p class="oryxos-problem-item">
-              <strong>{{ t('① 模型供应商锁定', '① Vendor lock-in') }}</strong>
-              {{ t('硬编码 LLM 接口，换模型就要改代码，本地模型无法接入。', 'Hardcoded LLM endpoints mean switching providers requires code changes and local models are excluded.') }}
-            </p>
-            <p class="oryxos-problem-item">
-              <strong>{{ t('② 没有记忆，每次都从零开始', '② No memory — stateless by default') }}</strong>
-              {{ t('Agent 无法跨对话记住用户偏好和历史上下文。', 'Agents forget everything between conversations — user preferences and context are lost.') }}
-            </p>
-            <p class="oryxos-problem-item">
-              <strong>{{ t('③ 审计缺失，无法合规', '③ No audit trail') }}</strong>
-              {{ t('工具调用和 LLM 请求没有落库，生产事故无法溯源。', 'Tool calls and LLM requests are not persisted — production incidents cannot be traced.') }}
-            </p>
-            <p class="oryxos-solution-line">{{ t('OryxOS 把模型路由、记忆、工具、审计整合在同一个 Java 底座里，让每个团队专注业务 Agent 逻辑。', 'OryxOS integrates LLM routing, memory, tools, and audit in one Java platform — letting each team focus on business agent logic.') }}</p>
+        <!-- Terminal Window -->
+        <div class="terminal">
+          <div class="terminal-titlebar">
+            <span class="dot dot-red"></span>
+            <span class="dot dot-yellow"></span>
+            <span class="dot dot-green"></span>
+            <span class="terminal-title">oryxos — bash</span>
           </div>
-          <div class="oryxos-problem-compare">
-            <div class="oryxos-compare-item oryxos-compare-bad">
-              <div class="oryxos-compare-label">{{ t('今天的做法', "Today's approach") }}</div>
-              <div class="oryxos-compare-rows">
-                <div class="oryxos-compare-row">
-                  <span class="oryxos-compare-icon">✗</span>
-                  <span>{{ t('硬编码 LLM 接口，换模型改代码', 'Hardcoded LLM endpoints, code changes to switch') }}</span>
-                </div>
-                <div class="oryxos-compare-row">
-                  <span class="oryxos-compare-icon">✗</span>
-                  <span>{{ t('无跨对话记忆，每次从零开始', 'No cross-session memory, starts fresh every time') }}</span>
-                </div>
-                <div class="oryxos-compare-row">
-                  <span class="oryxos-compare-icon">✗</span>
-                  <span>{{ t('工具调用无审计，生产事故无法溯源', 'No tool audit — production incidents untraceable') }}</span>
-                </div>
-                <div class="oryxos-compare-row">
-                  <span class="oryxos-compare-icon">✗</span>
-                  <span>{{ t('每个团队自己造 Agent 基础设施', 'Every team rebuilds the same agent infrastructure') }}</span>
-                </div>
-              </div>
+          <div class="terminal-body">
+            <div class="term-line">
+              <span class="term-prompt">❯</span>
+              <span class="term-cmd">oryxos init</span>
             </div>
-            <div class="oryxos-compare-item oryxos-compare-good">
-              <div class="oryxos-compare-label">OryxOS</div>
-              <div class="oryxos-compare-rows">
-                <div class="oryxos-compare-row">
-                  <span class="oryxos-compare-icon oryxos-icon-ok">✓</span>
-                  <span>{{ t('Profile YAML 切换 Provider，零代码', 'Switch LLM provider in Profile YAML — zero code') }}</span>
-                </div>
-                <div class="oryxos-compare-row">
-                  <span class="oryxos-compare-icon oryxos-icon-ok">✓</span>
-                  <span>{{ t('三层记忆系统，长期记忆自动注入 system prompt', 'Three-layer memory — long-term injected automatically') }}</span>
-                </div>
-                <div class="oryxos-compare-row">
-                  <span class="oryxos-compare-icon oryxos-icon-ok">✓</span>
-                  <span>{{ t('tool_invocations + llm_calls 审计表 Day One 写入', 'Audit tables written from day one — full traceability') }}</span>
-                </div>
-                <div class="oryxos-compare-row">
-                  <span class="oryxos-compare-icon oryxos-icon-ok">✓</span>
-                  <span>{{ t('统一底座，多 Agent 共享渠道和工具', 'Unified platform — multiple agents share channels and tools') }}</span>
-                </div>
-              </div>
+            <div class="term-output">✓ Workspace initialized at .oryxos/</div>
+            <div class="term-output dim">  profiles/ · memory/ · skills/ · oryxos.db</div>
+            <div class="term-spacer"></div>
+            <div class="term-line">
+              <span class="term-prompt">❯</span>
+              <span class="term-cmd">oryxos chat --profile ops-agent</span>
+            </div>
+            <div class="term-output dim">Loaded profile: ops-agent (deepseek-chat)</div>
+            <div class="term-output dim">Memory: 3 entries loaded from MEMORY.md</div>
+            <div class="term-spacer"></div>
+            <div class="term-line">
+              <span class="term-user">you</span>
+              <span class="term-msg">{{ t('检查一下 nginx 最近的错误日志', 'Check nginx error logs from the last hour') }}</span>
+            </div>
+            <div class="term-spacer"></div>
+            <div class="term-output agent-label">{{ t('[ops-agent] 思考中...', '[ops-agent] Thinking...') }}</div>
+            <div class="term-output dim">  → Tool: shell</div>
+            <div class="term-output dim">  → Input: tail -n 100 /var/log/nginx/error.log | grep "$(date +%H)"</div>
+            <div class="term-output dim">  → SandboxChecker: ✓ allowed</div>
+            <div class="term-spacer"></div>
+            <div class="term-output agent-label">{{ t('[ops-agent]', '[ops-agent]') }}</div>
+            <div class="term-output">{{ t('过去 1 小时发现 3 个 502 错误，均来自 upstream backend:8080', 'Found 3 × 502 errors in the last hour, all from upstream backend:8080') }}</div>
+            <div class="term-output">{{ t('建议检查后端服务健康状态。需要我运行诊断命令吗？', 'Recommend checking backend service health. Want me to run a diagnostic?') }}</div>
+            <div class="term-spacer"></div>
+            <div class="term-line">
+              <span class="term-prompt">❯</span>
+              <span class="term-cursor"></span>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- ── CAPABILITIES ── -->
-    <section class="oryxos-section oryxos-primitives-section">
-      <div class="oryxos-section-inner oryxos-primitives-inner">
-        <div class="oryxos-section-header">
-          <div class="oryxos-section-tag">{{ t('核心能力', 'Core Capabilities') }}</div>
-          <h2 class="oryxos-section-title">{{ t('模型路由 + ReAct 循环 + 记忆系统', 'LLM Routing + ReAct Loop + Memory System') }}</h2>
+    <!-- ── STATS BAR ── -->
+    <div class="stats-bar">
+      <div class="stats-inner">
+        <div class="stat">
+          <span class="stat-num">9</span>
+          <span class="stat-label">{{ t('Maven 模块', 'Maven modules') }}</span>
         </div>
-        <div class="oryxos-primitives">
-          <div v-for="p in capabilities" :key="p.title" class="oryxos-primitive">
-            <div class="oryxos-primitive-header">
-              <span class="oryxos-primitive-icon">{{ p.icon }}</span>
-              <div>
-                <h3 class="oryxos-primitive-title">{{ p.title }}</h3>
-                <p class="oryxos-primitive-subtitle">{{ p.subtitle }}</p>
-              </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num">10</span>
+          <span class="stat-label">{{ t('REST 端点', 'REST endpoints') }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num">7</span>
+          <span class="stat-label">{{ t('内置工具', 'built-in tools') }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num">3</span>
+          <span class="stat-label">{{ t('记忆层', 'memory layers') }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-num">∞</span>
+          <span class="stat-label">{{ t('并发 Agent', 'concurrent agents') }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── HOW IT WORKS ── -->
+    <section class="section section-light">
+      <div class="section-inner">
+        <div class="section-header">
+          <span class="section-label">{{ t('运行原理', 'HOW IT WORKS') }}</span>
+          <h2 class="section-h2 dark">{{ t('一个平台，所有 Agent。', 'One platform. Every agent.') }}</h2>
+        </div>
+
+        <div class="flow">
+          <div v-for="col in flowColumns" :key="col.id" class="flow-col" :class="{ 'flow-col--highlight': col.highlight }">
+            <div class="flow-col-label">{{ col.label }}</div>
+            <div class="flow-nodes">
+              <div v-for="node in col.nodes" :key="node" class="flow-node">{{ node }}</div>
             </div>
-            <pre class="oryxos-code"><code>{{ p.code }}</code></pre>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- ── SCENARIOS ── -->
-    <section class="oryxos-section">
-      <div class="oryxos-section-inner">
-        <div class="oryxos-section-header">
-          <div class="oryxos-section-tag">{{ t('真实场景', 'Real Scenarios') }}</div>
-          <h2 class="oryxos-section-title">{{ t('八个企业真实使用场景', 'Eight enterprise use cases') }}</h2>
+    <!-- ── CORE CAPABILITIES ── -->
+    <section class="section section-dark">
+      <div class="section-inner">
+        <div class="section-header">
+          <span class="section-label">{{ t('核心能力', 'CORE CAPABILITIES') }}</span>
+          <h2 class="section-h2">{{ t('三个原语，无限 Agent。', 'Three primitives. Unlimited agents.') }}</h2>
         </div>
-        <div class="oryxos-scenarios">
-          <div v-for="s in scenarios" :key="s.num" class="oryxos-scenario">
-            <div class="oryxos-scenario-num">{{ s.num }}</div>
-            <div>
-              <h3 class="oryxos-scenario-title">{{ s.title }}</h3>
-              <p class="oryxos-scenario-desc">{{ s.desc }}</p>
+
+        <div class="caps-grid">
+          <div v-for="cap in capabilities" :key="cap.num" class="cap-card">
+            <div class="cap-top">
+              <span class="cap-num">{{ cap.num }}</span>
+              <h3 class="cap-title">{{ cap.title }}</h3>
+              <p class="cap-desc">{{ cap.desc }}</p>
             </div>
+            <pre class="cap-code"><code>{{ cap.code }}</code></pre>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- ── TECH STACK ── -->
-    <section class="oryxos-section oryxos-modules-section">
-      <div class="oryxos-section-inner">
-        <div class="oryxos-section-header">
-          <div class="oryxos-section-tag">{{ t('模块架构', 'Module Architecture') }}</div>
-          <h2 class="oryxos-section-title">{{ t('九个 Maven 模块，接口解耦', 'Nine Maven modules, interface-decoupled') }}</h2>
-          <p class="oryxos-section-desc">{{ t('新增 Channel 或 Tool 只需加新模块，不改 oryxos-core。', 'Adding a new Channel or Tool requires only a new module — oryxos-core stays untouched.') }}</p>
+    <!-- ── USE CASES ── -->
+    <section class="section section-dark section-use-cases">
+      <div class="section-inner">
+        <div class="section-header">
+          <span class="section-label">{{ t('使用场景', 'USE CASES') }}</span>
+          <h2 class="section-h2">{{ t('企业真实场景', 'Enterprise-ready scenarios') }}</h2>
         </div>
-        <div class="oryxos-modules">
-          <div v-for="m in modules" :key="m.name" class="oryxos-module">
-            <code class="oryxos-module-name">{{ m.name }}</code>
-            <p class="oryxos-module-desc">{{ m.desc }}</p>
+
+        <div class="cases-grid">
+          <div v-for="s in scenarios" :key="s.num" class="case-card">
+            <span class="case-num">{{ s.num }}</span>
+            <h3 class="case-title">{{ s.title }}</h3>
+            <p class="case-desc">{{ s.desc }}</p>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ── CTA ── -->
-    <section class="oryxos-section oryxos-cta-section">
-      <div class="oryxos-section-inner">
-        <div class="oryxos-cta">
-          <h2 class="oryxos-cta-title">{{ t('开始构建你的企业 Agent OS', 'Start building your enterprise Agent OS') }}</h2>
-          <p class="oryxos-cta-desc">{{ t('三步启动：初始化工作区、配置 Profile、开始对话。', 'Three steps: initialize the workspace, configure a Profile, start chatting.') }}</p>
-          <pre class="oryxos-code oryxos-cta-code"><code># 1. Initialize the workspace
-oryxos init
+    <section class="section section-cta">
+      <div class="section-inner">
+        <div class="cta-grid">
+          <div class="cta-left">
+            <span class="section-label label-dark">{{ t('立即开始', 'GET STARTED') }}</span>
+            <h2 class="cta-h2">{{ t('三步启动', 'Start in three steps') }}</h2>
+            <p class="cta-sub">{{ t('初始化工作区、配置 LLM Provider、开始对话。5 分钟搭起你的第一个企业 Agent。', 'Initialize the workspace, configure an LLM provider, and start chatting. Your first enterprise agent in under 5 minutes.') }}</p>
+            <div class="cta-btns">
+              <a class="btn-dark" :href="t('/zh/docs/what', '/docs/what')">{{ t('查看文档', 'Read the Docs') }}</a>
+              <a class="btn-dark-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">GitHub</a>
+            </div>
+          </div>
+          <div class="cta-right">
+            <div class="cta-terminal">
+              <div class="cta-terminal-bar">
+                <span class="dot dot-dark"></span>
+                <span class="dot dot-dark"></span>
+                <span class="dot dot-dark"></span>
+              </div>
+              <pre class="cta-code"><code><span class="code-comment"># 1. {{ t('初始化工作区', 'Initialize the workspace') }}</span>
+<span class="code-prompt">❯</span> oryxos init
 
-# 2. Configure your LLM provider
-export DEEPSEEK_API_KEY=your-key-here
+<span class="code-comment"># 2. {{ t('配置你的 LLM Provider', 'Configure your LLM provider') }}</span>
+<span class="code-prompt">❯</span> export DEEPSEEK_API_KEY=your-key-here
 
-# 3. Start chatting with your agent
-oryxos chat --profile ops-agent
+<span class="code-comment"># 3. {{ t('启动你的第一个 Agent', 'Start your first agent') }}</span>
+<span class="code-prompt">❯</span> oryxos chat --profile ops-agent
 
-# Or launch the REST API server
-oryxos serve --port 8080</code></pre>
-          <div class="oryxos-cta-links">
-            <a class="oryxos-btn-primary" :href="t('/zh/docs/what', '/docs/what')">{{ t('查看文档', 'Read the Docs') }}</a>
-            <a class="oryxos-btn-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">GitHub</a>
+<span class="code-comment"># {{ t('或启动 REST API 服务', 'Or launch the REST API') }}</span>
+<span class="code-prompt">❯</span> oryxos serve --port 8080</code></pre>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
+    <!-- ── FOOTER ── -->
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <span class="footer-logo">Oryx<strong>OS</strong></span>
+          <span class="footer-tagline">{{ t('企业级 Agent OS · 私有部署', 'Enterprise Agent OS · Self-hosted') }}</span>
+        </div>
+        <div class="footer-links">
+          <a :href="t('/zh/docs/what', '/docs/what')" class="footer-link">{{ t('文档', 'Docs') }}</a>
+          <a href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+        </div>
+      </div>
+    </footer>
+
   </div>
 </template>
 
 <style scoped>
-.oryxos-page {
+/* ────────────────────────────────────────────────
+   RESET / BASE
+──────────────────────────────────────────────── */
+.home {
   min-height: 100vh;
-  background: #ffffff;
-  color: #000000;
-  font-family: inherit;
+  background: #000000;
+  color: #fafafa;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Override VitePress default page padding */
+  margin: 0;
+  padding: 0;
 }
+.home * { box-sizing: border-box; }
+a { text-decoration: none; }
 
-/* ── Hero ── */
-.oryxos-hero {
-  position: relative;
-  padding: 100px 24px 80px;
+/* ────────────────────────────────────────────────
+   HERO
+──────────────────────────────────────────────── */
+.hero {
+  background: #000000;
+  padding: 96px 24px 80px;
   text-align: center;
-  overflow: hidden;
 }
-.oryxos-hero-inner {
-  position: relative;
-  max-width: 760px;
+.hero-inner {
+  max-width: 800px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
-.oryxos-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  border-radius: 20px;
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  color: #1e3a8a;
-  font-size: 12px;
-  margin-bottom: 28px;
-}
-.oryxos-badge-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: #2563eb;
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  0%,100% { opacity:1; transform:scale(1); }
-  50% { opacity:0.4; transform:scale(1.4); }
-}
-.oryxos-title {
-  margin: 0 0 12px;
-  line-height: 1;
-}
-.oryxos-title-name {
-  font-size: clamp(64px, 12vw, 108px);
-  font-weight: 900;
-  letter-spacing: -0.03em;
-  color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
-}
-.oryxos-title-sub {
-  font-size: 18px;
-  color: #475569;
-  margin: 0 0 20px;
-}
-.oryxos-hero-desc {
-  font-size: 16px;
-  line-height: 1.7;
-  color: #334155;
-  max-width: 620px;
+
+.hero-eyebrow {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  color: #888888;
   margin: 0 0 32px;
+  letter-spacing: 0.02em;
 }
-.oryxos-hero-actions {
+.eyebrow-comment { color: #f97316; }
+
+.hero-headline {
+  font-size: clamp(40px, 7vw, 72px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin: 0 0 28px;
+}
+.headline-white { color: #fafafa; }
+.headline-amber { color: #f97316; }
+
+.hero-sub {
+  font-size: 16px;
+  line-height: 1.75;
+  color: #888888;
+  max-width: 620px;
+  margin: 0 0 40px;
+}
+
+/* CTA Buttons */
+.hero-ctas {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 20px;
+  margin-bottom: 56px;
 }
-.oryxos-btn-primary {
-  padding: 11px 28px;
-  border-radius: 8px;
-  background: #1e3a8a;
-  color: #ffffff;
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: 6px;
+  background: #f97316;
+  color: #000000;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  transition: background 0.15s, transform 0.15s;
+}
+.btn-primary:hover { background: #fb923c; transform: translateY(-1px); }
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 6px;
+  border: 1px solid #333333;
+  color: #fafafa;
   font-weight: 600;
   font-size: 14px;
-  text-decoration: none;
-  transition: opacity 0.2s, transform 0.15s;
+  transition: border-color 0.15s, color 0.15s;
 }
-.oryxos-btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
-.oryxos-btn-ghost {
-  padding: 11px 28px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  color: #334155;
-  font-weight: 600;
-  font-size: 14px;
-  text-decoration: none;
-  transition: border-color 0.2s, background 0.2s;
+.btn-ghost:hover { border-color: #f97316; color: #f97316; }
+
+/* Terminal */
+.terminal {
+  width: 100%;
+  max-width: 680px;
+  border-radius: 10px;
+  border: 1px solid #1e1e1e;
+  background: #0a0a0a;
+  overflow: hidden;
+  text-align: left;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px #1e1e1e;
 }
-.oryxos-btn-ghost:hover { border-color: #1e3a8a; background: #eff6ff; color: #1e3a8a; }
-.oryxos-hero-note {
+.terminal-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #111111;
+  border-bottom: 1px solid #1e1e1e;
+}
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-red    { background: #ff5f57; }
+.dot-yellow { background: #febc2e; }
+.dot-green  { background: #28c840; }
+.terminal-title {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 12px;
-  color: #94a3b8;
+  color: #444444;
+  margin-left: 8px;
+}
+.terminal-body {
+  padding: 20px 20px 24px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.term-line { display: flex; align-items: baseline; gap: 8px; }
+.term-prompt { color: #f97316; font-weight: 700; }
+.term-cmd { color: #fafafa; }
+.term-output { color: #d4d4d4; padding-left: 0; }
+.term-output.dim { color: #555555; }
+.term-spacer { height: 6px; }
+.term-user {
+  color: #22c55e;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.term-msg { color: #fafafa; }
+.agent-label { color: #f97316; font-weight: 700; }
+.term-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: #f97316;
+  animation: blink 1.2s step-end infinite;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
 }
 
-/* ── Section ── */
-.oryxos-section { padding: 72px 24px; }
-.oryxos-section-inner { max-width: 1000px; margin: 0 auto; }
-.oryxos-primitives-inner { max-width: 1400px; }
-.oryxos-section-header { text-align: center; margin-bottom: 48px; }
-.oryxos-section-tag {
-  display: inline-block;
+/* ────────────────────────────────────────────────
+   STATS BAR
+──────────────────────────────────────────────── */
+.stats-bar {
+  background: #0d0d0d;
+  border-top: 1px solid #1e1e1e;
+  border-bottom: 1px solid #1e1e1e;
+  padding: 0 24px;
+}
+.stats-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 0;
+}
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+.stat-num {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 28px;
+  font-weight: 900;
+  color: #f97316;
+  line-height: 1;
+}
+.stat-label {
+  font-size: 11px;
+  color: #555555;
+  text-align: center;
+  letter-spacing: 0.03em;
+}
+.stat-divider {
+  width: 1px;
+  height: 40px;
+  background: #1e1e1e;
+  flex-shrink: 0;
+}
+
+/* ────────────────────────────────────────────────
+   SECTIONS BASE
+──────────────────────────────────────────────── */
+.section { padding: 88px 24px; }
+.section-inner { max-width: 1040px; margin: 0 auto; }
+.section-dark { background: #000000; }
+.section-light { background: #fafafa; }
+.section-use-cases { border-top: 1px solid #1e1e1e; }
+
+.section-header {
+  text-align: center;
+  margin-bottom: 56px;
+}
+.section-label {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: #1d4ed8;
-  padding: 4px 12px;
-  border-radius: 20px;
-  border: 1px solid #bfdbfe;
-  background: #eff6ff;
-  margin-bottom: 14px;
+  color: #f97316;
+  display: block;
+  margin-bottom: 16px;
 }
-.oryxos-section-title {
-  font-size: clamp(22px, 4vw, 32px);
-  font-weight: 700;
-  color: #0f172a;
-  margin: 0 0 12px;
+.label-dark { color: #000000; }
+.section-h2 {
+  font-size: clamp(26px, 4vw, 42px);
+  font-weight: 800;
+  color: #fafafa;
+  margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
 }
-.oryxos-section-desc {
-  font-size: 15px;
-  color: #64748b;
-  max-width: 600px;
-  margin: 0 auto;
-  line-height: 1.6;
-}
+.section-h2.dark { color: #0a0a0a; }
 
-/* ── Problem ── */
-.oryxos-problem {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 48px;
-  align-items: start;
+/* ────────────────────────────────────────────────
+   HOW IT WORKS — FLOW
+──────────────────────────────────────────────── */
+.flow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 40px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
 }
-.oryxos-problem-text p { color: #475569; line-height: 1.7; margin: 0 0 14px; font-size: 15px; }
-.oryxos-problem-item strong { color: #0f172a; display: block; margin-bottom: 4px; }
-.oryxos-solution-line { color: #1e3a8a !important; font-weight: 600; }
-.oryxos-problem-compare { display: flex; flex-direction: column; gap: 16px; }
-.oryxos-compare-item {
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-}
-.oryxos-compare-bad { background: #fafafa; }
-.oryxos-compare-good { background: #eff6ff; border-color: #bfdbfe; }
-.oryxos-compare-label { font-size: 11px; font-weight: 700; color: #94a3b8; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
-.oryxos-compare-rows { display: flex; flex-direction: column; gap: 8px; }
-.oryxos-compare-row { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #475569; line-height: 1.5; }
-.oryxos-compare-icon { flex-shrink: 0; font-style: normal; color: #cbd5e1; font-weight: 700; width: 14px; }
-.oryxos-icon-ok { color: #1d4ed8; }
-
-/* ── Primitives ── */
-.oryxos-primitives-section { background: #f8fafc; }
-.oryxos-primitives { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 16px; }
-.oryxos-primitive {
-  padding: 20px;
-  border-radius: 14px;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
+.flow-col {
+  position: relative;
+  flex: 1;
+  min-width: 160px;
+  max-width: 220px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  min-width: 0;
+}
+.flow-col-label {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #888888;
+  text-align: center;
+  margin-bottom: 4px;
+}
+.flow-col--highlight .flow-col-label { color: #f97316; }
+.flow-nodes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.flow-node {
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111111;
+  font-size: 12px;
+  text-align: center;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  line-height: 1.4;
+}
+.flow-col--highlight .flow-node {
+  border-color: #f97316;
+  background: rgba(249,115,22,0.06);
+  color: #1a1a1a;
+}
+.flow-col:not(:last-child)::after {
+  content: '→';
+  position: absolute;
+  right: -22px;
+  top: 48px;
+  font-size: 20px;
+  color: #9ca3af;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ────────────────────────────────────────────────
+   CORE CAPABILITIES
+──────────────────────────────────────────────── */
+.caps-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: #1e1e1e;
+  border: 1px solid #1e1e1e;
+  border-radius: 12px;
   overflow: hidden;
 }
-.oryxos-primitive .oryxos-code { flex: 1; }
-.oryxos-primitive:hover { border-color: #2563eb; box-shadow: 0 4px 16px rgba(37,99,235,0.08); }
-.oryxos-primitive-header { display: flex; align-items: flex-start; gap: 12px; }
-.oryxos-primitive-icon { font-size: 28px; flex-shrink: 0; }
-.oryxos-primitive-title { font-size: 17px; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
-.oryxos-primitive-subtitle { font-size: 12px; color: #94a3b8; margin: 0; }
-.oryxos-code {
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 14px 16px;
+.cap-card {
+  background: #111111;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  transition: background 0.2s;
+  cursor: default;
+}
+.cap-card:hover {
+  background: #161616;
+  box-shadow: inset 0 0 0 1px #f97316;
+}
+.cap-top { display: flex; flex-direction: column; gap: 10px; }
+.cap-num {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f97316;
+  letter-spacing: 0.1em;
+}
+.cap-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fafafa;
+  margin: 0;
+  line-height: 1.2;
+}
+.cap-desc {
+  font-size: 13px;
+  color: #888888;
+  line-height: 1.7;
+  margin: 0;
+}
+.cap-code {
+  background: #0a0a0a;
+  border: 1px solid #1e1e1e;
+  border-radius: 6px;
+  padding: 16px;
   font-size: 12px;
-  line-height: 1.6;
-  color: #1e293b;
+  line-height: 1.65;
+  color: #d4d4d4;
   overflow-x: auto;
   margin: 0;
   white-space: pre;
+  flex: 1;
 }
-.oryxos-code code { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: none; color: inherit; }
-
-/* ── Scenarios ── */
-.oryxos-scenarios { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-.oryxos-scenario {
-  display: flex;
-  gap: 16px;
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  background: #fafafa;
-  transition: border-color 0.2s;
-}
-.oryxos-scenario:hover { border-color: #bfdbfe; background: #eff6ff; }
-.oryxos-scenario-num {
-  font-size: 28px;
-  font-weight: 900;
-  color: #e2e8f0;
-  line-height: 1;
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-.oryxos-scenario:hover .oryxos-scenario-num { color: #bfdbfe; }
-.oryxos-scenario-title { font-size: 15px; font-weight: 600; color: #0f172a; margin: 0 0 6px; }
-.oryxos-scenario-desc { font-size: 13px; color: #64748b; line-height: 1.6; margin: 0; }
-
-/* ── Modules ── */
-.oryxos-modules-section { background: #f8fafc; }
-.oryxos-modules {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-.oryxos-module {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 16px 18px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-.oryxos-module:hover { border-color: #2563eb; box-shadow: 0 2px 12px rgba(37,99,235,0.07); }
-.oryxos-module-name {
+.cap-code code {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 12px;
+  background: none;
+  color: inherit;
+}
+
+/* ────────────────────────────────────────────────
+   USE CASES
+──────────────────────────────────────────────── */
+.cases-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: #1e1e1e;
+  border: 1px solid #1e1e1e;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.case-card {
+  background: #111111;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-left: 3px solid transparent;
+  transition: border-color 0.2s, background 0.2s;
+  cursor: default;
+}
+.case-card:hover {
+  border-left-color: #f97316;
+  background: #141414;
+}
+.case-num {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  color: #444444;
   font-weight: 700;
-  color: #1d4ed8;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 5px;
-  padding: 2px 8px;
-  display: inline-block;
-  margin-bottom: 8px;
+  align-self: flex-end;
 }
-.oryxos-module-desc { font-size: 12px; color: #64748b; line-height: 1.5; margin: 0; }
-
-/* ── CTA ── */
-.oryxos-cta-section { background: #0f172a; }
-.oryxos-cta-section .oryxos-cta { text-align: center; max-width: 680px; margin: 0 auto; }
-.oryxos-cta-title { font-size: 28px; font-weight: 700; color: #f8fafc; margin: 0 0 12px; }
-.oryxos-cta-desc { font-size: 15px; color: #94a3b8; margin: 0 0 24px; }
-.oryxos-cta-section .oryxos-code {
-  background: #1e293b;
-  border-color: #334155;
-  color: #e2e8f0;
-  text-align: left;
-  margin-bottom: 28px;
+.case-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fafafa;
+  margin: 0;
 }
-.oryxos-cta-code { text-align: left; }
-.oryxos-cta-links { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-.oryxos-cta-section .oryxos-btn-primary {
-  background: #2563eb;
-}
-.oryxos-cta-section .oryxos-btn-ghost {
-  border-color: #334155;
-  color: #e2e8f0;
-}
-.oryxos-cta-section .oryxos-btn-ghost:hover {
-  border-color: #2563eb;
-  background: rgba(37,99,235,0.15);
-  color: #93c5fd;
+.case-desc {
+  font-size: 12px;
+  color: #666666;
+  line-height: 1.65;
+  margin: 0;
 }
 
-/* ── Responsive ── */
+/* ────────────────────────────────────────────────
+   CTA
+──────────────────────────────────────────────── */
+.section-cta {
+  background: #f97316;
+  padding: 88px 24px;
+}
+.cta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 64px;
+  align-items: center;
+  max-width: 1040px;
+  margin: 0 auto;
+}
+.cta-h2 {
+  font-size: clamp(28px, 4vw, 48px);
+  font-weight: 900;
+  color: #000000;
+  margin: 12px 0 16px;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+.cta-sub {
+  font-size: 15px;
+  color: rgba(0,0,0,0.65);
+  line-height: 1.7;
+  margin: 0 0 32px;
+}
+.cta-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+.btn-dark {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 24px;
+  border-radius: 6px;
+  background: #000000;
+  color: #fafafa;
+  font-weight: 700;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+.btn-dark:hover { background: #111111; }
+.btn-dark-ghost {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 24px;
+  border-radius: 6px;
+  border: 2px solid rgba(0,0,0,0.25);
+  color: #000000;
+  font-weight: 700;
+  font-size: 14px;
+  transition: border-color 0.15s;
+}
+.btn-dark-ghost:hover { border-color: #000000; }
+.cta-terminal {
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.15);
+  background: #0a0a0a;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
+.cta-terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #111111;
+  border-bottom: 1px solid #1e1e1e;
+}
+.dot-dark { background: #333333; }
+.cta-code {
+  padding: 24px 20px;
+  font-size: 13px;
+  line-height: 1.75;
+  margin: 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+.cta-code code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  background: none;
+  color: #d4d4d4;
+}
+.code-comment { color: #555555; }
+.code-prompt { color: #f97316; font-weight: 700; }
+
+/* ────────────────────────────────────────────────
+   FOOTER
+──────────────────────────────────────────────── */
+.footer {
+  background: #000000;
+  border-top: 1px solid #111111;
+  padding: 32px 24px;
+}
+.footer-inner {
+  max-width: 1040px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.footer-brand { display: flex; flex-direction: column; gap: 4px; }
+.footer-logo {
+  font-size: 18px;
+  font-weight: 400;
+  color: #fafafa;
+  letter-spacing: -0.01em;
+}
+.footer-logo strong { font-weight: 900; }
+.footer-tagline {
+  font-size: 12px;
+  color: #444444;
+}
+.footer-links { display: flex; gap: 24px; }
+.footer-link {
+  font-size: 13px;
+  color: #555555;
+  transition: color 0.15s;
+}
+.footer-link:hover { color: #f97316; }
+
+/* ────────────────────────────────────────────────
+   RESPONSIVE
+──────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  .oryxos-modules { grid-template-columns: repeat(2, 1fr); }
+  .caps-grid { grid-template-columns: 1fr; }
+  .cases-grid { grid-template-columns: repeat(2, 1fr); }
+  .cta-grid { grid-template-columns: 1fr; gap: 40px; }
 }
+
 @media (max-width: 768px) {
-  .oryxos-hero { padding: 72px 20px 60px; }
-  .oryxos-problem { grid-template-columns: 1fr; }
-  .oryxos-primitives { grid-template-columns: 1fr; }
-  .oryxos-scenarios { grid-template-columns: 1fr; }
-  .oryxos-modules { grid-template-columns: 1fr; }
-  .oryxos-section { padding: 48px 20px; }
+  .hero { padding: 72px 20px 64px; }
+  .hero-headline { font-size: clamp(36px, 10vw, 56px); }
+  .section { padding: 64px 20px; }
+  .stats-inner { flex-wrap: wrap; gap: 24px; justify-content: center; }
+  .stat-divider { display: none; }
+  .stat { flex: none; width: 80px; }
+  .flow { gap: 0; overflow-x: auto; }
+  .flow-col { min-width: 130px; }
+  .caps-grid { grid-template-columns: 1fr; }
+  .cases-grid { grid-template-columns: 1fr; }
+  .cta-grid { grid-template-columns: 1fr; }
+  .footer-inner { flex-direction: column; gap: 20px; text-align: center; }
+  .footer-links { justify-content: center; }
+}
+
+@media (max-width: 480px) {
+  .hero-ctas { flex-direction: column; align-items: center; }
+  .btn-primary, .btn-ghost { width: 200px; justify-content: center; }
 }
 </style>

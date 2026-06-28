@@ -1,266 +1,192 @@
-
-
 <p align="center">
-  <img src="docs/images/logo.svg" alt="OryxOS" width="380"/>
+  <img src="docs/images/logo.svg" alt="OryxOS" width="300"/>
 </p>
 
-> **Enterprise Agent OS built on Java** — run multiple AI agents on your own infrastructure, sharing channels, model routing, tool execution, memory, and sandbox capabilities.
+<p align="center">
+  <strong>Enterprise Agent OS — run multiple AI agents on your own infrastructure</strong>
+</p>
 
-[![Java](https://img.shields.io/badge/Java-21-orange)](https://openjdk.org/projects/jdk/21/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.x-brightgreen)](https://spring.io/projects/spring-boot)
-[![Spring AI Alibaba](https://img.shields.io/badge/Spring%20AI%20Alibaba-latest-blue)](https://github.com/alibaba/spring-ai-alibaba)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
----
-
-## What is OryxOS?
-
-OryxOS is a **Java-based Agent Operating System** designed for enterprise deployment. Install it on your own Kubernetes cluster or server, and run multiple business agents (DevOps assistant, customer service, HR assistant, sales assistant, knowledge management) on top of a shared runtime — all on infrastructure you own, with no cloud lock-in.
-
-### Agent OS vs. Agent Runtime
-
-| | Agent Runtime | Agent OS |
-| --- | --- | --- |
-| **Scope** | Runs a single agent | Manages a fleet of agents |
-| **Capabilities** | LLM calls, tool execution, context management | Runtime + lifecycle management, unified channels, shared memory, audit, multi-tenancy |
-| **Analogy** | A process execution environment | The OS that schedules processes and provides shared services |
-
-OryxOS delivers an Agent OS kernel first, then adds the full enterprise governance layer (multi-tenancy, SSO, audit, Tool policy) incrementally.
+<p align="center">
+  <a href="https://github.com/oryx-labs/oryxos/releases"><img src="https://img.shields.io/badge/version-1.0.0--SNAPSHOT-orange?style=flat-square" alt="version"/></a>
+  <a href="https://www.java.com"><img src="https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white" alt="Java 21"/></a>
+  <a href="https://spring.io/projects/spring-boot"><img src="https://img.shields.io/badge/Spring%20Boot-3.x-6DB33F?style=flat-square&logo=springboot&logoColor=white" alt="Spring Boot 3"/></a>
+  <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache 2.0"/></a>
+</p>
 
 ---
 
-## Features
+OryxOS is a self-hosted Enterprise Agent OS built on **Java 21 + Spring Boot 3**. Deploy it on your own Kubernetes cluster or servers as a unified platform for multiple business AI agents — sharing channels, LLM routing, tool execution, memory systems, and sandboxed execution.
 
-- **Multi-Provider LLM Routing** — DeepSeek, Qwen, Kimi, Zhipu, Hunyuan, Doubao, Anthropic, OpenAI, Ollama, vLLM, and any OpenAI-compatible endpoint. Switch providers at runtime without agent changes.
-- **Self-implemented ReAct Loop** — Full control over the Reason+Act cycle. No framework magic; tool scheduling and execution are 100% owned by OryxOS.
-- **Three-layer Memory** — Session memory (current conversation), long-term memory (`MEMORY.md`, persisted across sessions), and episodic memory (roadmap).
-- **Extensible Tool System** — Built-in file/shell/HTTP tools plus a three-tier plugin model: zero-code (SKILL.md + MCP), light-code (custom MCP server), or heavy-code (Java `@Tool` bean).
-- **Sandboxed Execution** — Path/command/domain whitelists enforced at the application layer (no deprecated `SecurityManager`).
-- **Auditable by Design** — Every tool invocation and LLM call is written to SQLite on day one.
-- **Single-binary Deployment** — Fat JAR with no external runtime dependencies. GraalVM Native Image support on the roadmap.
-- **CLI + REST** — Interactive `oryxos chat` for local use and a full REST API for integration.
-
----
+No vendor lock-in. No data leaving your environment.
 
 ## Architecture
 
-![OryxOS Architecture](docs/images/architecture.svg)
+<p align="center">
+  <img src="docs/images/architecture.svg" alt="OryxOS Architecture" width="100%"/>
+</p>
 
-### Module Layout
+## Why OryxOS
 
-| Module | Responsibility |
-| ------ | -------------- |
-| `oryxos-core` | Core abstractions: `OryxTool`, `Session`, `Profile`, `ContextLoader`, `ReActLoop`, `PromptBuilder`, `ToolExecutor`, `AgentService` |
-| `oryxos-provider` | `ProviderService`, Function Calling adapter, explicit multi-provider mapping |
-| `oryxos-memory` | `MemoryService` facade, `LongTermMemory`, `MemoryTools` (save / recall) |
-| `oryxos-tool` | Built-in tools (file / shell / HTTP), MCP client, `ToolRegistry`, `SandboxChecker` |
-| `oryxos-channel-cli` | CLI channel — interactive `oryxos chat` |
-| `oryxos-web` | REST controllers, `GlobalExceptionHandler`, OpenAPI spec |
-| `oryxos-storage` | SQLite, `SessionRepository`, `ToolInvocationRepository`, `LlmCallRepository` |
-| `oryxos-cli` | Picocli entry point, 12 subcommands, `ConfigLoader` |
-| `oryxos-boot` | Spring Boot main class, auto-configuration, dependency aggregation |
+| Pain point | OryxOS answer |
+| --- | --- |
+| Hardcoded LLM endpoints — code changes to switch models | Profile YAML: one line to switch provider, zero code |
+| Agents forget everything between sessions | Three-layer memory; long-term MEMORY.md auto-injected into every prompt |
+| No audit trail — production incidents untraceable | `tool_invocations` + `llm_calls` tables written from day one |
+| Every team rebuilds the same agent infrastructure | Unified platform — multiple agents share channels and tools |
 
----
+## Module Structure
+
+```text
+oryxos/
+├── oryxos-core          # OryxTool interface, Session, ReActLoop, PromptBuilder, ToolExecutor
+├── oryxos-provider      # ProviderService, Function Calling adapter, explicit multi-provider map
+├── oryxos-memory        # MemoryService, LongTermMemory, MemoryTools (save/recall)
+├── oryxos-tool          # Built-in tools (file/shell/http), MCP Client, ToolRegistry, SandboxChecker
+├── oryxos-channel-cli   # CLI channel: oryxos chat implementation
+├── oryxos-web           # 10 REST endpoints, ApiController, GlobalExceptionHandler
+├── oryxos-storage       # SQLite, SessionRepository, ToolInvocationRepository, LlmCallRepository
+├── oryxos-cli           # Picocli entry, 12 subcommands, ConfigLoader
+└── oryxos-boot          # Spring Boot main class, auto-configuration, dependency aggregation
+```
+
+Modules are decoupled through interfaces. Adding a new Channel or Tool only requires a new module — `oryxos-core` stays untouched.
 
 ## Quick Start
 
-### Prerequisites
-
-- Java 21+
-- Maven 3.9+
-- At least one LLM provider API key (e.g. `DEEPSEEK_API_KEY`)
-
-### Build
+**Prerequisites**: Java 21, Maven 3.9+, an LLM API key (DeepSeek / Qwen / OpenAI / Ollama)
 
 ```bash
-git clone https://github.com/your-org/oryxos.git
+# Build
+git clone https://github.com/oryx-labs/oryxos.git
 cd oryxos
 mvn package -DskipTests
+
+# Initialize the workspace
+java -jar oryxos-boot/target/oryxos-boot-*.jar init
+
+# Set your LLM API key
+export DEEPSEEK_API_KEY=your-key-here
+
+# Start chatting
+java -jar oryxos-boot/target/oryxos-boot-*.jar chat --profile default
+
+# Or launch the REST API
+java -jar oryxos-boot/target/oryxos-boot-*.jar serve --port 8080
 ```
-
-### Initialize a workspace
-
-```bash
-export DEEPSEEK_API_KEY=your_key_here
-
-java -jar oryxos-boot/target/oryxos.jar init
-```
-
-This creates a `.oryxos/` directory in the current folder with default configuration files.
-
-### Start chatting
-
-```bash
-java -jar oryxos-boot/target/oryxos.jar chat
-```
-
-Or use a specific agent profile:
-
-```bash
-java -jar oryxos-boot/target/oryxos.jar chat --profile ops-agent
-```
-
-### Start the REST API server
-
-```bash
-java -jar oryxos-boot/target/oryxos.jar serve --port 8080
-```
-
----
-
-## Configuration
-
-### Agent Profile (`profiles/ops-agent.yaml`)
-
-Each agent is defined by a Profile YAML under `.oryxos/profiles/`:
-
-```yaml
-name: ops-agent
-description: DevOps assistant
-identity:
-  agent_name: OpsBot
-  prompt: You are a professional DevOps assistant...
-provider:
-  name: deepseek          # maps to an explicit provider entry
-  model: deepseek-chat
-  temperature: 0.7
-tools:
-  - read_file
-  - shell
-  - http_get
-  - save_memory
-  - recall_memory
-skills:
-  - daily-pr-digest       # loads .oryxos/skills/daily-pr-digest.md into the system prompt
-mcp_servers:
-  - github-mcp
-channels:
-  - name: cli
-bootstrap:
-  - AGENTS.md
-  - SOUL.md
-  - USER.md
-settings:
-  max_iterations: 10
-  max_history_turns: 20
-```
-
-### Provider credentials
-
-Sensitive values are read from environment variables — never hardcoded:
-
-```bash
-export DEEPSEEK_API_KEY=sk-...
-export QWEN_API_KEY=sk-...
-export KIMI_API_KEY=sk-...
-```
-
-Reference them in the profile with `${ENV_VAR_NAME}`.
-
----
 
 ## CLI Reference
 
 ```bash
-# Workspace
-oryxos init                        # initialize .oryxos/ workspace
-oryxos status                      # show config and runtime status
+oryxos init                      # Initialize .oryxos/ workspace
+oryxos status                    # Show configuration and runtime status
+oryxos chat [--profile <name>]   # Interactive multi-turn chat
+oryxos serve [--port 8080]       # Launch HTTP API server
+oryxos gateway                   # Daemon mode (multi-channel)
 
-# Channels
-oryxos chat [--profile <name>]     # interactive multi-turn conversation
-oryxos serve [--port 8080]         # start REST API server
-oryxos gateway                     # daemon mode (multiple channels)
-
-# Profile management
 oryxos profile list
 oryxos profile create <name>
 oryxos profile show <name>
 oryxos profile delete <name>
 
-# Inspection
 oryxos provider list
 oryxos tool list
 oryxos session list
 ```
 
----
+## Agent Profile
+
+Each agent is defined by a single YAML file under `.oryxos/profiles/`:
+
+```yaml
+name: ops-agent
+description: DevOps assistant
+identity:
+  agent_name: ops-agent
+  prompt: You are a professional DevOps assistant...
+provider:
+  name: deepseek          # Switch to qwen / ollama / openai — zero code change
+  model: deepseek-chat
+  api_key: ${DEEPSEEK_API_KEY}
+tools:
+  - shell
+  - read_file
+  - http_get
+  - save_memory
+  - recall_memory
+settings:
+  max_iterations: 10
+  max_history_turns: 20
+```
 
 ## REST API
 
-Base path: `/api/v1`
+All endpoints are prefixed with `/api/v1`:
 
 | Method | Path | Description |
-| ------ | ---- | ----------- |
+| --- | --- | --- |
 | `POST` | `/sessions` | Create a session |
 | `POST` | `/sessions/{id}/messages` | Send a message (triggers ReAct Loop) |
-| `GET` | `/sessions/{id}` | Retrieve session history |
+| `GET` | `/sessions/{id}` | Get session history |
 | `DELETE` | `/sessions/{id}` | Archive a session |
 | `POST` | `/agents/{name}/invoke` | Stateless agent invocation |
 | `GET` | `/profiles` | List all profiles |
 | `GET` | `/memory` | Read long-term memory |
 | `GET` | `/tools` | List available tools |
 | `GET` | `/health` | Health check |
-| `GET` | `/info` | Runtime info and provider status |
+| `GET` | `/info` | Runtime info + provider status |
 
----
-
-## Workspace Layout
+## ReAct Loop
 
 ```text
-.oryxos/
-├── profiles/           # one YAML file per agent profile
-├── memory/
-│   └── MEMORY.md       # long-term memory written by save_memory tool
-├── skills/             # SKILL.md instruction templates (injected into system prompt)
-├── logs/               # structured JSON logs
-├── mcp_servers.yaml    # MCP server configuration
-├── oryxos.db           # SQLite database
-├── AGENTS.md           # project-level agent behavior bootstrap
-├── SOUL.md             # agent personality bootstrap
-└── USER.md             # user preferences (read-only for agents)
+User message
+  → PromptBuilder: system prompt (identity + bootstrap + SKILL.md)
+                 + long-term memory (MEMORY.md)
+                 + conversation history (max_history_turns)
+                 + available tools (function calling format)
+  → ProviderService: ChatModel.call()
+  → [No tool call]  → return final response
+  → [Tool call]     → SandboxChecker whitelist validation
+                    → ToolExecutor (built-in in-process / MCP via JSON-RPC)
+                    → write tool_invocations audit table
+                    → append result → loop (max_iterations)
 ```
 
----
+## Built-in Tools
 
-## Extending OryxOS
+| Tool | Description |
+| --- | --- |
+| `read_file` | Read files; path whitelist enforced |
+| `write_file` | Write files; path whitelist enforced |
+| `list_dir` | List directories; path whitelist enforced |
+| `shell` | Execute shell commands; command whitelist + timeout |
+| `http_get` | HTTP GET; domain whitelist enforced |
+| `http_post` | HTTP POST; domain whitelist enforced |
+| `save_memory` | Append to MEMORY.md (long-term memory) |
+| `recall_memory` | Keyword search in MEMORY.md |
 
-### Zero-code: SKILL.md + MCP Server
+## Supported LLM Providers
 
-Write a `SKILL.md` under `.oryxos/skills/` and reference a community MCP server in `mcp_servers.yaml`. No Java required.
+| Provider | Example models |
+| --- | --- |
+| `deepseek` | deepseek-chat, deepseek-coder |
+| `qwen` | qwen-max, qwen-plus |
+| `kimi` | moonshot-v1-8k, moonshot-v1-32k |
+| `openai` | gpt-4o, gpt-4o-mini |
+| `ollama` | qwen2.5:7b, llama3, any local model |
 
-### Light-code: Custom MCP Server
+## Tech Stack
 
-Implement an MCP server in any language and register it in `mcp_servers.yaml`. OryxOS connects over JSON-RPC.
-
-### Heavy-code: Java `@Tool` Bean
-
-Annotate a Spring Bean method with `@Tool` and register it in `ToolRegistry`. The bean runs in-process for maximum performance.
-
----
-
-## Roadmap
-
-| Phase | Scope |
-| ----- | ----- |
-| **Week 1** | Provider abstraction + ReAct Loop + CLI channel |
-| **Week 2** | Memory system + built-in tool suite + MCP client |
-| **Week 3** | Web Service (10 REST endpoints) + SQLite audit |
-| **Week 4** | Multi-agent demo + session persistence across restarts |
-| **Extension** | Multi-tenancy, RBAC, SSO, vector memory, SSE streaming, GraalVM Native Image |
-
----
-
-## Contributing
-
-Contributions are welcome. Please read the coding principles in [CLAUDE.md](CLAUDE.md) before submitting a PR — especially the rules around the ReAct Loop, Spring AI usage boundaries, and audit table writes.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feat/your-feature`)
-3. Commit your changes
-4. Open a Pull Request
-
----
+| Component | Choice |
+| --- | --- |
+| Language / Runtime | Java 21 (virtual threads) |
+| Framework | Spring Boot 3.x |
+| LLM Integration | Spring AI Alibaba (protocol translation + `@Tool` schema only) |
+| CLI | Picocli |
+| Config | SnakeYAML |
+| Persistence | SQLite + Spring Data JPA |
+| Logging | Logback + SLF4J (structured JSON) |
+| Build | Maven multi-module |
 
 ## License
 
-[MIT](LICENSE)
+[Apache License 2.0](LICENSE)
