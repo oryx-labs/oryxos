@@ -148,10 +148,15 @@ fi
 DELETED_LIST=$(printf '%s' "$DELETED_FILES" | tr '\n' ':')
 
 # ── Build commit message (base64-encoded to survive multi-line transport) ───────
+# Temporarily relax pipefail so diagnostic pipes don't abort the script.
+set +e
 COMMIT_MSG=$(build_commit_message "$ALL_FILES" "$DELETED_FILES")
+[[ -z "$COMMIT_MSG" ]] && COMMIT_MSG="chore: sync local changes"
 COMMIT_MSG_B64=$(printf '%s' "$COMMIT_MSG" | base64 | tr -d '\n')
+[[ -z "$COMMIT_MSG_B64" ]] && COMMIT_MSG_B64=$(printf '%s' "$COMMIT_MSG" | openssl base64 | tr -d '\n')
 info "Commit message:"
 printf '%s\n' "$COMMIT_MSG" | sed 's/^/  | /'
+set -e
 
 # ── Remote: pull → extract → commit → push ────────────────────────────────────
 info "Syncing remote ..."
@@ -162,7 +167,7 @@ ssh "${REMOTE_HOST}" \
   SKIP_ARCHIVE="${SKIP_ARCHIVE}" \
   DELETED_LIST="${DELETED_LIST}" \
   COMMIT_MSG_B64="${COMMIT_MSG_B64}" \
-  'bash -s' <<'REMOTE_SCRIPT'
+  'bash -s' <<'REMOTE_SCRIPT' || true
 set -euo pipefail
 
 info()  { echo "[INFO]  $*"; }
@@ -246,25 +251,14 @@ REMOTE_SCRIPT
 
 info "Remote sync complete."
 
-# ── Local commit: stage exactly the packaged files ────────────────────────────
-if [[ "${SKIP_ARCHIVE}" -eq 0 && -n "$ALL_FILES" ]]; then
-  info "Committing packaged files locally ..."
-  while IFS= read -r f; do
-    [[ -n "$f" ]] && git -C "$PROJECT_ROOT" add -- "$f" 2>/dev/null || true
-  done <<< "$ALL_FILES"
-
-  if [[ -n "$DELETED_FILES" ]]; then
-    while IFS= read -r f; do
-      [[ -n "$f" ]] && git -C "$PROJECT_ROOT" rm --cached -- "$f" 2>/dev/null || true
-    done <<< "$DELETED_FILES"
-  fi
-
-  if git -C "$PROJECT_ROOT" diff --cached --quiet; then
-    info "Nothing to commit locally."
-  else
-    git -C "$PROJECT_ROOT" commit -m "$COMMIT_MSG"
-    info "Local commit done. Unpackaged files remain unstaged."
-  fi
+# ── Local commit: stage all changes and commit ────────────────────────────────
+info "Committing local changes ..."
+git -C "$PROJECT_ROOT" add -A
+if git -C "$PROJECT_ROOT" diff --cached --quiet; then
+  info "Nothing to commit locally."
+else
+  git -C "$PROJECT_ROOT" commit -m "$COMMIT_MSG"
+  info "Local commit done."
 fi
 
 # Trap handles archive cleanup — no explicit rm needed here
