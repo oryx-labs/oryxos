@@ -4,7 +4,7 @@ export default defineConfig({
   title: 'OryxOS',
   titleTemplate: ':title — OryxOS',
   description: 'Enterprise Agent OS built on Java — run multiple AI agents on your own infrastructure',
-  base: '/',
+  base: '/oryxos/',
   cleanUrls: true,
   appearance: 'force-light',
 
