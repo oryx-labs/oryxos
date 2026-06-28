@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 480" width="760" height="480">
+  <defs>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.25)"/>
+    </filter>
+    <marker id="arr" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 Z" fill="#4b5563"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="760" height="480" fill="#0a0a0a" rx="12"/>
+
+  <!-- Title -->
+  <text x="380" y="34" font-family="'SF Mono','Fira Code',monospace" font-size="13" fill="#9ca3af" text-anchor="middle" letter-spacing="1.5">OryxOS — Four-Layer Architecture</text>
+
+  <!-- ═══ Layer 1: Channel Layer ═══ -->
+  <rect x="40" y="52" width="680" height="76" rx="8" fill="#0f1729" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="56" y="74" font-family="'SF Mono','Fira Code',monospace" font-size="11" fill="#3b82f6" font-weight="bold">Channel Layer</text>
+  <!-- CLI box -->
+  <rect x="56" y="82" width="290" height="36" rx="6" fill="#1e2d4a" stroke="#3b82f6" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="201" y="98" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#93c5fd" text-anchor="middle">CLI Channel</text>
+  <text x="201" y="112" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">oryxos chat  ·  oryxos-channel-cli</text>
+  <!-- REST box -->
+  <rect x="360" y="82" width="348" height="36" rx="6" fill="#1e2d4a" stroke="#3b82f6" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="534" y="98" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#93c5fd" text-anchor="middle">REST API</text>
+  <text x="534" y="112" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">POST /api/v1/…  ·  oryxos-web</text>
+
+  <!-- Arrow down -->
+  <line x1="380" y1="128" x2="380" y2="150" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ═══ Layer 2: Engine Layer ═══ -->
+  <rect x="40" y="150" width="680" height="84" rx="8" fill="#1a0f00" stroke="#f97316" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="56" y="172" font-family="'SF Mono','Fira Code',monospace" font-size="11" fill="#f97316" font-weight="bold">Engine Layer  ·  oryxos-core</text>
+  <!-- ReActLoop -->
+  <rect x="56" y="180" width="192" height="42" rx="6" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
+  <text x="152" y="197" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#fb923c" text-anchor="middle" font-weight="bold">ReActLoop</text>
+  <text x="152" y="213" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">drives each iteration</text>
+  <!-- PromptBuilder -->
+  <rect x="264" y="180" width="192" height="42" rx="6" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
+  <text x="360" y="197" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#fb923c" text-anchor="middle" font-weight="bold">PromptBuilder</text>
+  <text x="360" y="213" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">assembles 4-part prompt</text>
+  <!-- ToolExecutor -->
+  <rect x="472" y="180" width="236" height="42" rx="6" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
+  <text x="590" y="197" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#fb923c" text-anchor="middle" font-weight="bold">ToolExecutor</text>
+  <text x="590" y="213" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">sandbox check + audit write</text>
+
+  <!-- Arrow down -->
+  <line x1="380" y1="234" x2="380" y2="256" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ═══ Layer 3: Capability Layer ═══ -->
+  <rect x="40" y="256" width="680" height="96" rx="8" fill="#130d1f" stroke="#a855f7" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="56" y="278" font-family="'SF Mono','Fira Code',monospace" font-size="11" fill="#a855f7" font-weight="bold">Capability Layer</text>
+  <!-- Provider -->
+  <rect x="56" y="286" width="196" height="54" rx="6" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
+  <text x="154" y="306" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#c084fc" text-anchor="middle" font-weight="bold">Provider</text>
+  <text x="154" y="322" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">LLM call + routing</text>
+  <text x="154" y="334" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">oryxos-provider</text>
+  <!-- Memory -->
+  <rect x="268" y="286" width="196" height="54" rx="6" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
+  <text x="366" y="306" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#c084fc" text-anchor="middle" font-weight="bold">Memory</text>
+  <text x="366" y="322" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">session + long-term</text>
+  <text x="366" y="334" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">oryxos-memory</text>
+  <!-- Tool System -->
+  <rect x="480" y="286" width="228" height="54" rx="6" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
+  <text x="594" y="306" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#c084fc" text-anchor="middle" font-weight="bold">Tool System</text>
+  <text x="594" y="322" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">builtin + MCP + @Tool</text>
+  <text x="594" y="334" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">oryxos-tool</text>
+
+  <!-- Arrow down -->
+  <line x1="380" y1="352" x2="380" y2="374" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- ═══ Layer 4: Storage Layer ═══ -->
+  <rect x="40" y="374" width="680" height="84" rx="8" fill="#0a1a10" stroke="#22c55e" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="56" y="396" font-family="'SF Mono','Fira Code',monospace" font-size="11" fill="#22c55e" font-weight="bold">Storage Layer  ·  oryxos-storage</text>
+  <!-- SQLite box -->
+  <rect x="56" y="404" width="316" height="42" rx="6" fill="#0f2a18" stroke="#22c55e" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="214" y="421" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#4ade80" text-anchor="middle" font-weight="bold">SQLite</text>
+  <text x="214" y="437" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">sessions  ·  tool_invocations  ·  llm_calls</text>
+  <!-- Filesystem box -->
+  <rect x="388" y="404" width="320" height="42" rx="6" fill="#0f2a18" stroke="#22c55e" stroke-width="1" stroke-dasharray="4,2"/>
+  <text x="548" y="421" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#4ade80" text-anchor="middle" font-weight="bold">Filesystem  (.oryxos/)</text>
+  <text x="548" y="437" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">profiles  ·  MEMORY.md  ·  skills  ·  bootstrap</text>
+
+  <!-- Legend dots on left -->
+  <circle cx="56" cy="472" r="5" fill="#3b82f6"/>
+  <text x="68" y="476" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280">Channel</text>
+  <circle cx="136" cy="472" r="5" fill="#f97316"/>
+  <text x="148" y="476" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280">Engine</text>
+  <circle cx="208" cy="472" r="5" fill="#a855f7"/>
+  <text x="220" y="476" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280">Capability</text>
+  <circle cx="296" cy="472" r="5" fill="#22c55e"/>
+  <text x="308" y="476" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280">Storage</text>
+</svg>

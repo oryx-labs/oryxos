@@ -10,33 +10,7 @@ OryxOS 是一个 Spring Boot 3.x 单体应用，运行在 JDK 21 上，整个系
 
 ## 分层架构图
 
-```
-┌─────────────────────────────────────────────────────┐
-│                     接入层                           │
-│         CLI (oryxos chat)  │  REST API (/api/v1)    │
-│              oryxos-channel-cli  │  oryxos-web       │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│                     引擎层                           │
-│     ReActLoop  │  PromptBuilder  │  ToolExecutor    │
-│                    oryxos-core                      │
-└──────┬──────────────┬──────────────────┬────────────┘
-       │              │                  │
-┌──────▼──────┐ ┌──────▼──────┐ ┌───────▼────────────┐
-│  Provider   │ │   Memory    │ │    Tool System      │
-│  (LLM 调用) │ │  (上下文)   │ │    (执行)           │
-│ oryxos-     │ │ oryxos-     │ │  oryxos-tool        │
-│ provider    │ │ memory      │ │                     │
-└──────┬──────┘ └──────┬──────┘ └───────┬────────────┘
-       │               │                │
-┌──────▼───────────────▼────────────────▼────────────┐
-│                     基础层                           │
-│   SQLite (sessions, tool_invocations, llm_calls)   │
-│   文件系统 (.oryxos/: profiles, memory, skills)     │
-│                   oryxos-storage                    │
-└─────────────────────────────────────────────────────┘
-```
+![OryxOS Layer Diagram](/images/layer-diagram.svg)
 
 **接入层** — 两个入口。CLI 处理交互式使用和本地调试。REST API 处理业务系统集成。两者都汇入同一个引擎层。
 

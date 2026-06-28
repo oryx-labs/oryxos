@@ -10,33 +10,7 @@ The reasoning engine is a self-implemented ReAct loop. Spring AI Alibaba handles
 
 ## Layer Diagram
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   Channel Layer                     │
-│         CLI (oryxos chat)  │  REST API (/api/v1)    │
-│              oryxos-channel-cli  │  oryxos-web       │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│                   Engine Layer                      │
-│     ReActLoop  │  PromptBuilder  │  ToolExecutor    │
-│                    oryxos-core                      │
-└──────┬──────────────┬──────────────────┬────────────┘
-       │              │                  │
-┌──────▼──────┐ ┌──────▼──────┐ ┌───────▼────────────┐
-│  Provider   │ │   Memory    │ │    Tool System      │
-│  (LLM call) │ │  (context)  │ │  (execution)        │
-│ oryxos-     │ │ oryxos-     │ │  oryxos-tool        │
-│ provider    │ │ memory      │ │                     │
-└──────┬──────┘ └──────┬──────┘ └───────┬────────────┘
-       │               │                │
-┌──────▼───────────────▼────────────────▼────────────┐
-│                  Storage Layer                      │
-│   SQLite (sessions, tool_invocations, llm_calls)   │
-│   Filesystem (.oryxos/: profiles, memory, skills)  │
-│                   oryxos-storage                    │
-└─────────────────────────────────────────────────────┘
-```
+![OryxOS Layer Diagram](/images/layer-diagram.svg)
 
 **Channel Layer** — the two entry points. CLI handles interactive use and local debugging. REST API handles business system integration. Both funnel into the same engine.
 
