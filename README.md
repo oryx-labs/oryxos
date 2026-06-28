@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo.svg" alt="OryxOS" width="300"/>
+  <img src="docs/images/logo.svg" alt="OryxOS" width="256"/>
 </p>
 
 <p align="center">
