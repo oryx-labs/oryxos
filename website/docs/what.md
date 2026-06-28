@@ -2,6 +2,8 @@
 
 ***A Java-native Agent OS that runs and manages a fleet of business agents on your own infrastructure — shared channels, LLM routing, memory, tools, and auditable execution, all in one deployable binary.***
 
+![OryxOS Architecture](/images/architecture.svg)
+
 ## What it is
 
 OryxOS is a Spring Boot 3.x application that runs on JDK 21 as a unified Agent platform for enterprise deployments. You write a YAML Profile to define an Agent — its identity, which LLM it talks to, which tools it can use, which memory it shares. OryxOS handles everything else: the reasoning loop, context assembly, tool execution, sandbox enforcement, session persistence, and REST API exposure. Multiple Agents run inside a single instance simultaneously. Business systems integrate via HTTP. Data stays on your own infrastructure.

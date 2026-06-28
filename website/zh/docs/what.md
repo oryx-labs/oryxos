@@ -2,6 +2,8 @@
 
 ***一个 Java 原生的 Agent OS——在你自己的基础设施上运行和管理一批业务 Agent，共享渠道接入、LLM 路由、记忆系统和工具体系，全部打包在一个可部署的二进制文件里。***
 
+![OryxOS Architecture](/images/architecture.svg)
+
 ## 它是什么
 
 OryxOS 是一个基于 Spring Boot 3.x、运行在 JDK 21 上的统一 Agent 平台，专为企业私有化部署设计。你只需写一份 YAML Profile 来定义一个 Agent——它的身份、对话的 LLM、可用的工具、共享的记忆。其余的事情 OryxOS 全包：推理循环、上下文组装、工具执行、沙箱管控、会话持久化、REST API 对外暴露。多个 Agent 可以在同一个实例里并发运行。业务系统通过 HTTP 接入。数据始终在你自己的基础设施上。

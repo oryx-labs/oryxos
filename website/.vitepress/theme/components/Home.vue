@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { useData } from 'vitepress'
+import { useData, withBase } from 'vitepress'
 
 const { lang } = useData()
 const isZh = computed(() => lang.value === 'zh-CN')
@@ -281,25 +281,15 @@ const flowColumns = computed(() => [
     </div>
 
     <!-- ── HOW IT WORKS ── -->
-    <section class="section section-light">
+    <section class="section section-dark">
       <div class="section-inner">
         <div class="section-header">
           <span class="section-label">{{ t('运行原理', 'HOW IT WORKS') }}</span>
-          <h2 class="section-h2 dark">{{ t('Runtime 跑一个，OS 管一群。', 'Runtime for one. OS for many.') }}</h2>
+          <h2 class="section-h2">{{ t('Runtime 跑一个，OS 管一群。', 'Runtime for one. OS for many.') }}</h2>
         </div>
 
-        <p class="how-sub">{{ t(
-          'Agent Runtime 只负责运行单个 Agent；Agent OS 管理一群 Agent 的生命周期、渠道接入、LLM 路由、记忆隔离与跨节点协同。OryxOS 是后者。',
-          'An Agent Runtime runs one agent. An Agent OS manages a fleet — lifecycle, channels, LLM routing, memory isolation, and cross-node coordination. OryxOS is the latter.'
-        ) }}</p>
-
-        <div class="flow">
-          <div v-for="col in flowColumns" :key="col.id" class="flow-col" :class="{ 'flow-col--highlight': col.highlight }">
-            <div class="flow-col-label">{{ col.label }}</div>
-            <div class="flow-nodes">
-              <div v-for="node in col.nodes" :key="node" class="flow-node">{{ node }}</div>
-            </div>
-          </div>
+        <div class="arch-diagram">
+          <img :src="withBase('/images/architecture.svg')" alt="OryxOS Architecture" class="arch-img"/>
         </div>
       </div>
     </section>
@@ -1007,6 +997,18 @@ a { text-decoration: none; }
   text-align: center;
   max-width: 680px;
   margin: -32px auto 48px;
+}
+.arch-diagram {
+  width: 100%;
+  margin-top: 8px;
+  overflow-x: auto;
+}
+.arch-img {
+  display: block;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  border-radius: 10px;
 }
 
 /* ────────────────────────────────────────────────

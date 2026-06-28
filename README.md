@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo.svg" alt="OryxOS" width="256"/>
+  <img src="website/public/images/logo.svg" alt="OryxOS" width="256"/>
 </p>
 
 <p align="center">
@@ -55,7 +55,7 @@ Tools via MCP. Agent-to-agent collaboration via A2A. Skills via SKILL.md. OryxOS
 ## Architecture
 
 <p align="center">
-  <img src="docs/images/architecture.png" alt="OryxOS Architecture" width="100%"/>
+  <img src="website/public/images/architecture.svg" alt="OryxOS Architecture" width="100%"/>
 </p>
 
 ## Five Core Capabilities
