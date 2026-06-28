@@ -17,6 +17,47 @@ info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; }
 
+# ── Commit message builder ──────────────────────────────────────────────────────
+# Derive a meaningful commit message from the changed / deleted file lists:
+#   subject line summarises the affected top-level areas + file counts,
+#   body lists the files (capped to keep the message readable).
+build_commit_message() {
+  local changed="$1" deleted="$2"
+  local n_changed n_deleted areas subject
+  local -i cap=30
+
+  n_changed=$(printf '%s\n' "$changed" | grep -c '[^[:space:]]' || true)
+  n_deleted=$(printf '%s\n' "$deleted" | grep -c '[^[:space:]]' || true)
+  [[ "$n_changed" =~ ^[0-9]+$ ]] || n_changed=0
+  [[ "$n_deleted" =~ ^[0-9]+$ ]] || n_deleted=0
+
+  # Distinct top-level path segments touched (e.g. "docs, scripts, website")
+  areas=$(printf '%s\n%s\n' "$changed" "$deleted" \
+    | grep '[^[:space:]]' \
+    | sed 's#/.*##' \
+    | sort -u | paste -sd ', ' -)
+
+  if [[ "$n_changed" -gt 0 && "$n_deleted" -gt 0 ]]; then
+    subject="chore: sync ${areas:-changes} (${n_changed} changed, ${n_deleted} deleted)"
+  elif [[ "$n_deleted" -gt 0 ]]; then
+    subject="chore: remove ${n_deleted} file(s) in ${areas:-repo}"
+  else
+    subject="chore: update ${areas:-changes} (${n_changed} file(s))"
+  fi
+
+  printf '%s\n' "$subject"
+  if [[ "$n_changed" -gt 0 ]]; then
+    printf '\nChanged:\n'
+    printf '%s\n' "$changed" | grep '[^[:space:]]' | head -n "$cap" | sed 's/^/  - /'
+    [[ "$n_changed" -gt "$cap" ]] && printf '  - ... and %s more\n' "$((n_changed - cap))"
+  fi
+  if [[ "$n_deleted" -gt 0 ]]; then
+    printf '\nDeleted:\n'
+    printf '%s\n' "$deleted" | grep '[^[:space:]]' | head -n "$cap" | sed 's/^/  - /'
+    [[ "$n_deleted" -gt "$cap" ]] && printf '  - ... and %s more\n' "$((n_deleted - cap))"
+  fi
+}
+
 # ── Version / archive name ─────────────────────────────────────────────────────
 VERSION=$(git -C "$PROJECT_ROOT" describe --tags --always --dirty 2>/dev/null || echo "dev")
 TIMESTAMP=$(date +%Y%m%d%H%M%S)_$$
@@ -106,6 +147,12 @@ fi
 # ── Build remote delete commands (passed via env to avoid injection) ────────────
 DELETED_LIST=$(printf '%s' "$DELETED_FILES" | tr '\n' ':')
 
+# ── Build commit message (base64-encoded to survive multi-line transport) ───────
+COMMIT_MSG=$(build_commit_message "$ALL_FILES" "$DELETED_FILES")
+COMMIT_MSG_B64=$(printf '%s' "$COMMIT_MSG" | base64 | tr -d '\n')
+info "Commit message:"
+printf '%s\n' "$COMMIT_MSG" | sed 's/^/  | /'
+
 # ── Remote: pull → extract → commit → push ────────────────────────────────────
 info "Syncing remote ..."
 ssh "${REMOTE_HOST}" \
@@ -114,6 +161,7 @@ ssh "${REMOTE_HOST}" \
   ARCHIVE_NAME="${ARCHIVE_NAME}" \
   SKIP_ARCHIVE="${SKIP_ARCHIVE}" \
   DELETED_LIST="${DELETED_LIST}" \
+  COMMIT_MSG_B64="${COMMIT_MSG_B64}" \
   'bash -s' <<'REMOTE_SCRIPT'
 set -euo pipefail
 
@@ -162,7 +210,9 @@ git add -A
 if git diff --cached --quiet; then
   info "Nothing to commit on remote."
 else
-  git commit -m 'dev'
+  COMMIT_MSG=$(printf '%s' "${COMMIT_MSG_B64:-}" | base64 -d 2>/dev/null || true)
+  [[ -z "${COMMIT_MSG}" ]] && COMMIT_MSG="chore: sync local changes"
+  git commit -m "${COMMIT_MSG}"
 
   MAX_RETRIES=3
   RETRY=0
@@ -212,7 +262,7 @@ if [[ "${SKIP_ARCHIVE}" -eq 0 && -n "$ALL_FILES" ]]; then
   if git -C "$PROJECT_ROOT" diff --cached --quiet; then
     info "Nothing to commit locally."
   else
-    git -C "$PROJECT_ROOT" commit -m 'dev'
+    git -C "$PROJECT_ROOT" commit -m "$COMMIT_MSG"
     info "Local commit done. Unpackaged files remain unstaged."
   fi
 fi
