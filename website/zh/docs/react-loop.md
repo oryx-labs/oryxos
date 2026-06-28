@@ -2,6 +2,8 @@
 
 OryxOS 从零实现了 ReAct（Reason + Act）算法——`ReActLoop.java` 里数十行 Java 代码，没有框架委托，没有黑盒 Agent 抽象。每次迭代都是透明的、可审计的。
 
+![ReAct Loop](/images/react-loop.svg)
+
 ## 循环如何运转
 
 七个步骤，最多重复 `max_iterations` 次（默认 10 次）：

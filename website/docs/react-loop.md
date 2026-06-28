@@ -2,6 +2,8 @@
 
 OryxOS implements the ReAct (Reason + Act) algorithm entirely from scratch — a few dozen lines of Java in `ReActLoop.java`. There is no framework delegation, no black-box agent abstraction. Every iteration is observable and auditable.
 
+![ReAct Loop](/images/react-loop.svg)
+
 ## How the loop works
 
 Seven steps, repeated up to `max_iterations` times (default: 10):
