@@ -6,7 +6,7 @@ The reasoning engine is a self-implemented ReAct loop. Spring AI Alibaba handles
 
 ## Architecture Diagram
 
-![OryxOS Architecture](/images/architecture.png)
+![OryxOS Architecture](/images/architecture.svg)
 
 ## Layer Diagram
 

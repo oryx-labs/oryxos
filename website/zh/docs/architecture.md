@@ -6,7 +6,7 @@ OryxOS 是一个 Spring Boot 3.x 单体应用，运行在 JDK 21 上，整个系
 
 ## 架构图
 
-![OryxOS Architecture](/images/architecture.png)
+![OryxOS Architecture](/images/architecture.svg)
 
 ## 分层架构图
 
