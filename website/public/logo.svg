@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 56" width="300" height="56">
+  <!-- "OryxOS" word-mark -->
+  <text x="0" y="50"
+        font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-size="52" font-weight="900"
+        fill="#0f172a" letter-spacing="-2">Oryx<tspan fill="#2563eb">OS</tspan></text>
+</svg>

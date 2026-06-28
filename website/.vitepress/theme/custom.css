@@ -1,0 +1,258 @@
+/* ─── Brand tokens ────────────────────────────────────────────── */
+:root {
+  --vp-nav-bg-color: rgba(255, 255, 255, 0.92);
+  --vp-local-nav-bg-color: rgba(255, 255, 255, 0.92);
+  --vp-sidebar-bg-color: #ffffff;
+  --vp-c-brand-1: #1e3a8a;
+  --vp-c-brand-2: #1d4ed8;
+  --vp-c-brand-3: #2563eb;
+  --vp-c-brand-soft: rgba(37, 99, 235, 0.08);
+
+  --vp-font-family-base: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-soft: #f8fafc;
+  --vp-c-bg-mute: #f1f5f9;
+
+  --vp-c-text-1: #0f172a;
+  --vp-c-text-2: #334155;
+  --vp-c-text-3: #64748b;
+
+  --vp-c-divider: #e2e8f0;
+  --vp-c-border: #e2e8f0;
+}
+
+/* ─── Hide dark mode toggle ──────────────────────────────────── */
+.VPNavBarAppearance,
+.VPSwitchAppearance {
+  display: none !important;
+}
+
+/* ─── Nav ─────────────────────────────────────────────────────── */
+.VPNav {
+  border-bottom: 1px solid var(--vp-c-divider) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+
+.VPNavBarTitle .logo {
+  height: 36px;
+  width: auto;
+}
+
+.VPNavBarTitle .title:hover {
+  opacity: 0.8;
+}
+
+
+.VPNavBarMenu .VPNavBarMenuLink {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--vp-c-text-2) !important;
+  transition: color 0.15s;
+}
+
+.VPNavBarMenu .VPNavBarMenuLink:hover {
+  color: var(--vp-c-text-1) !important;
+}
+
+/* ─── Content page ──────────── */
+.VPDoc .container {
+  max-width: 1200px !important;
+}
+
+.VPDoc .content {
+  max-width: 1000px !important;
+}
+
+.VPDoc h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--vp-c-text-1);
+  margin-bottom: 0.5rem;
+}
+
+.VPDoc h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 2rem;
+  margin-top: 2rem;
+  color: var(--vp-c-text-1);
+}
+
+.VPDoc h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.VPDoc p {
+  line-height: 1.75;
+  color: var(--vp-c-text-2);
+}
+
+/* Code blocks — light background, dark text */
+.vp-code-group,
+div[class*='language-'] {
+  border-radius: 8px !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  background: #f8fafc !important;
+}
+
+div[class*='language-'] pre,
+div[class*='language-'] pre code {
+  background: #f8fafc !important;
+}
+
+div[class*='language-'] code,
+div[class*='language-'] code span {
+  font-size: 0.82rem;
+  color: #1e293b !important;
+}
+
+/* language label */
+div[class*='language-'] > span.lang {
+  color: #64748b !important;
+}
+
+/* copy button */
+div[class*='language-'] > button.copy {
+  color: #64748b !important;
+}
+
+/* Inline code */
+:not(pre) > code {
+  background: var(--vp-c-bg-soft) !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  border-radius: 4px !important;
+  padding: 0.1em 0.35em !important;
+  font-size: 0.85em !important;
+  color: var(--vp-c-text-1) !important;
+}
+
+/* Tables */
+.vp-doc table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.vp-doc table th {
+  background: var(--vp-c-bg-soft);
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+  text-align: left;
+  padding: 0.5rem 1rem;
+  border-bottom: 2px solid var(--vp-c-divider);
+}
+
+.vp-doc table td {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ─── Nav dropdown ────────────────────────────────────────────── */
+.VPFlyout .menu,
+.VPFlyout .panel,
+.VPNavBarMenuGroup .panel,
+.VPNavBarMenuGroup .menu,
+.VPMenu,
+.VPFlyout > .menu,
+.VPNavBarMenuGroup > .menu {
+  background: #ffffff !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+.VPMenu .item .VPMenuLink,
+.VPMenu .item .link,
+.VPFlyout .VPMenuLink,
+.VPFlyout .link {
+  color: var(--vp-c-text-1) !important;
+}
+
+.VPMenu .item .VPMenuLink:hover,
+.VPMenu .item .link:hover,
+.VPFlyout .VPMenuLink:hover,
+.VPFlyout .link:hover {
+  background: var(--vp-c-bg-soft) !important;
+  color: var(--vp-c-text-1) !important;
+}
+
+/* ─── Sidebar top padding ─────────────────────────────────────── */
+.VPSidebarItem.level-0:first-child {
+  padding-top: 24px !important;
+}
+
+/* ─── Sidebar ─────────────────────────────────────────────────── */
+.VPSidebar {
+  background: #ffffff !important;
+  border-right: 1px solid var(--vp-c-divider) !important;
+}
+
+.VPSidebarItem .item .link.is-active,
+.VPSidebarItem .item .link.is-active:hover {
+  color: #1e3a8a !important;
+  font-weight: 600 !important;
+}
+
+.VPSidebarItem .item .link.is-active .text {
+  color: #1e3a8a !important;
+  font-weight: 600 !important;
+}
+
+.VPSidebarItem.is-active > .item > .link,
+.VPSidebarItem.is-active > .item > .link:hover {
+  background: rgba(37, 99, 235, 0.08) !important;
+  border-radius: 6px !important;
+  color: #1e3a8a !important;
+  font-weight: 600 !important;
+}
+
+.VPSidebarItem.level-1.is-active > .item > .indicator {
+  background: #2563eb !important;
+}
+
+/* ─── Footer ──────────────────────────────────────────────────── */
+.VPFooter {
+  border-top: 1px solid var(--vp-c-divider) !important;
+  background: transparent !important;
+}
+
+.VPFooter .message,
+.VPFooter .copyright {
+  font-size: 0.8rem;
+  color: var(--vp-c-text-3) !important;
+}
+
+/* ─── Home page layout overrides ─────────────────────────────── */
+.VPHome {
+  padding-bottom: 0 !important;
+  padding-top: 0 !important;
+}
+
+.VPPage,
+.VPContent {
+  padding-bottom: 0 !important;
+}
+
+/* Hide default VitePress home hero when using custom */
+.VPHero {
+  display: none;
+}
+
+/* Hide VitePress footer globally — custom footer in Home.vue */
+.VPFooter {
+  display: none !important;
+}

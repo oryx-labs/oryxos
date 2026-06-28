@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: oryxos
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:sqlite:oryxos.db
+    driver-class-name: org.sqlite.JDBC
+  jpa:
+    database-platform: org.hibernate.community.dialect.SQLiteDialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    io.oryxos: DEBUG
