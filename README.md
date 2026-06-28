@@ -19,6 +19,23 @@ OryxOS is a self-hosted Enterprise Agent OS built on **Java 21 + Spring Boot 3**
 
 No vendor lock-in. No data leaving your environment.
 
+## Features
+
+**🔀 Zero-code LLM Provider Switching**
+Switch between DeepSeek, Qwen, Kimi, OpenAI, or any local Ollama model by editing one line in a YAML Profile — no code changes, no redeployment. Each agent can independently use a different provider and model.
+
+**🔄 Self-implemented ReAct Loop**
+OryxOS owns the full Reason → Act → Observe cycle. It does not delegate to Spring AI's agent abstractions — `ToolExecutor` dispatches every tool call, enforces sandbox whitelists, writes audit records, and feeds results back into the loop. You get complete visibility and control.
+
+**🧠 Three-layer Persistent Memory**
+Agents remember across sessions. Session memory keeps the current conversation; long-term memory (`MEMORY.md`) is automatically injected into every system prompt so preferences and facts persist indefinitely; episodic memory is on the roadmap. `save_memory` and `recall_memory` tools let agents write and search their own memory.
+
+**📋 Built-in Audit Trail**
+Every tool call and every LLM request is written to `tool_invocations` and `llm_calls` tables in SQLite from day one — not as an afterthought. Production incidents are fully traceable without log parsing.
+
+**🔌 Extensible Tool & MCP Ecosystem**
+Seven built-in tools (file read/write, shell, HTTP, memory) cover common needs out of the box. For everything else: point to any community MCP server in `mcp_servers.yaml` with zero Java code, or register a Spring `@Tool` bean for in-process execution. New channels and tools are added as independent Maven modules — `oryxos-core` stays untouched.
+
 ## Architecture
 
 <p align="center">
