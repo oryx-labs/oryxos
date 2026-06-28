@@ -40,17 +40,24 @@ export default defineConfig({
         sidebar: {
           '/docs/': [
             {
-              text: 'Getting Started',
+              text: 'Introduction',
               items: [
                 { text: 'What is OryxOS', link: '/docs/what' },
+                { text: 'Why OryxOS', link: '/docs/why' },
+              ],
+            },
+            {
+              text: 'Getting Started',
+              items: [
                 { text: 'Quick Start', link: '/docs/quick-start' },
               ],
             },
             {
-              text: 'Core',
+              text: 'Architecture',
               items: [
-                { text: 'Provider', link: '/docs/provider' },
+                { text: 'Overview', link: '/docs/architecture' },
                 { text: 'ReAct Loop', link: '/docs/react-loop' },
+                { text: 'Provider', link: '/docs/provider' },
                 { text: 'Memory', link: '/docs/memory' },
                 { text: 'Tool System', link: '/docs/tool' },
               ],
@@ -58,8 +65,9 @@ export default defineConfig({
             {
               text: 'Reference',
               items: [
-                { text: 'CLI', link: '/docs/cli' },
                 { text: 'REST API', link: '/docs/api' },
+                { text: 'CLI', link: '/docs/cli' },
+                { text: 'Profile YAML', link: '/docs/profile' },
                 { text: 'Roadmap', link: '/docs/roadmap' },
               ],
             },
@@ -80,17 +88,24 @@ export default defineConfig({
         sidebar: {
           '/zh/docs/': [
             {
-              text: '快速入门',
+              text: '介绍',
               items: [
                 { text: 'OryxOS 是什么', link: '/zh/docs/what' },
+                { text: '为什么选 OryxOS', link: '/zh/docs/why' },
+              ],
+            },
+            {
+              text: '快速入门',
+              items: [
                 { text: '快速开始', link: '/zh/docs/quick-start' },
               ],
             },
             {
-              text: '核心能力',
+              text: '架构设计',
               items: [
-                { text: 'Provider 路由', link: '/zh/docs/provider' },
+                { text: '架构概览', link: '/zh/docs/architecture' },
                 { text: 'ReAct 循环', link: '/zh/docs/react-loop' },
+                { text: 'Provider 路由', link: '/zh/docs/provider' },
                 { text: '记忆系统', link: '/zh/docs/memory' },
                 { text: 'Tool 体系', link: '/zh/docs/tool' },
               ],
@@ -98,8 +113,9 @@ export default defineConfig({
             {
               text: '参考',
               items: [
-                { text: 'CLI 命令', link: '/zh/docs/cli' },
                 { text: 'REST API', link: '/zh/docs/api' },
+                { text: 'CLI 命令', link: '/zh/docs/cli' },
+                { text: 'Profile YAML', link: '/zh/docs/profile' },
                 { text: '路线图', link: '/zh/docs/roadmap' },
               ],
             },

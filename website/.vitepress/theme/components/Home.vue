@@ -177,10 +177,11 @@ const flowColumns = computed(() => [
     <section class="hero">
       <div class="hero-inner">
         <p class="hero-eyebrow">
-          <span class="eyebrow-comment">// </span>{{ t('分布式 AI Agent OS · Java 21 · Apache 2.0', 'distributed AI agent OS · Java 21 · Apache 2.0') }}
+          <span class="eyebrow-comment">// </span>{{ t('开源 · 私有部署 · Apache 2.0', 'open-source · self-hosted · Apache 2.0') }}
         </p>
 
         <h1 class="hero-headline">
+          <span class="headline-tag">{{ t('分布式 AI Agent OS', 'Distributed AI Agent OS') }}</span><br>
           <span class="headline-white">{{ t('让一群 Agent', 'Run AI Agents') }}</span><br>
           <span class="headline-amber">{{ t('像进程跑在操作系统上', 'Like Processes on an OS') }}</span>
         </h1>
@@ -466,6 +467,19 @@ a { text-decoration: none; }
   line-height: 1.05;
   letter-spacing: -0.03em;
   margin: 0 0 28px;
+}
+.headline-tag {
+  display: inline-block;
+  font-size: 0.38em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.5);
+  border-radius: 4px;
+  padding: 3px 10px;
+  margin-bottom: 12px;
+  vertical-align: middle;
 }
 .headline-white { color: #fafafa; }
 .headline-amber { color: #f97316; }
