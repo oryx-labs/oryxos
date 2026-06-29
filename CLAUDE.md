@@ -1,8 +1,10 @@
 # OryxOS — Claude Code 项目指南
 
-OryxOS 是基于 Java 实现的面向企业场景的 **Agent OS**，装在企业自己的 K8s 或服务器上，作为统一底座运行多个业务 Agent，共享渠道接入、模型路由、工具调用、记忆系统、沙箱执行能力。
+OryxOS 是用 Java 实现的面向企业场景的 **Distributed AI Agent OS**。装在企业自己的 K8s 或服务器上，作为统一底座运行多个业务 Agent，共享渠道接入、模型路由、工具调用、记忆系统、沙箱执行能力。数据完全留在企业自己的基础设施，不锁任何云生态。
 
-> 详细背景：`docs/DemandAnalysis.md`（需求）、`docs/TechnicalSolution.md`（技术方案）、`docs/IndustryResearch.md`（业界调研）、`docs/AiProgrammingGuide.md`（AI 编程指南）
+长期目标：走进 Apache 基金会，成为 Apache 顶级项目。
+
+> 详细背景：`docs/DemandAnalysis.md`（需求）、`docs/TechnicalSolution.md`（技术方案）、`docs/IndustryResearch.md`（业界调研）、`docs/AiProgrammingGuide.md`（AI 编程指南）、`docs/oryxos.md`（项目定位）
 
 ---
 
@@ -10,7 +12,7 @@ OryxOS 是基于 Java 实现的面向企业场景的 **Agent OS**，装在企业
 
 | 组件 | 选型 |
 |------|------|
-| 语言 / 运行时 | Java 21（必须，不得降版本） |
+| 语言 / 运行时 | Java 21（必须，virtual thread 处理并发） |
 | 框架 | Spring Boot 3.x |
 | LLM 调用 | Spring AI Alibaba（仅用协议转换 + `@Tool` schema 生成） |
 | HTTP 服务 | Spring MVC + Java 21 Virtual Thread |
@@ -22,17 +24,23 @@ OryxOS 是基于 Java 实现的面向企业场景的 **Agent OS**，装在企业
 
 ---
 
-## 模块结构
+## 模块结构（9 个）
 
 ```
 oryxos/
-├── oryxos-core          # 核心抽象：OryxTool 接口、Session、Profile、ContextLoader、ReActLoop、PromptBuilder、ToolExecutor、AgentService
-├── oryxos-provider      # 能力一：ProviderService、Function Calling 适配、多 Provider 显式映射
-├── oryxos-memory        # 能力三：MemoryService 门面、LongTermMemory、MemoryTools（save/recall）
-├── oryxos-tool          # 能力四：内置 Tool（文件/Shell/HTTP）、MCP Client、ToolRegistry、SandboxChecker
+├── oryxos-core          # 核心抽象：OryxTool 接口、Session、Profile、ContextLoader、
+│                        #   ReActLoop、PromptBuilder、ToolExecutor、AgentService
+├── oryxos-provider      # 能力一：ProviderService、Function Calling 适配、
+│                        #   多 Provider 显式映射
+├── oryxos-memory        # 能力三：MemoryService 门面、LongTermMemory、
+│                        #   MemoryTools（save/recall）
+├── oryxos-tool          # 能力四：内置 Tool（文件/Shell/HTTP）、MCP Client、
+│                        #   ToolRegistry、SandboxChecker
 ├── oryxos-channel-cli   # CLI Channel：oryxos chat 实现
-├── oryxos-web           # 能力五：WebServer、6 个 ApiController、GlobalExceptionHandler、OpenAPI
-├── oryxos-storage       # 持久化：SQLite、SessionRepository、ToolInvocationRepository、LlmCallRepository
+├── oryxos-web           # 能力五：WebServer、ApiController、GlobalExceptionHandler、
+│                        #   OpenAPI
+├── oryxos-storage       # 持久化：SQLite、SessionRepository、
+│                        #   ToolInvocationRepository、LlmCallRepository
 ├── oryxos-cli           # 命令行入口：Picocli 主入口、12 个子命令、ConfigLoader
 └── oryxos-boot          # Spring Boot 启动模块：主类、自动配置、依赖聚合
 ```
@@ -43,15 +51,15 @@ oryxos/
 
 ## 不可违背的原则（Constitution）
 
-以下原则来自 `docs/AiProgrammingGuide.md` 的 constitution，所有代码必须遵守。
+以下原则来自 `docs/AiProgrammingGuide.md` 和 `docs/TechnicalSolution.md`，所有代码必须遵守。
 
 ### 原则一：自实现 ReAct Loop
 
-`ReActLoop` 必须自己实现，**不得**使用 Spring AI 的 Agent 抽象（如 `ChatClient.prompt().call()` 的自动工具执行）。核心循环约数十行 Java，完整掌握 Agent 工作机制。
+`ReActLoop` 必须自己实现，**不得**使用 Spring AI 的 Agent 抽象（如 `ChatClient.prompt().call()` 的自动工具执行）。核心循环约数十行 Java，完整掌握 Agent 工作机制，保留未来定制循环行为的空间。
 
-### 原则二：Spring AI 只用一半 ⚠️
+### 原则二：Spring AI 只用两件事 ⚠️
 
-Spring AI 在 OryxOS 里只做两件事：
+Spring AI 在 OryxOS 里只做：
 
 1. LLM Provider 协议转换（OpenAI / Anthropic / Gemini 等各家格式差异由它吸收）
 2. `@Tool` 注解的 JSON Schema 生成
@@ -75,8 +83,8 @@ ChatResponse response = chatModel.call(new Prompt(messages, options));
 // 正确：显式映射
 Map<String, ChatModel> providerMap = Map.of(
     "deepseek", deepseekChatModel,
-    "qwen", qwenChatModel,
-    "kimi", kimiChatModel
+    "qwen",     qwenChatModel,
+    "kimi",     kimiChatModel
 );
 ```
 
@@ -98,6 +106,10 @@ Map<String, ChatModel> providerMap = Map.of(
 ### 原则七：同步执行模型
 
 核心阶段全程同步阻塞，配合 Java 21 Virtual Thread 处理并发。**不引入** Reactor / WebFlux / CompletableFuture 等异步编程模型（SSE 流式响应放扩展阶段）。
+
+### 原则八：Tool 模块三合一
+
+内置 Tool、MCP Client 合并在一个 `oryxos-tool` 模块，**不拆成多个模块**。SKILL.md 加载归 `oryxos-core` 的 `ContextLoader`。
 
 ---
 
@@ -140,6 +152,7 @@ provider:
   name: deepseek          # 对应 ProviderService 里的显式映射 key
   model: deepseek-chat
   temperature: 0.7
+  api_key: ${DEEPSEEK_API_KEY}   # 从环境变量读取，不明文写死
 tools:
   - read_file
   - shell
@@ -216,17 +229,17 @@ settings:
   → 追加到 Session 对话历史
   → PromptBuilder 组装 Prompt：
       [1] system prompt（Profile identity + Bootstrap + SKILL.md）← ContextLoader
-      [2] 长期记忆（MEMORY.md 全文）                             ← MemoryService
+      [2] 长期记忆（MEMORY.md 全文，超 4000 字自动截断）         ← MemoryService
       [3] 对话历史（最近 max_history_turns 轮）                  ← SessionManager
       [4] 可用 Tool 列表（Function Calling 格式）                ← ToolRegistry
-  → ProviderService 调 LLM
+  → ProviderService 调 LLM（写 llm_calls 表）
   → [无 Tool 调用] → 返回最终响应
   → [有 Tool 调用] → ToolExecutor 执行 Tool
       → SandboxChecker 白名单校验
       → 执行（内置 Tool 在进程内 / MCP Tool 通过 JSON-RPC 转发）
       → 写 tool_invocations 表
       → 结果追加到对话历史
-  → 回到组装 Prompt 继续循环（最多 max_iterations 次）
+  → 回到组装 Prompt 继续循环（最多 max_iterations 次，默认 10）
 ```
 
 ---
@@ -246,7 +259,7 @@ interface OryxTool {
 
 `ToolResult` 包含：`success`、`content`、`errorMessage`、`retryable`。
 
-### 内置 Tool（核心阶段 7 个）
+### 内置 Tool（核心阶段 8 个）
 
 | Tool | 类 | 说明 |
 |------|-----|------|
@@ -266,6 +279,8 @@ interface OryxTool {
 | 零代码 | 最低 | ⭐ 主推 | 写 SKILL.md + 复用社区 MCP server |
 | 轻代码 | 中 | ⭐⭐ | 任意语言写 MCP server，配置在 `mcp_servers.yaml` |
 | 重代码 | 高 | ⭐⭐⭐ | Java `@Tool` 注解 Spring Bean，进程内直接调用 |
+
+> 选择原则：能用方式一就不用方式二，能用方式二就不用方式三。
 
 ---
 
@@ -290,7 +305,7 @@ interface OryxTool {
 
 ---
 
-## 命令行工具
+## 命令行工具（12 个）
 
 ```bash
 # 启动和状态
@@ -319,13 +334,24 @@ oryxos session list
 敏感配置（API key、MCP server 凭证）通过环境变量注入，**不得**明文写在 Profile YAML 里：
 
 ```yaml
-# Profile 里用占位符
 provider:
   name: deepseek
   api_key: ${DEEPSEEK_API_KEY}   # 从环境变量读取
 ```
 
 `ConfigLoader` 启动时做必填项和格式校验，缺失或非法时给清晰报错，不静默失败。
+
+---
+
+## 五大核心能力与验收 Demo
+
+| 能力 | 核心组件 | 验收 Demo |
+|------|---------|---------|
+| **一：对接 LLM** | `ProviderService`，显式 provider 映射 | — |
+| **二：ReAct 循环** | `ReActLoop`、`PromptBuilder`、`ToolExecutor` | Demo 一：`oryxos chat` 查天气穿衣 |
+| **三：Memory** | `MemoryService`、`LongTermMemory`、`MEMORY.md` | Demo 二：跨对话记偏好 |
+| **四：Plugin Tool** | `ToolRegistry`、`SandboxChecker`、MCP Client | Demo 三：零代码 PR digest |
+| **五：Web Service** | `WebServer`、`ApiController` × 6 | Demo 四+五：REST 端点联动 |
 
 ---
 
@@ -351,3 +377,16 @@ provider:
 | 用 `hibernate.ddl-auto=update` 迁移表结构 | SQLite ALTER TABLE 报错 | 手动维护建表脚本或引入 Flyway |
 | 在 ReAct Loop 里用异步 | 复杂度激增，Virtual Thread 优势消失 | 保持同步阻塞，Virtual Thread 自动处理 IO 等待 |
 | `MEMORY.md` 超过 4000 字不截断 | 注入 system prompt 超 context window | `LongTermMemory.truncateIfNeeded()` 超阈值保留最近内容 |
+| Tool 模块拆成多个 | 模块间依赖混乱 | 内置 Tool + MCP Client 合并为一个 `oryxos-tool` 模块 |
+
+---
+
+## 设计原则
+
+- **底座优先于 Agent**：最重要的交付不是某个强大的 Agent，而是让任意 Agent 可靠运行的环境
+- **自实现核心，复用管道**：ReAct 循环手写；LLM 协议适配委托给 Spring AI Alibaba
+- **配置即 Agent**：一个 Agent 完全由一份 YAML Profile 定义，不需要写代码
+- **对接开放标准**：工具用 MCP，Agent 间协作用 A2A，技能用 `SKILL.md` 文件
+- **无状态实例，状态外置**：这是未来走向分布式架构而不需要大改设计的前提
+- **安全是地基，不是补丁**：工具来源管控、最小权限、强制沙箱白名单、凭证走环境变量、完整审计记录从第一天就写入 SQLite
+- **分阶段克制**：先构建最小完整的运行时内核；治理和分布式基础设施在真实使用数据验证后再做
