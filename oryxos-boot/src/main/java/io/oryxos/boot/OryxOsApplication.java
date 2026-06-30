@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication(scanBasePackages = "io.oryxos")
 public class OryxOsApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(OryxOsApplication.class, args);
-    }
+  public static void main(String[] args) {
+    SpringApplication.run(OryxOsApplication.class, args);
+  }
 }
