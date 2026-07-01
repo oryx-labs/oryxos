@@ -1,0 +1,18 @@
+# Local pre-commit hooks for OryxOS.
+# Install once:  pip install pre-commit && pre-commit install
+# Runs before every commit; fails the commit if formatting is off.
+repos:
+  - repo: local
+    hooks:
+      - id: spotless-apply
+        name: spotless (google-java-format)
+        entry: mvn -q -B spotless:apply
+        language: system
+        pass_filenames: false
+        files: \.java$
+      - id: spotless-check
+        name: spotless check
+        entry: mvn -q -B spotless:check
+        language: system
+        pass_filenames: false
+        files: \.java$

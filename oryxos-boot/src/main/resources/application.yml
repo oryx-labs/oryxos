@@ -1,6 +1,12 @@
 spring:
   application:
     name: oryxos
+  # Principle 2: disable Spring AI's eager auto-configuration. The Provider module wires
+  # each ChatModel explicitly (provider name -> ChatModel map); models must not be
+  # auto-instantiated at startup (which would also demand API keys before any agent runs).
+  autoconfigure:
+    exclude:
+      - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAutoConfiguration
   threads:
     virtual:
       enabled: true
@@ -16,6 +22,37 @@ spring:
 server:
   port: 8080
 
+# Observability: Actuator + Micrometer/Prometheus
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  health:
+    # Nacos is pulled in transitively by the Spring AI Alibaba starter but OryxOS does not
+    # use it; its health indicator would otherwise report DOWN (no Nacos server).
+    nacos-config:
+      enabled: false
+    nacos-discovery:
+      enabled: false
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+      show-components: always
+  metrics:
+    tags:
+      application: oryxos
+
+# OpenAPI / Swagger UI
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+# Log levels (formatting/appenders live in logback-spring.xml)
 logging:
   level:
     root: INFO

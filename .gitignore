@@ -26,6 +26,12 @@ replay_pid*
 # Maven build output
 target/
 
+# SQLite runtime database
+*.db
+
+# OWASP Dependency-Check data cache
+.dependency-check/
+
 # VitePress build output and cache
 website/.vitepress/dist/
 website/.vitepress/cache/

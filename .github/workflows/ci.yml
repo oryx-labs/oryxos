@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'week-*', 'dev-*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build & quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # Runs the full lifecycle: spotless:check (validate) → checkstyle → compile →
+      # test → pmd/p3c → spotbugs+findsecbugs (verify). Any violation fails the job.
+      - name: mvn verify
+        run: mvn -B clean verify
+
+  dependency-check:
+    name: OWASP Dependency-Check (CVE scan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # Enabled via -Dowasp.skip=false. NVD_API_KEY (repo secret) makes the NVD
+      # download fast and avoids rate limiting; the scan still works without it, slowly.
+      - name: mvn verify with dependency-check
+        run: mvn -B clean verify -DskipTests -Dowasp.skip=false -DnvdApiKey="${NVD_API_KEY}"
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
