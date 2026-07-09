@@ -1,0 +1,29 @@
+<svg viewBox="0 0 820 380" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="380" fill="#ffffff"/>
+  <defs>
+    <marker id="tsg1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+    <marker id="tsam1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f59e0b"/></marker>
+    <marker id="tsgr1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#22c55e"/></marker>
+  </defs>
+  <rect x="250" y="24" width="320" height="54" rx="10" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="410" y="48" fill="#4338ca" font-size="16" font-weight="bold" text-anchor="middle">上层 · ReAct 循环</text>
+  <text x="410" y="68" fill="#6366f1" font-size="12" text-anchor="middle">传入 Profile + Prompt</text>
+  <line x1="410" y1="78" x2="410" y2="104" stroke="#94a3b8" stroke-width="2" marker-end="url(#tsg1)"/>
+  <rect x="185" y="106" width="450" height="58" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="410" y="132" fill="#b45309" font-size="16" font-weight="bold" text-anchor="middle">ProviderService（前台 / 统一抽象层）</text>
+  <text x="410" y="152" fill="#92400e" font-size="12" text-anchor="middle">按 Profile 选对应模型 · 屏蔽各家差异</text>
+  <line x1="410" y1="164" x2="410" y2="184" stroke="#f59e0b" stroke-width="2"/>
+  <line x1="140" y1="184" x2="680" y2="184" stroke="#f59e0b" stroke-width="2"/>
+  <line x1="140" y1="184" x2="140" y2="212" stroke="#f59e0b" stroke-width="2" marker-end="url(#tsam1)"/>
+  <line x1="410" y1="184" x2="410" y2="212" stroke="#f59e0b" stroke-width="2" marker-end="url(#tsam1)"/>
+  <line x1="680" y1="184" x2="680" y2="212" stroke="#f59e0b" stroke-width="2" marker-end="url(#tsam1)"/>
+  <rect x="40" y="214" width="200" height="48" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="140" y="243" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">ChatModel · DeepSeek</text>
+  <rect x="310" y="214" width="200" height="48" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="410" y="243" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">ChatModel · Kimi</text>
+  <rect x="580" y="214" width="200" height="48" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="680" y="243" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">ChatModel · Qwen</text>
+  <line x1="410" y1="262" x2="410" y2="298" stroke="#22c55e" stroke-width="2" marker-end="url(#tsgr1)"/>
+  <rect x="40" y="300" width="740" height="52" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="410" y="331" fill="#15803d" font-size="14" font-weight="bold" text-anchor="middle">各家 LLM API（OpenAI / Anthropic / Gemini 协议）</text>
+</svg>

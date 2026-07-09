@@ -1,0 +1,38 @@
+<svg viewBox="0 0 820 280" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="280" fill="#ffffff"/>
+  <defs>
+    <marker id="c321" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+  </defs>
+  <text x="410" y="36" fill="#1e293b" font-size="15" font-weight="bold" text-anchor="middle">五周三十二节：从认知到一个打了 tag 的 Agent OS</text>
+  <rect x="40" y="70" width="140" height="100" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="110" y="98" fill="#475569" font-size="12" font-weight="bold" text-anchor="middle">周一 · 总论</text>
+  <text x="110" y="120" fill="#64748b" font-size="9.5" text-anchor="middle">1–7 节</text>
+  <text x="110" y="140" fill="#64748b" font-size="9.5" text-anchor="middle">认知与判断力</text>
+  <text x="110" y="156" fill="#64748b" font-size="9.5" text-anchor="middle">工具·方法论·工作流</text>
+  <line x1="180" y1="120" x2="194" y2="120" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c321)"/>
+  <rect x="196" y="70" width="140" height="100" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="266" y="98" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">周二 · 起手</text>
+  <text x="266" y="120" fill="#1e40af" font-size="9.5" text-anchor="middle">8–14 节</text>
+  <text x="266" y="140" fill="#1e40af" font-size="9.5" text-anchor="middle">看懂 Agent OS</text>
+  <text x="266" y="156" fill="#1e40af" font-size="9.5" text-anchor="middle">评审·准备·Spec-Kit</text>
+  <line x1="336" y1="120" x2="350" y2="120" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c321)"/>
+  <rect x="352" y="70" width="140" height="100" rx="10" fill="#ede9fe" stroke="#a855f7" stroke-width="2"/>
+  <text x="422" y="98" fill="#7c3aed" font-size="12" font-weight="bold" text-anchor="middle">周三 · 基础能力</text>
+  <text x="422" y="120" fill="#6b21a8" font-size="9.5" text-anchor="middle">15–20 节</text>
+  <text x="422" y="140" fill="#6b21a8" font-size="9.5" text-anchor="middle">地基 · Provider · ReAct</text>
+  <text x="422" y="156" fill="#6b21a8" font-size="9.5" text-anchor="middle">CLI · Notify · Tool</text>
+  <line x1="492" y1="120" x2="506" y2="120" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c321)"/>
+  <rect x="508" y="70" width="140" height="100" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="578" y="98" fill="#15803d" font-size="12" font-weight="bold" text-anchor="middle">周四 · 核心支撑</text>
+  <text x="578" y="120" fill="#166534" font-size="9.5" text-anchor="middle">21–26 节</text>
+  <text x="578" y="140" fill="#166534" font-size="9.5" text-anchor="middle">Memory · Sandbox</text>
+  <text x="578" y="156" fill="#166534" font-size="9.5" text-anchor="middle">定时 · Web Service</text>
+  <line x1="648" y1="120" x2="662" y2="120" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c321)"/>
+  <rect x="664" y="70" width="140" height="100" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="734" y="98" fill="#b45309" font-size="12" font-weight="bold" text-anchor="middle">周五 · 打通发布</text>
+  <text x="734" y="120" fill="#92400e" font-size="9.5" text-anchor="middle">27–32 节</text>
+  <text x="734" y="140" fill="#92400e" font-size="9.5" text-anchor="middle">串联 · 插件化 Agent</text>
+  <text x="734" y="156" fill="#92400e" font-size="9.5" text-anchor="middle">两个 Demo · v0.1.0</text>
+  <text x="410" y="212" fill="#64748b" font-size="11.5" text-anchor="middle">前两周立判断力，后三周把判断力变成一个跑着两个真实 Agent 的系统</text>
+  <text x="410" y="238" fill="#64748b" font-size="11.5" text-anchor="middle">代码是判断力的产物——这五周真正交付的是那套可迁移的工作流</text>
+</svg>

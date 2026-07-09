@@ -1,0 +1,23 @@
+<svg viewBox="0 0 820 360" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="360" fill="#ffffff"/>
+  <defs>
+    <marker id="mp" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+    <marker id="ma" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f59e0b"/></marker>
+  </defs>
+  <rect x="40" y="30" width="280" height="70" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="180" y="60" fill="#b45309" font-size="14" font-weight="bold" text-anchor="middle">核心记忆</text>
+  <text x="180" y="82" fill="#92400e" font-size="11" text-anchor="middle">始终在场，小而恒定，MEMORY.md 顶部固定区块</text>
+  <rect x="40" y="130" width="280" height="70" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="180" y="160" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">会话记忆</text>
+  <text x="180" y="182" fill="#1e40af" font-size="11" text-anchor="middle">当前 session 往来，存 SQLite</text>
+  <rect x="40" y="230" width="280" height="70" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="180" y="260" fill="#475569" font-size="14" font-weight="bold" text-anchor="middle">归档记忆</text>
+  <text x="180" y="282" fill="#64748b" font-size="11" text-anchor="middle">按需检索，文件 + 关键词匹配</text>
+  <line x1="320" y1="65" x2="560" y2="145" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#mp)"/>
+  <line x1="320" y1="165" x2="560" y2="165" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#mp)"/>
+  <line x1="320" y1="265" x2="560" y2="185" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#mp)"/>
+  <rect x="560" y="130" width="220" height="70" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="670" y="160" fill="#15803d" font-size="14" font-weight="bold" text-anchor="middle">拼进 Prompt</text>
+  <text x="670" y="182" fill="#166534" font-size="11" text-anchor="middle">核心 + 会话 + 检索到的归档</text>
+  <text x="410" y="335" fill="#64748b" font-size="12" text-anchor="middle">核心/归档记忆靠 Agent 主动调 save_memory 写入，不是系统自动提炼</text>
+</svg>

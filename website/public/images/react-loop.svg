@@ -68,7 +68,7 @@
   <!-- Step 4: ToolExecutor -->
   <rect x="240" y="432" width="320" height="76" rx="8" fill="#1a0f00" stroke="#f97316" stroke-width="1.5" filter="url(#shadow)"/>
   <text x="400" y="454" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" fill="#f97316" text-anchor="middle" font-weight="bold">ToolExecutor</text>
-  <text x="400" y="472" font-family="'SF Mono', 'Fira Code', monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">SandboxChecker → execute tool</text>
+  <text x="400" y="472" font-family="'SF Mono', 'Fira Code', monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">Sandbox.enforce → execute tool</text>
   <text x="400" y="488" font-family="'SF Mono', 'Fira Code', monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">→ writes tool_invocations</text>
   <text x="400" y="503" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#6b7280" text-anchor="middle">builtin / MCP / @Tool bean</text>
 

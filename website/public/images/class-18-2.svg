@@ -1,0 +1,13 @@
+<svg viewBox="0 0 820 240" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="240" fill="#ffffff"/>
+  <rect x="30" y="28" width="360" height="188" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="52" y="62" fill="#b45309" font-size="18" font-weight="bold">CLI 负责</text>
+  <text x="52" y="100" fill="#3f3f46" font-size="15">· 解析命令行参数、分发子命令</text>
+  <text x="52" y="132" fill="#3f3f46" font-size="15">· 把输入交给引擎、打印结果</text>
+  <text x="52" y="164" fill="#3f3f46" font-size="15">· 维护交互会话（/quit 退出）</text>
+  <rect x="430" y="28" width="360" height="188" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="452" y="62" fill="#475569" font-size="18" font-weight="bold">CLI 不管</text>
+  <text x="452" y="100" fill="#64748b" font-size="15">· Agent 怎么想 → ReActLoop</text>
+  <text x="452" y="132" fill="#64748b" font-size="15">· 工具怎么执行 → ToolExecutor</text>
+  <text x="452" y="164" fill="#64748b" font-size="15">· HTTP 接入 → Web Service</text>
+</svg>

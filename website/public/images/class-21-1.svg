@@ -1,0 +1,20 @@
+<svg viewBox="0 0 820 290" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="290" fill="#ffffff"/>
+  <defs>
+    <marker id="m1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f59e0b"/></marker>
+    <marker id="m2" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#22c55e"/></marker>
+  </defs>
+  <rect x="60" y="80" width="300" height="110" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="210" y="115" fill="#1d4ed8" font-size="16" font-weight="bold" text-anchor="middle">短期记忆 · 工作记忆</text>
+  <text x="210" y="140" fill="#334155" font-size="12" text-anchor="middle">当前对话 / 任务的上下文</text>
+  <text x="210" y="160" fill="#64748b" font-size="11" text-anchor="middle">容量有限 · 随窗口消失</text>
+  <rect x="460" y="80" width="300" height="110" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="610" y="115" fill="#15803d" font-size="16" font-weight="bold" text-anchor="middle">长期记忆 · 跨会话</text>
+  <text x="610" y="140" fill="#334155" font-size="12" text-anchor="middle">情景 / 语义 / 程序记忆</text>
+  <text x="610" y="160" fill="#64748b" font-size="11" text-anchor="middle">持久保存 · 检索后拼回</text>
+  <path d="M360,90 L360,50 L460,50 L460,90" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#m1)"/>
+  <text x="410" y="38" fill="#b45309" font-size="12" font-weight="bold" text-anchor="middle">固化写出去</text>
+  <path d="M460,180 L460,220 L360,220 L360,180" fill="none" stroke="#22c55e" stroke-width="2" marker-end="url(#m2)"/>
+  <text x="410" y="235" fill="#15803d" font-size="12" font-weight="bold" text-anchor="middle">检索读回来</text>
+  <text x="410" y="265" fill="#64748b" font-size="12" text-anchor="middle">短期记忆里重要的，固化成长期；长期记忆里相关的，检索回来拼进上下文</text>
+</svg>

@@ -1,0 +1,26 @@
+<svg viewBox="0 0 820 430" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="430" fill="#ffffff"/>
+  <defs>
+    <marker id="c281" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+  </defs>
+  <rect x="250" y="20" width="320" height="55" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.4"/>
+  <text x="410" y="42" fill="#b45309" font-size="12" font-weight="bold" text-anchor="middle">① AgentScheduler 到点触发 · 拿本地锁</text>
+  <text x="410" y="62" fill="#92400e" font-size="9.5" text-anchor="middle">cron + 时区来自 Profile 的 schedules 字段（25 节）</text>
+  <line x1="410" y1="75" x2="410" y2="93" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c281)"/>
+  <rect x="250" y="95" width="320" height="55" rx="8" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="410" y="117" fill="#4338ca" font-size="12" font-weight="bold" text-anchor="middle">② AgentService.process（跟人推同一入口）</text>
+  <text x="410" y="137" fill="#6366f1" font-size="9.5" text-anchor="middle">Session 按 scheduler+profile 复用，历次触发同一条历史</text>
+  <line x1="410" y1="150" x2="410" y2="168" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c281)"/>
+  <rect x="250" y="170" width="320" height="55" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="410" y="192" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">③ ReAct 循环：想、调工具</text>
+  <text x="410" y="212" fill="#1e40af" font-size="9.5" text-anchor="middle">每次涉外调用都过 Sandbox 白名单</text>
+  <line x1="410" y1="225" x2="410" y2="243" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c281)"/>
+  <rect x="250" y="245" width="320" height="55" rx="8" fill="#fce7f3" stroke="#db2777" stroke-width="2"/>
+  <text x="410" y="267" fill="#be185d" font-size="12" font-weight="bold" text-anchor="middle">④ notify 主动推送</text>
+  <text x="410" y="287" fill="#db2777" font-size="9.5" text-anchor="middle">没人在等响应，结果必须自己送出去（19 节）</text>
+  <line x1="410" y1="300" x2="410" y2="318" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c281)"/>
+  <rect x="250" y="320" width="320" height="55" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2.4"/>
+  <text x="410" y="342" fill="#15803d" font-size="12" font-weight="bold" text-anchor="middle">⑤ 落库：sessions + 两张审计表</text>
+  <text x="410" y="362" fill="#166534" font-size="9.5" text-anchor="middle">跟人推的一次对话完全同一套记账口径</text>
+  <text x="410" y="408" fill="#64748b" font-size="11.5" text-anchor="middle">钟推链路 = 人推链路换了个触发头、多了个推送尾——中间五脏六腑一模一样</text>
+</svg>
