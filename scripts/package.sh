@@ -136,17 +136,6 @@ else
   info "Archive created: $ARCHIVE ($(du -sh "$ARCHIVE" | cut -f1))"
 fi
 
-# ── Upload archive ─────────────────────────────────────────────────────────────
-ARCHIVE_NAME="$(basename "$ARCHIVE")"
-if [[ "${SKIP_ARCHIVE}" -eq 0 ]]; then
-  info "Uploading to ${REMOTE_HOST}:${REMOTE_DIR} ..."
-  scp "$ARCHIVE" "${REMOTE_HOST}:${REMOTE_DIR}/"
-  info "Upload complete: ${REMOTE_HOST}:${REMOTE_DIR}/${ARCHIVE_NAME}"
-fi
-
-# ── Build remote delete commands (passed via env to avoid injection) ────────────
-DELETED_LIST=$(printf '%s' "$DELETED_FILES" | tr '\n' ':')
-
 # ── Build commit message (base64-encoded to survive multi-line transport) ───────
 # Temporarily relax pipefail so diagnostic pipes don't abort the script.
 set +e
@@ -157,6 +146,27 @@ COMMIT_MSG_B64=$(printf '%s' "$COMMIT_MSG" | base64 | tr -d '\n')
 info "Commit message:"
 printf '%s\n' "$COMMIT_MSG" | sed 's/^/  | /'
 set -e
+
+# ── Local commit first: 网络/远端任何一步失败，本地工作也已留痕 ────────────────
+info "Committing local changes ..."
+git -C "$PROJECT_ROOT" add -A
+if git -C "$PROJECT_ROOT" diff --cached --quiet; then
+  info "Nothing to commit locally."
+else
+  git -C "$PROJECT_ROOT" commit -m "$COMMIT_MSG"
+  info "Local commit done."
+fi
+
+# ── Upload archive ─────────────────────────────────────────────────────────────
+ARCHIVE_NAME="$(basename "$ARCHIVE")"
+if [[ "${SKIP_ARCHIVE}" -eq 0 ]]; then
+  info "Uploading to ${REMOTE_HOST}:${REMOTE_DIR} ..."
+  scp "$ARCHIVE" "${REMOTE_HOST}:${REMOTE_DIR}/"
+  info "Upload complete: ${REMOTE_HOST}:${REMOTE_DIR}/${ARCHIVE_NAME}"
+fi
+
+# ── Build remote delete commands (passed via env to avoid injection) ────────────
+DELETED_LIST=$(printf '%s' "$DELETED_FILES" | tr '\n' ':')
 
 # ── Remote: pull → extract → commit → push ────────────────────────────────────
 info "Syncing remote ..."
@@ -251,14 +261,21 @@ REMOTE_SCRIPT
 
 info "Remote sync complete."
 
-# ── Local commit: stage all changes and commit ────────────────────────────────
-info "Committing local changes ..."
-git -C "$PROJECT_ROOT" add -A
-if git -C "$PROJECT_ROOT" diff --cached --quiet; then
-  info "Nothing to commit locally."
+# ── Converge with origin: 远端替我们 commit+push 的是同内容的另一个 SHA，
+#    不收敛的话本地和 origin 会永久分叉（曾累积到 5:5）。──────────────────────
+info "Converging local history with origin/${LOCAL_BRANCH} ..."
+if ! git -C "$PROJECT_ROOT" fetch origin "${LOCAL_BRANCH}" --quiet; then
+  warn "fetch origin failed; skip converge (local commit kept)."
+elif git -C "$PROJECT_ROOT" diff --quiet "origin/${LOCAL_BRANCH}" HEAD; then
+  git -C "$PROJECT_ROOT" reset --hard "origin/${LOCAL_BRANCH}" >/dev/null
+  info "Local branch now matches origin/${LOCAL_BRANCH} (adopted remote history)."
 else
-  git -C "$PROJECT_ROOT" commit -m "$COMMIT_MSG"
-  info "Local commit done."
+  if git -C "$PROJECT_ROOT" rebase "origin/${LOCAL_BRANCH}"; then
+    info "Rebased local commits onto origin/${LOCAL_BRANCH}."
+  else
+    git -C "$PROJECT_ROOT" rebase --abort || true
+    warn "origin 与本地内容不同且 rebase 冲突，保留本地提交，请人工处理。"
+  fi
 fi
 
 # Trap handles archive cleanup — no explicit rm needed here
