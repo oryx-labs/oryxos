@@ -1,0 +1,40 @@
+<svg viewBox="0 0 820 320" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="320" fill="#ffffff"/>
+  <defs>
+    <marker id="c271" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+  </defs>
+  <rect x="40" y="40" width="150" height="60" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="115" y="65" fill="#475569" font-size="11" font-weight="bold" text-anchor="middle">① 输入</text>
+  <text x="115" y="83" fill="#64748b" font-size="9" text-anchor="middle">chat / REST（人推）</text>
+  <line x1="190" y1="70" x2="243" y2="70" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
+  <rect x="245" y="40" width="150" height="60" rx="8" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="320" y="65" fill="#4338ca" font-size="11" font-weight="bold" text-anchor="middle">② AgentService</text>
+  <text x="320" y="83" fill="#6366f1" font-size="9" text-anchor="middle">统一入口</text>
+  <line x1="395" y1="70" x2="448" y2="70" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
+  <rect x="450" y="40" width="150" height="60" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="525" y="60" fill="#1d4ed8" font-size="11" font-weight="bold" text-anchor="middle">③ PromptBuilder</text>
+  <text x="525" y="76" fill="#1e40af" font-size="8.5" text-anchor="middle">ContextLoader 注入 Skill</text>
+  <text x="525" y="90" fill="#1e40af" font-size="8.5" text-anchor="middle">MemoryService 注入记忆</text>
+  <line x1="600" y1="70" x2="653" y2="70" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
+  <rect x="655" y="40" width="130" height="60" rx="8" fill="#ede9fe" stroke="#a855f7" stroke-width="2"/>
+  <text x="720" y="65" fill="#7c3aed" font-size="11" font-weight="bold" text-anchor="middle">④ Provider</text>
+  <text x="720" y="83" fill="#9333ea" font-size="9" text-anchor="middle">调 LLM · 写 llm_calls</text>
+  <line x1="720" y1="100" x2="720" y2="138" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
+  <rect x="655" y="140" width="130" height="60" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.4"/>
+  <text x="720" y="165" fill="#b45309" font-size="11" font-weight="bold" text-anchor="middle">⑤ ToolExecutor</text>
+  <text x="720" y="183" fill="#92400e" font-size="9" text-anchor="middle">Sandbox 白名单校验</text>
+  <line x1="653" y1="170" x2="602" y2="170" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
+  <rect x="450" y="140" width="150" height="60" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="525" y="165" fill="#b45309" font-size="11" font-weight="bold" text-anchor="middle">⑥ Tool 执行</text>
+  <text x="525" y="183" fill="#92400e" font-size="9" text-anchor="middle">内置 / MCP · 写 tool_invocations</text>
+  <line x1="448" y1="170" x2="397" y2="170" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
+  <rect x="245" y="140" width="150" height="60" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="320" y="165" fill="#15803d" font-size="11" font-weight="bold" text-anchor="middle">⑦ 结果回填 Session</text>
+  <text x="320" y="183" fill="#166534" font-size="9" text-anchor="middle">进下一轮或收尾</text>
+  <line x1="243" y1="170" x2="192" y2="170" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
+  <rect x="40" y="140" width="150" height="60" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2.4"/>
+  <text x="115" y="165" fill="#15803d" font-size="11" font-weight="bold" text-anchor="middle">⑧ 落库</text>
+  <text x="115" y="183" fill="#166534" font-size="9" text-anchor="middle">sessions · 两张审计表</text>
+  <text x="410" y="245" fill="#64748b" font-size="12" text-anchor="middle">一次人推请求跑完，①~⑧ 每一站都要留下正确的痕迹</text>
+  <text x="410" y="270" fill="#64748b" font-size="11" text-anchor="middle">单个模块测试全绿 ≠ 链路能通——缝隙全都藏在两站之间的交接处</text>
+</svg>

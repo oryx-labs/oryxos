@@ -1,0 +1,27 @@
+<svg viewBox="0 0 820 340" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="340" fill="#ffffff"/>
+  <defs>
+    <marker id="gy2" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+    <marker id="am2" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f59e0b"/></marker>
+    <marker id="gr2" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#22c55e"/></marker>
+  </defs>
+  <rect x="300" y="20" width="240" height="46" rx="8" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="420" y="48" fill="#4338ca" font-size="14" font-weight="bold" text-anchor="middle">读一行输入（stdin）</text>
+  <line x1="420" y1="66" x2="420" y2="90" stroke="#94a3b8" stroke-width="2" marker-end="url(#gy2)"/>
+  <polygon points="420,92 545,128 420,164 295,128" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="420" y="133" fill="#b45309" font-size="13" font-weight="bold" text-anchor="middle">是 /quit ？</text>
+  <line x1="545" y1="128" x2="660" y2="128" stroke="#94a3b8" stroke-width="2" marker-end="url(#gy2)"/>
+  <text x="600" y="118" fill="#64748b" font-size="12" font-weight="bold" text-anchor="middle">是</text>
+  <rect x="662" y="104" width="128" height="46" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="726" y="132" fill="#475569" font-size="13" font-weight="bold" text-anchor="middle">退出</text>
+  <line x1="420" y1="164" x2="420" y2="188" stroke="#f59e0b" stroke-width="2" marker-end="url(#am2)"/>
+  <text x="452" y="182" fill="#64748b" font-size="12" text-anchor="start">否</text>
+  <rect x="270" y="190" width="300" height="48" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2.4"/>
+  <text x="420" y="212" fill="#15803d" font-size="14" font-weight="bold" text-anchor="middle">AgentService.process(输入)</text>
+  <text x="420" y="230" fill="#15803d" font-size="11" text-anchor="middle">进 ReAct 引擎跑一轮完整对话</text>
+  <line x1="420" y1="238" x2="420" y2="262" stroke="#22c55e" stroke-width="2" marker-end="url(#gr2)"/>
+  <rect x="300" y="264" width="240" height="44" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="420" y="291" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">打印响应（stdout）</text>
+  <path d="M300,286 L120,286 L120,43 L296,43" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#am2)"/>
+  <text x="120" y="165" fill="#b45309" font-size="12" text-anchor="middle" transform="rotate(-90 120 165)">循环：接着读下一行</text>
+</svg>

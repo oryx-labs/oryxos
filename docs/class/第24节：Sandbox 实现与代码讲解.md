@@ -1,0 +1,267 @@
+# Sandbox：实现与代码讲解
+
+上一节把 Sandbox 的账算清楚了：核心阶段做应用层白名单校验，接口要设计得能撑住未来的容器和 microVM。这节把它变成代码——按 23 节定的思路拆任务、写实现、接进已有的 Tool 体系。
+
+---
+
+## 一、这一节要做什么
+
+一句话：**把 23 节那道"墙"砌出来，墙后面填上白名单校验这一档实现，再把它接进 `read_file`/`write_file`/`shell`/`http_get`/`http_post` 这几个已经存在的 Tool。**
+
+不做的事：不写容器实现、不写 microVM 实现、不改 `ToolExecutor` 的审计逻辑（它已经有失败路径，Sandbox 拒绝就是一次普通的工具执行失败，直接复用）。
+
+## 二、动手前先拆任务
+
+按 23 节的顺序拆，不是想到哪写到哪：
+
+1. **先定接口和值对象**——`Sandbox` 接口、`SandboxAction`、`ActionType`、`SandboxViolationException`。这是墙，必须先定死，定完之后不管后面加多少档实现都不再改它。
+2. **写唯一的实现** `WhitelistSandbox`，对应文件路径、shell 命令、HTTP 域名三类校验，读 `file.allowed_paths`、`shell.allowed_commands`、`http.allowed_domains` 三块配置。
+3. **接进已有的 Tool**——`FileTools`、`ShellTools`、`HttpTools` 在各自 `execute` 方法一开始调用 `sandbox.enforce(...)`，校验不过直接抛异常，后面真正的 IO 代码一行都不用改。
+4. **确认失败路径不用新写代码**——`SandboxViolationException` 从 Tool 里抛出来，会被 `ToolExecutor` 已有的 try/catch 接住，按普通工具失败记进 `tool_invocations`（`success=false`，`error_message` 是校验失败的原因）。
+5. **自查接口中立性**——套 23 节教的办法，脑子里换成 microVM 实现问一遍："`Sandbox.enforce(SandboxAction)` 这个签名，microVM 套得进去吗？" 套得进去才算这道墙立住了。
+
+全部放在 `oryxos-tool` 模块，和 `FileTools`/`ShellTools`/`HttpTools` 挨在一起——它们本来就是一伙的，不需要往 `oryxos-core` 塞新概念。
+
+![Sandbox 拦截流程：三个内置 Tool 调 enforce，通过则执行，拒绝则抛异常](../../website/public/images/class-24-1.svg)
+
+## 三、代码怎么写
+
+### 3.1 接口和值对象——这是墙，先定死
+
+```java
+package io.oryxos.tool.sandbox;
+
+/**
+ * 表达"在受控环境里执行一个动作"的意图，不表达任何一档具体实现。
+ * 核心阶段只有 WhitelistSandbox 一个实现；未来加容器、microVM 实现时，
+ * 这个接口签名不应该发生变化。
+ */
+public interface Sandbox {
+    void enforce(SandboxAction action);
+}
+```
+
+```java
+package io.oryxos.tool.sandbox;
+
+public record SandboxAction(ActionType type, String target) {
+}
+```
+
+```java
+package io.oryxos.tool.sandbox;
+
+public enum ActionType {
+    FILE_ACCESS,
+    SHELL_EXEC,
+    HTTP_REQUEST
+}
+```
+
+```java
+package io.oryxos.tool.sandbox;
+
+public class SandboxViolationException extends RuntimeException {
+    public SandboxViolationException(String message) {
+        super(message);
+    }
+}
+```
+
+注意 `SandboxAction` 只有 `type` 和 `target` 两个字段，没有任何"白名单""容器""镜像"字样——这就是 23 节说的"接口表达意图，不表达实现"。`target` 是一个纯字符串，具体是路径、命令还是 URL，由 `type` 决定，实现类自己去解释。
+
+### 3.2 唯一实现：WhitelistSandbox
+
+先绑三块配置，对应文档里一直说的三个 key：
+
+```java
+package io.oryxos.tool.sandbox;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import java.util.List;
+
+@ConfigurationProperties(prefix = "file")
+public record FileSandboxProperties(List<String> allowedPaths) {
+}
+```
+
+```java
+@ConfigurationProperties(prefix = "shell")
+public record ShellSandboxProperties(List<String> allowedCommands) {
+}
+```
+
+```java
+@ConfigurationProperties(prefix = "http")
+public record HttpSandboxProperties(List<String> allowedDomains) {
+}
+```
+
+再写实现本身：
+
+```java
+package io.oryxos.tool.sandbox;
+
+import org.springframework.stereotype.Component;
+
+import java.net.URI;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;
+
+@Component
+public class WhitelistSandbox implements Sandbox {
+
+    private final List<Path> allowedRoots;
+    private final Set<String> allowedCommands;
+    private final List<String> allowedDomainPatterns;
+
+    public WhitelistSandbox(FileSandboxProperties fileProps,
+                             ShellSandboxProperties shellProps,
+                             HttpSandboxProperties httpProps) {
+        this.allowedRoots = fileProps.allowedPaths().stream()
+                .map(Path::of)
+                .map(Path::normalize)
+                .toList();
+        this.allowedCommands = Set.copyOf(shellProps.allowedCommands());
+        this.allowedDomainPatterns = List.copyOf(httpProps.allowedDomains());
+    }
+
+    @Override
+    public void enforce(SandboxAction action) {
+        switch (action.type()) {
+            case FILE_ACCESS -> checkFilePath(action.target());
+            case SHELL_EXEC -> checkShellCommand(action.target());
+            case HTTP_REQUEST -> checkHttpUrl(action.target());
+        }
+    }
+
+    private void checkFilePath(String rawPath) {
+        Path target = Path.of(rawPath).normalize().toAbsolutePath();
+        boolean allowed = allowedRoots.stream().anyMatch(target::startsWith);
+        if (!allowed) {
+            throw new SandboxViolationException("路径不在白名单内: " + rawPath);
+        }
+    }
+
+    private void checkShellCommand(String command) {
+        String firstToken = command.trim().split("\\s+")[0];
+        if (!allowedCommands.contains(firstToken)) {
+            throw new SandboxViolationException("命令不在白名单内: " + firstToken);
+        }
+    }
+
+    private void checkHttpUrl(String url) {
+        String host = URI.create(url).getHost();
+        boolean allowed = allowedDomainPatterns.stream()
+                .anyMatch(pattern -> matchesDomain(host, pattern));
+        if (!allowed) {
+            throw new SandboxViolationException("域名不在白名单内: " + host);
+        }
+    }
+
+    private boolean matchesDomain(String host, String pattern) {
+        if (pattern.startsWith("*.")) {
+            return host.endsWith(pattern.substring(1));
+        }
+        return host.equals(pattern);
+    }
+}
+```
+
+三个校验方法都是 `private`，外部只看得到 `enforce(SandboxAction)` 这一个入口——这一点很重要：**如果三个方法是 `public` 并且直接暴露在接口上，接口就又被这一档实现带偏了**。它们是 `WhitelistSandbox` 自己内部怎么组织代码的自由，不是接口契约的一部分。
+
+`checkFilePath` 用 `Path.normalize().toAbsolutePath()` 再 `startsWith` 判断，是为了防止 `../../etc/passwd` 这类路径穿越绕过白名单——这是应用层校验最容易漏的一个点，之前提过第一档"防的是犯傻不是攻击"，这里至少把最常见的穿越手法堵上。`checkShellCommand` 只取命令的第一个 token 比对，和文档里"命令首 token 白名单"的说法一致。
+
+### 3.3 接进已有的三个 Tool
+
+以 `ShellTools` 为例，`FileTools`、`HttpTools` 是同样的改法——在 `execute` 方法最开头调用 `sandbox.enforce(...)`，校验通过才往下走：
+
+```java
+package io.oryxos.tool.builtin;
+
+import io.oryxos.tool.sandbox.ActionType;
+import io.oryxos.tool.sandbox.Sandbox;
+import io.oryxos.tool.sandbox.SandboxAction;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ShellTools {
+
+    private final Sandbox sandbox;
+
+    public ShellTools(Sandbox sandbox) {
+        this.sandbox = sandbox;
+    }
+
+    @Tool(description = "执行一条 shell 命令")
+    public ToolResult shell(String command) {
+        sandbox.enforce(new SandboxAction(ActionType.SHELL_EXEC, command));
+        return doExecute(command);
+    }
+
+    private ToolResult doExecute(String command) {
+        // 真正的进程执行逻辑，这一段完全没变
+        ...
+    }
+}
+```
+
+`FileTools` 的改法：
+
+```java
+@Tool(description = "读文件")
+public ToolResult readFile(String path) {
+    sandbox.enforce(new SandboxAction(ActionType.FILE_ACCESS, path));
+    return doRead(path);
+}
+
+@Tool(description = "写文件")
+public ToolResult writeFile(String path, String content) {
+    sandbox.enforce(new SandboxAction(ActionType.FILE_ACCESS, path));
+    return doWrite(path, content);
+}
+```
+
+`HttpTools` 的改法：
+
+```java
+@Tool(description = "发起 GET 请求")
+public ToolResult httpGet(String url) {
+    sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, url));
+    return doGet(url);
+}
+```
+
+三处改动的模式完全一样：**先 `enforce`，通过了才做原来的事**。真正的文件 IO、进程调用、HTTP 调用代码一行没动——这正是接口设计对了的直接体现，如果当初接口设计跟白名单校验绑死，现在接这三个 Tool 的代码肯定不会这么干净。
+
+### 3.4 失败路径复用 ToolExecutor 已有的审计逻辑
+
+`SandboxViolationException` 是一个普通的 `RuntimeException`，从 Tool 的 `execute` 里抛出来，会被 `ToolExecutor` 里已经写好的 try/catch 接住——17 节讲过，工具执行失败也要记进 `tool_invocations`，`success=false`，`error_message` 存异常信息。这里不需要为 Sandbox 单独写一条审计路径，`SandboxViolationException` 的 `message`（比如"命令不在白名单内: rm"）会原样存进 `error_message`，模型在下一轮对话里能看到这条失败原因，从而知道这条路走不通。
+
+![类结构图：Sandbox 接口、WhitelistSandbox 实现、SandboxAction 值对象](../../website/public/images/class-24-2.svg)
+
+完整的一次失败调用，串起来是这样的：
+
+![失败链路时序图：模型生成命令、Sandbox 拦截、写入 tool_invocations、结果回填](../../website/public/images/class-24-3.svg)
+
+这张图想说明的是：**Sandbox 拒绝和 Sandbox 放行，走的是完全同一条后续路径**，唯一的差别就是 `success` 是 `true` 还是 `false`。这也从侧面验证了当初的设计是对的——如果 Sandbox 违规需要一条专门的处理逻辑，说明它没有被自然地融进已有的工具执行框架。
+
+**本节交付物**（Spec-Kit 拆解锚点）：
+
+- 代码：`Sandbox` 接口、`SandboxAction`、`ActionType`、`SandboxViolationException`、`WhitelistSandbox`、三个 `@ConfigurationProperties`（file/shell/http）
+- 配置：`application.yaml` 的 `file.allowed_paths`、`shell.allowed_commands`、`http.allowed_domains`
+- 改造点：`FileTools`/`ShellTools`/`HttpTools`/`NotifyTools` 各在执行首行加 `sandbox.enforce(...)`
+
+## 四、做完怎么验
+
+- **单元测试**：给 `WhitelistSandbox` 三类校验各写允许和拒绝两个用例，一共至少 6 个测试；`checkFilePath` 额外补一个 `../` 路径穿越的用例，确认会被拒绝。
+- **集成验证**：配一个只允许 `ls` 的 `shell.allowed_commands`，跑一次 `rm -rf /tmp/x`，确认执行链路里抛出了 `SandboxViolationException`，并且 `tool_invocations` 表里对应记录 `success=false`、`error_message` 里能看到"命令不在白名单内: rm"。
+- **配置边界要在文档里写清楚**：某个白名单配置项为空时，代表"什么都不允许"而不是"不校验"——这一点很容易被误解成放行，一定要在 Profile / `application.yaml` 的说明文档里明确写出来，避免有人以为留空等于关闭沙箱。
+- **接口中立性自查**：合上代码，把 `Sandbox.enforce(SandboxAction)` 这个签名读一遍，问自己——如果换成 `KataMicroVmSandbox implements Sandbox`，需要往接口上加任何新方法或者新字段吗？答案应该是不需要，`SandboxAction` 的 `type + target` 足够表达"在受控环境里执行这个动作"的意图，隔离手段是实现类自己的事。
+- **回归**：确认改造后的 `FileTools`/`ShellTools`/`HttpTools` 原有单元测试仍然全绿——因为真正的 IO 逻辑代码没有变化，唯一新增的是开头那一行 `sandbox.enforce(...)`。
+
+## 结语
+
+这一节做的事情量不大：一个接口、三个值对象、一个实现类、三处一行的改动。但它验证了 23 节的核心判断——**当接口设计对了，接入成本会小到不成比例**。三个已经写好的 Tool，接入 Sandbox 只多了一行代码，审计不用碰，`ToolExecutor` 不用碰。这也是为什么"接口先行"值得在核心阶段就花时间想清楚：现在多花的这一点设计成本，换来的是以后升级到容器、升级到 microVM 时，`FileTools`/`ShellTools`/`HttpTools` 这几处调用代码大概率一行都不用再改。

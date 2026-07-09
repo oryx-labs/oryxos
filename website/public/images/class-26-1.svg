@@ -1,0 +1,31 @@
+<svg viewBox="0 0 820 310" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="310" fill="#ffffff"/>
+  <text x="410" y="30" fill="#1e293b" font-size="15" font-weight="bold" text-anchor="middle">核心阶段 10 个端点 · 统一前缀 /api/v1 · 六个 Controller</text>
+  <rect x="40" y="50" width="220" height="100" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="150" y="70" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">SessionApiController（4）</text>
+  <text x="150" y="90" fill="#1e40af" font-size="9.5" text-anchor="middle">POST /sessions</text>
+  <text x="150" y="105" fill="#1e40af" font-size="9.5" text-anchor="middle">POST /sessions/{id}/messages</text>
+  <text x="150" y="120" fill="#1e40af" font-size="9.5" text-anchor="middle">GET /sessions/{id}</text>
+  <text x="150" y="135" fill="#1e40af" font-size="9.5" text-anchor="middle">DELETE /sessions/{id}</text>
+  <rect x="300" y="50" width="220" height="100" rx="8" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="410" y="70" fill="#4338ca" font-size="12" font-weight="bold" text-anchor="middle">AgentApiController（1）</text>
+  <text x="410" y="95" fill="#4338ca" font-size="9.5" text-anchor="middle">POST /agents/{name}/invoke</text>
+  <text x="410" y="115" fill="#6366f1" font-size="9" text-anchor="middle">无状态调用，触发完整 ReAct 循环</text>
+  <rect x="560" y="50" width="220" height="100" rx="8" fill="#ede9fe" stroke="#a855f7" stroke-width="2"/>
+  <text x="670" y="70" fill="#7c3aed" font-size="12" font-weight="bold" text-anchor="middle">ProfileApiController（1）</text>
+  <text x="670" y="95" fill="#6b21a8" font-size="9.5" text-anchor="middle">GET /profiles</text>
+  <text x="670" y="115" fill="#9333ea" font-size="9" text-anchor="middle">列出所有已加载的 Profile</text>
+  <rect x="40" y="170" width="220" height="100" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="150" y="190" fill="#15803d" font-size="12" font-weight="bold" text-anchor="middle">MemoryApiController（1）</text>
+  <text x="150" y="215" fill="#166534" font-size="9.5" text-anchor="middle">GET /memory</text>
+  <text x="150" y="235" fill="#16a34a" font-size="9" text-anchor="middle">返回 MEMORY.md 内容</text>
+  <rect x="300" y="170" width="220" height="100" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="410" y="190" fill="#b45309" font-size="12" font-weight="bold" text-anchor="middle">ToolApiController（1）</text>
+  <text x="410" y="215" fill="#92400e" font-size="9.5" text-anchor="middle">GET /tools</text>
+  <text x="410" y="235" fill="#b45309" font-size="9" text-anchor="middle">列出 ToolRegistry 里全部工具</text>
+  <rect x="560" y="170" width="220" height="100" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="670" y="190" fill="#475569" font-size="12" font-weight="bold" text-anchor="middle">SystemApiController（2）</text>
+  <text x="670" y="212" fill="#334155" font-size="9.5" text-anchor="middle">GET /health</text>
+  <text x="670" y="228" fill="#334155" font-size="9.5" text-anchor="middle">GET /info（含 Provider 状态）</text>
+  <text x="410" y="296" fill="#64748b" font-size="11.5" text-anchor="middle">每个 Controller 只做参数校验、响应包装、错误处理——实际逻辑全部委托给核心层，跟 CLI 走同一个 AgentService</text>
+</svg>

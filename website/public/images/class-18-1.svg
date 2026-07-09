@@ -1,0 +1,29 @@
+<svg viewBox="0 0 820 360" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="360" fill="#ffffff"/>
+  <defs>
+    <marker id="am1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f59e0b"/></marker>
+    <marker id="gy1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+    <marker id="gr1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#22c55e"/></marker>
+  </defs>
+  <rect x="70" y="24" width="280" height="56" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="210" y="48" fill="#b45309" font-size="16" font-weight="bold" text-anchor="middle">CLI 入口（本节）</text>
+  <text x="210" y="68" fill="#92400e" font-size="12" text-anchor="middle">终端交互、调试　chat / serve / gateway</text>
+  <rect x="470" y="24" width="280" height="56" rx="10" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="610" y="48" fill="#475569" font-size="16" font-weight="bold" text-anchor="middle">Web Service 入口</text>
+  <text x="610" y="68" fill="#64748b" font-size="12" text-anchor="middle">业务系统走 REST API 集成</text>
+  <line x1="210" y1="80" x2="380" y2="120" stroke="#f59e0b" stroke-width="2" marker-end="url(#am1)"/>
+  <line x1="610" y1="80" x2="440" y2="120" stroke="#94a3b8" stroke-width="2" marker-end="url(#gy1)"/>
+  <rect x="270" y="122" width="280" height="58" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2.4"/>
+  <text x="410" y="147" fill="#15803d" font-size="16" font-weight="bold" text-anchor="middle">ReAct 引擎（中枢）</text>
+  <text x="410" y="167" fill="#15803d" font-size="12" text-anchor="middle">接消息 → 想 → 调工具 → 回结果</text>
+  <line x1="290" y1="180" x2="180" y2="220" stroke="#22c55e" stroke-width="2" marker-end="url(#gr1)"/>
+  <line x1="410" y1="180" x2="410" y2="220" stroke="#22c55e" stroke-width="2" marker-end="url(#gr1)"/>
+  <line x1="530" y1="180" x2="640" y2="220" stroke="#22c55e" stroke-width="2" marker-end="url(#gr1)"/>
+  <rect x="80" y="222" width="190" height="46" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="175" y="250" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">Provider</text>
+  <rect x="315" y="222" width="190" height="46" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="410" y="250" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">Memory</text>
+  <rect x="550" y="222" width="190" height="46" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="645" y="250" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">Tool</text>
+  <text x="410" y="312" fill="#64748b" font-size="13" text-anchor="middle">两个入口消息汇入同一个引擎 · 引擎调度三块能力干活</text>
+</svg>

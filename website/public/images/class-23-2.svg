@@ -1,0 +1,14 @@
+<svg viewBox="0 0 820 340" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="340" fill="#ffffff"/>
+  <rect x="160" y="30" width="500" height="48" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+  <text x="410" y="59" fill="#6d28d9" font-size="14" font-weight="bold" text-anchor="middle">全链路审计</text>
+  <rect x="160" y="88" width="500" height="48" rx="8" fill="#fce7f3" stroke="#db2777" stroke-width="2"/>
+  <text x="410" y="117" fill="#be185d" font-size="14" font-weight="bold" text-anchor="middle">资源配额</text>
+  <rect x="160" y="146" width="500" height="48" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="410" y="175" fill="#1d4ed8" font-size="14" font-weight="bold" text-anchor="middle">网络出口控制</text>
+  <rect x="160" y="204" width="500" height="48" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="410" y="233" fill="#b45309" font-size="14" font-weight="bold" text-anchor="middle">容器 / microVM 隔离（视阶段而定）</text>
+  <rect x="160" y="262" width="500" height="48" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <text x="410" y="291" fill="#475569" font-size="14" font-weight="bold" text-anchor="middle">应用层白名单校验（文件 · 命令 · 域名）</text>
+  <text x="410" y="325" fill="#64748b" font-size="12" text-anchor="middle">没有任何一层是万能的，安全靠层层设防</text>
+</svg>

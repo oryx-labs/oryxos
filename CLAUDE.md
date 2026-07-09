@@ -259,7 +259,7 @@ interface OryxTool {
 
 `ToolResult` 包含：`success`、`content`、`errorMessage`、`retryable`。
 
-### 内置 Tool（核心阶段 8 个）
+### 内置 Tool（核心阶段 9 个）
 
 | Tool | 类 | 说明 |
 |------|-----|------|
@@ -271,6 +271,7 @@ interface OryxTool {
 | `http_post` | `HttpTools` | POST 请求，域名白名单 |
 | `save_memory` | `MemoryTools` | 追加到 MEMORY.md |
 | `recall_memory` | `MemoryTools` | 关键词检索 MEMORY.md |
+| `notify` | `NotifyTools` | 推送到 Profile 的 `notify_channels`，核心阶段走 `WebhookNotifyAdapter` |
 
 ### Plugin Tool 三档
 
@@ -385,7 +386,7 @@ provider:
 
 - **底座优先于 Agent**：最重要的交付不是某个强大的 Agent，而是让任意 Agent 可靠运行的环境
 - **自实现核心，复用管道**：ReAct 循环手写；LLM 协议适配委托给 Spring AI Alibaba
-- **配置即 Agent**：一个 Agent 完全由一份 YAML Profile 定义，不需要写代码
+- **配置即 Agent**：一个业务 Agent 由一份 SKILL.md（做什么）加一份 YAML Profile（怎么跑）共同定义，都不需要写代码
 - **对接开放标准**：工具用 MCP，Agent 间协作用 A2A，技能用 `SKILL.md` 文件
 - **无状态实例，状态外置**：这是未来走向分布式架构而不需要大改设计的前提
 - **安全是地基，不是补丁**：工具来源管控、最小权限、强制沙箱白名单、凭证走环境变量、完整审计记录从第一天就写入 SQLite

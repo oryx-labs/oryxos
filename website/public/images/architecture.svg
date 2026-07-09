@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 620" width="960" height="620">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 780" width="1080" height="780">
   <defs>
     <filter id="shadow">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.3)"/>
@@ -18,20 +18,20 @@
     <marker id="arr-purple" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
       <path d="M0,0 L0,6 L7,3 Z" fill="#a855f7"/>
     </marker>
-    <marker id="arr-green" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
-      <path d="M0,0 L0,6 L7,3 Z" fill="#22c55e"/>
+    <marker id="arr-pink" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L7,3 Z" fill="#ec4899"/>
     </marker>
   </defs>
 
   <!-- Background -->
-  <rect width="960" height="620" fill="#0a0a0a" rx="14"/>
+  <rect width="1080" height="780" fill="#0a0a0a" rx="14"/>
 
   <!-- Title -->
-  <text x="480" y="36" font-family="'SF Mono','Fira Code',monospace" font-size="14" fill="#f97316" text-anchor="middle" letter-spacing="2" font-weight="bold">OryxOS — System Architecture</text>
+  <text x="540" y="34" font-family="'SF Mono','Fira Code',monospace" font-size="14" fill="#f97316" text-anchor="middle" letter-spacing="2" font-weight="bold">OryxOS — System Architecture</text>
 
-  <!-- ──────────────────────────────────────── -->
+  <!-- ════════════════════════════════════════ -->
   <!-- EXTERNAL: LLM Providers (top-left) -->
-  <!-- ──────────────────────────────────────── -->
+  <!-- ════════════════════════════════════════ -->
   <rect x="24" y="56" width="196" height="140" rx="8" fill="#111" stroke="#374151" stroke-width="1" stroke-dasharray="5,3"/>
   <text x="122" y="76" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#6b7280" text-anchor="middle" letter-spacing="1">LLM PROVIDERS</text>
   <rect x="38" y="84" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
@@ -42,143 +42,138 @@
   <text x="122" y="166" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">Ollama (local)</text>
   <text x="122" y="192" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">Spring AI Alibaba</text>
 
-  <!-- ──────────────────────────────────────── -->
+  <!-- ════════════════════════════════════════ -->
   <!-- EXTERNAL: MCP Servers (top-right) -->
-  <!-- ──────────────────────────────────────── -->
-  <rect x="740" y="56" width="196" height="140" rx="8" fill="#111" stroke="#374151" stroke-width="1" stroke-dasharray="5,3"/>
-  <text x="838" y="76" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#6b7280" text-anchor="middle" letter-spacing="1">MCP SERVERS</text>
-  <rect x="754" y="84" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
-  <text x="838" y="102" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">github-mcp · jira-mcp</text>
-  <rect x="754" y="116" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
-  <text x="838" y="134" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">Custom MCP servers</text>
-  <rect x="754" y="148" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
-  <text x="838" y="166" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">SKILL.md (zero-code)</text>
-  <text x="838" y="192" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">MCP JSON-RPC protocol</text>
+  <!-- ════════════════════════════════════════ -->
+  <rect x="860" y="56" width="196" height="140" rx="8" fill="#111" stroke="#374151" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="958" y="76" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#6b7280" text-anchor="middle" letter-spacing="1">MCP SERVERS</text>
+  <rect x="874" y="84" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
+  <text x="958" y="102" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">github-mcp · news-mcp</text>
+  <rect x="874" y="116" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
+  <text x="958" y="134" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">Custom MCP servers</text>
+  <rect x="874" y="148" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
+  <text x="958" y="166" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">SKILL.md (zero-code)</text>
+  <text x="958" y="192" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">MCP JSON-RPC protocol</text>
 
-  <!-- ──────────────────────────────────────── -->
+  <!-- ════════════════════════════════════════ -->
+  <!-- EXTERNAL: Notify Targets (right, below MCP) -->
+  <!-- ════════════════════════════════════════ -->
+  <rect x="860" y="210" width="196" height="96" rx="8" fill="#111" stroke="#374151" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="958" y="230" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#6b7280" text-anchor="middle" letter-spacing="1">NOTIFY TARGETS</text>
+  <rect x="874" y="238" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
+  <text x="958" y="256" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">企业微信 · 飞书 · 钉钉</text>
+  <text x="958" y="292" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">Generic Webhook</text>
+
+  <!-- ════════════════════════════════════════ -->
   <!-- ORYXOS MAIN BOX -->
-  <!-- ──────────────────────────────────────── -->
-  <rect x="240" y="56" width="480" height="464" rx="10" fill="#0d0d0d" stroke="#f97316" stroke-width="1.5" filter="url(#glow)"/>
-  <text x="480" y="80" font-family="'SF Mono','Fira Code',monospace" font-size="12" fill="#f97316" text-anchor="middle" font-weight="bold" letter-spacing="1">OryxOS</text>
-  <text x="480" y="96" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">Spring Boot 3.x · JDK 21 · Single JAR</text>
+  <!-- ════════════════════════════════════════ -->
+  <rect x="300" y="56" width="480" height="548" rx="10" fill="#0d0d0d" stroke="#f97316" stroke-width="1.5" filter="url(#glow)"/>
+  <text x="540" y="80" font-family="'SF Mono','Fira Code',monospace" font-size="12" fill="#f97316" text-anchor="middle" font-weight="bold" letter-spacing="1">OryxOS</text>
+  <text x="540" y="96" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">Spring Boot 3.x · JDK 21 · Single JAR</text>
 
-  <!-- ── Channel Layer ── -->
-  <rect x="256" y="108" width="448" height="66" rx="7" fill="#0f1729" stroke="#3b82f6" stroke-width="1.5"/>
-  <text x="272" y="126" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#3b82f6" font-weight="bold">Channel Layer</text>
-  <!-- CLI -->
-  <rect x="268" y="132" width="192" height="30" rx="5" fill="#1e2d4a" stroke="#3b82f6" stroke-width="1" stroke-dasharray="3,2"/>
-  <text x="364" y="148" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#93c5fd" text-anchor="middle">CLI  ·  oryxos chat</text>
-  <!-- REST -->
-  <rect x="476" y="132" width="216" height="30" rx="5" fill="#1e2d4a" stroke="#3b82f6" stroke-width="1" stroke-dasharray="3,2"/>
-  <text x="584" y="148" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#93c5fd" text-anchor="middle">REST API  ·  /api/v1</text>
+  <!-- ── Band 1: Channel / Trigger Layer ── -->
+  <rect x="316" y="108" width="448" height="66" rx="7" fill="#0f1729" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="332" y="126" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#3b82f6" font-weight="bold">Channel / Trigger Layer</text>
+  <rect x="316" y="132" width="140" height="30" rx="5" fill="#1e2d4a" stroke="#3b82f6" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="386" y="151" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#93c5fd" text-anchor="middle">CLI · 人推</text>
+  <rect x="470" y="132" width="140" height="30" rx="5" fill="#1e2d4a" stroke="#3b82f6" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="540" y="151" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#93c5fd" text-anchor="middle">REST API · 人推</text>
+  <rect x="624" y="132" width="140" height="30" rx="5" fill="#1e2d4a" stroke="#3b82f6" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="694" y="151" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#93c5fd" text-anchor="middle">Scheduler · 钟推</text>
 
-  <!-- Arrow -->
-  <line x1="480" y1="174" x2="480" y2="196" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr-gray)"/>
+  <line x1="540" y1="174" x2="540" y2="196" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr-gray)"/>
 
-  <!-- ── Engine Layer ── -->
-  <rect x="256" y="196" width="448" height="88" rx="7" fill="#1a0f00" stroke="#f97316" stroke-width="1.5"/>
-  <text x="272" y="215" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#f97316" font-weight="bold">Engine Layer  ·  oryxos-core</text>
-  <!-- ReActLoop -->
-  <rect x="268" y="220" width="130" height="52" rx="5" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
-  <text x="333" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#fb923c" text-anchor="middle" font-weight="bold">ReActLoop</text>
-  <text x="333" y="256" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">Reason + Act</text>
-  <text x="333" y="268" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">max 10 iterations</text>
-  <!-- PromptBuilder -->
-  <rect x="412" y="220" width="130" height="52" rx="5" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
-  <text x="477" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#fb923c" text-anchor="middle" font-weight="bold">PromptBuilder</text>
-  <text x="477" y="256" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">system + memory</text>
-  <text x="477" y="268" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">+ history + tools</text>
-  <!-- ToolExecutor -->
-  <rect x="556" y="220" width="136" height="52" rx="5" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
-  <text x="624" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#fb923c" text-anchor="middle" font-weight="bold">ToolExecutor</text>
-  <text x="624" y="256" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">SandboxChecker</text>
-  <text x="624" y="268" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">+ audit write</text>
+  <!-- ── Band 2: Agent Layer (NEW) ── -->
+  <rect x="316" y="196" width="448" height="58" rx="7" fill="#1f0d18" stroke="#ec4899" stroke-width="1.5"/>
+  <text x="332" y="214" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#ec4899" font-weight="bold">Agent Layer  ·  一个业务 Agent = Skill + Profile</text>
+  <rect x="316" y="222" width="210" height="26" rx="5" fill="#33121f" stroke="#ec4899" stroke-width="1"/>
+  <text x="421" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#f9a8d4" text-anchor="middle">Skill · 做什么（SKILL.md）</text>
+  <rect x="554" y="222" width="210" height="26" rx="5" fill="#33121f" stroke="#ec4899" stroke-width="1"/>
+  <text x="659" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#f9a8d4" text-anchor="middle">Profile · 怎么跑（YAML）</text>
 
-  <!-- Arrow -->
-  <line x1="480" y1="284" x2="480" y2="306" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr-gray)"/>
+  <line x1="540" y1="254" x2="540" y2="276" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr-gray)"/>
 
-  <!-- ── Capability Layer ── -->
-  <rect x="256" y="306" width="448" height="100" rx="7" fill="#130d1f" stroke="#a855f7" stroke-width="1.5"/>
-  <text x="272" y="325" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#a855f7" font-weight="bold">Capability Layer</text>
-  <!-- Provider -->
-  <rect x="268" y="332" width="130" height="62" rx="5" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
-  <text x="333" y="352" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#c084fc" text-anchor="middle" font-weight="bold">Provider</text>
-  <text x="333" y="368" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">LLM routing</text>
-  <text x="333" y="382" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#4b5563" text-anchor="middle">explicit name→model map</text>
-  <!-- Memory -->
-  <rect x="412" y="332" width="130" height="62" rx="5" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
-  <text x="477" y="352" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#c084fc" text-anchor="middle" font-weight="bold">Memory</text>
-  <text x="477" y="368" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">session + MEMORY.md</text>
-  <text x="477" y="382" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#4b5563" text-anchor="middle">keyword recall</text>
-  <!-- Tool System -->
-  <rect x="556" y="332" width="136" height="62" rx="5" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
-  <text x="624" y="352" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#c084fc" text-anchor="middle" font-weight="bold">Tool System</text>
-  <text x="624" y="368" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">builtin + @Tool</text>
-  <text x="624" y="382" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#4b5563" text-anchor="middle">+ MCP Client</text>
+  <!-- ── Band 3: Engine Layer ── -->
+  <rect x="316" y="276" width="448" height="88" rx="7" fill="#1a0f00" stroke="#f97316" stroke-width="1.5"/>
+  <text x="332" y="295" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#f97316" font-weight="bold">Engine Layer  ·  oryxos-core</text>
+  <rect x="316" y="300" width="138" height="52" rx="5" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
+  <text x="385" y="320" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#fb923c" text-anchor="middle" font-weight="bold">ReActLoop</text>
+  <text x="385" y="336" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">Reason + Act</text>
+  <text x="385" y="348" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">max 10 iterations</text>
+  <rect x="466" y="300" width="138" height="52" rx="5" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
+  <text x="535" y="320" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#fb923c" text-anchor="middle" font-weight="bold">PromptBuilder</text>
+  <text x="535" y="336" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">system + memory</text>
+  <text x="535" y="348" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">+ history + tools</text>
+  <rect x="616" y="300" width="148" height="52" rx="5" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
+  <text x="690" y="320" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#fb923c" text-anchor="middle" font-weight="bold">ToolExecutor</text>
+  <text x="690" y="336" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">Sandbox check</text>
+  <text x="690" y="348" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">+ audit write</text>
 
-  <!-- Arrow -->
-  <line x1="480" y1="406" x2="480" y2="428" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr-gray)"/>
+  <line x1="540" y1="364" x2="540" y2="386" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr-gray)"/>
 
-  <!-- ── Storage Layer ── -->
-  <rect x="256" y="428" width="448" height="80" rx="7" fill="#0a1a10" stroke="#22c55e" stroke-width="1.5"/>
-  <text x="272" y="447" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#22c55e" font-weight="bold">Storage Layer  ·  oryxos-storage</text>
-  <!-- SQLite -->
-  <rect x="268" y="454" width="200" height="42" rx="5" fill="#0f2a18" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,2"/>
-  <text x="368" y="472" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#4ade80" text-anchor="middle" font-weight="bold">SQLite (oryxos.db)</text>
-  <text x="368" y="487" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">sessions · tool_invocations · llm_calls</text>
-  <!-- Filesystem -->
-  <rect x="484" y="454" width="208" height="42" rx="5" fill="#0f2a18" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,2"/>
-  <text x="588" y="472" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#4ade80" text-anchor="middle" font-weight="bold">Filesystem (.oryxos/)</text>
-  <text x="588" y="487" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">profiles · MEMORY.md · skills</text>
+  <!-- ── Band 4: Capability Layer ── -->
+  <rect x="316" y="386" width="448" height="100" rx="7" fill="#130d1f" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="332" y="405" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#a855f7" font-weight="bold">Capability Layer</text>
+  <rect x="316" y="412" width="100" height="64" rx="5" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
+  <text x="366" y="432" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#c084fc" text-anchor="middle" font-weight="bold">Provider</text>
+  <text x="366" y="448" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#6b7280" text-anchor="middle">LLM 路由</text>
+  <text x="366" y="462" font-family="'SF Mono','Fira Code',monospace" font-size="7.5" fill="#4b5563" text-anchor="middle">显式映射</text>
+  <rect x="432" y="412" width="100" height="64" rx="5" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
+  <text x="482" y="432" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#c084fc" text-anchor="middle" font-weight="bold">Memory</text>
+  <text x="482" y="448" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#6b7280" text-anchor="middle">会话+长期</text>
+  <text x="482" y="462" font-family="'SF Mono','Fira Code',monospace" font-size="7.5" fill="#4b5563" text-anchor="middle">核心/归档分区</text>
+  <rect x="548" y="412" width="100" height="64" rx="5" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
+  <text x="598" y="432" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#c084fc" text-anchor="middle" font-weight="bold">Tool</text>
+  <text x="598" y="448" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#6b7280" text-anchor="middle">内置+MCP</text>
+  <text x="598" y="462" font-family="'SF Mono','Fira Code',monospace" font-size="7.5" fill="#4b5563" text-anchor="middle">+ Sandbox</text>
+  <rect x="664" y="412" width="100" height="64" rx="5" fill="#1e1030" stroke="#a855f7" stroke-width="1"/>
+  <text x="714" y="432" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#c084fc" text-anchor="middle" font-weight="bold">Notify</text>
+  <text x="714" y="448" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#6b7280" text-anchor="middle">出站推送</text>
+  <text x="714" y="462" font-family="'SF Mono','Fira Code',monospace" font-size="7.5" fill="#4b5563" text-anchor="middle">NotifyTools</text>
 
-  <!-- ──────────────────────────────────────── -->
+  <line x1="540" y1="486" x2="540" y2="508" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr-gray)"/>
+
+  <!-- ── Band 5: Storage Layer ── -->
+  <rect x="316" y="508" width="448" height="80" rx="7" fill="#0a1a10" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="332" y="527" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#22c55e" font-weight="bold">Storage Layer  ·  oryxos-storage</text>
+  <rect x="316" y="534" width="216" height="42" rx="5" fill="#0f2a18" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="424" y="552" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#4ade80" text-anchor="middle" font-weight="bold">SQLite (oryxos.db)</text>
+  <text x="424" y="567" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">sessions · tool_invocations · llm_calls</text>
+  <rect x="548" y="534" width="216" height="42" rx="5" fill="#0f2a18" stroke="#22c55e" stroke-width="1" stroke-dasharray="3,2"/>
+  <text x="656" y="552" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#4ade80" text-anchor="middle" font-weight="bold">Filesystem (.oryxos/)</text>
+  <text x="656" y="567" font-family="'SF Mono','Fira Code',monospace" font-size="8.5" fill="#6b7280" text-anchor="middle">profiles · MEMORY.md · skills</text>
+
+  <!-- ════════════════════════════════════════ -->
   <!-- EXTERNAL CONNECTIONS (arrows) -->
-  <!-- ──────────────────────────────────────── -->
+  <!-- ════════════════════════════════════════ -->
+  <line x1="220" y1="126" x2="300" y2="436" stroke="#a855f7" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-purple)"/>
+  <text x="216" y="280" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#a855f7" text-anchor="end">API</text>
 
-  <!-- LLM Providers → Provider (bidirectional) -->
-  <line x1="220" y1="126" x2="256" y2="363" stroke="#a855f7" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-purple)"/>
-  <text x="218" y="260" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#a855f7" text-anchor="end">API</text>
+  <line x1="860" y1="126" x2="780" y2="428" stroke="#a855f7" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-purple)"/>
+  <text x="864" y="280" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#a855f7">JSON-RPC</text>
 
-  <!-- MCP Servers → Tool System (bidirectional) -->
-  <line x1="740" y1="126" x2="704" y2="363" stroke="#a855f7" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-purple)"/>
-  <text x="742" y="260" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#a855f7">JSON-RPC</text>
+  <line x1="860" y1="265" x2="780" y2="452" stroke="#ec4899" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-pink)"/>
+  <text x="864" y="360" font-family="'SF Mono','Fira Code',monospace" font-size="8" fill="#ec4899">Webhook</text>
 
-  <!-- ──────────────────────────────────────── -->
+  <!-- ════════════════════════════════════════ -->
   <!-- USERS / CLIENTS (bottom) -->
-  <!-- ──────────────────────────────────────── -->
-  <rect x="24" y="540" width="196" height="56" rx="8" fill="#111" stroke="#374151" stroke-width="1" stroke-dasharray="5,3"/>
-  <text x="122" y="562" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#6b7280" text-anchor="middle">USERS</text>
-  <text x="122" y="580" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af" text-anchor="middle">oryxos chat (CLI)</text>
+  <!-- ════════════════════════════════════════ -->
+  <rect x="24" y="624" width="196" height="56" rx="8" fill="#111" stroke="#374151" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="122" y="646" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#6b7280" text-anchor="middle">USERS</text>
+  <text x="122" y="664" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af" text-anchor="middle">oryxos chat (CLI)</text>
 
-  <rect x="740" y="540" width="196" height="56" rx="8" fill="#111" stroke="#374151" stroke-width="1" stroke-dasharray="5,3"/>
-  <text x="838" y="562" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#6b7280" text-anchor="middle">BUSINESS SYSTEMS</text>
-  <text x="838" y="580" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af" text-anchor="middle">HTTP POST /api/v1/…</text>
+  <rect x="860" y="624" width="196" height="56" rx="8" fill="#111" stroke="#374151" stroke-width="1" stroke-dasharray="5,3"/>
+  <text x="958" y="646" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#6b7280" text-anchor="middle">BUSINESS SYSTEMS</text>
+  <text x="958" y="664" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af" text-anchor="middle">HTTP POST /api/v1/…</text>
 
-  <!-- User → CLI arrow -->
-  <line x1="122" y1="540" x2="290" y2="160" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
+  <line x1="122" y1="624" x2="300" y2="147" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
+  <line x1="958" y1="624" x2="780" y2="147" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
 
-  <!-- Business → REST arrow -->
-  <line x1="838" y1="540" x2="670" y2="160" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-blue)"/>
-
-  <!-- ──────────────────────────────────────── -->
+  <!-- ════════════════════════════════════════ -->
   <!-- Legend -->
-  <!-- ──────────────────────────────────────── -->
-  <rect x="256" y="520" width="448" height="78" rx="7" fill="#0d0d0d" stroke="#1f2937" stroke-width="1"/>
-  <text x="480" y="538" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle" letter-spacing="1">LEGEND</text>
-  <!-- dots -->
-  <circle cx="284" cy="555" r="5" fill="#3b82f6"/>
-  <text x="296" y="559" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af">Channel</text>
-  <circle cx="364" cy="555" r="5" fill="#f97316"/>
-  <text x="376" y="559" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af">Engine</text>
-  <circle cx="440" cy="555" r="5" fill="#a855f7"/>
-  <text x="452" y="559" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af">Capability</text>
-  <circle cx="536" cy="555" r="5" fill="#22c55e"/>
-  <text x="548" y="559" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af">Storage</text>
-  <circle cx="618" cy="555" r="5" fill="#374151"/>
-  <text x="630" y="559" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af">External</text>
-  <!-- line types -->
-  <line x1="280" y1="580" x2="320" y2="580" stroke="#4b5563" stroke-width="1.5"/>
-  <text x="328" y="584" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280">internal call</text>
-  <line x1="420" y1="580" x2="460" y2="580" stroke="#6b7280" stroke-width="1.2" stroke-dasharray="4,2"/>
-  <text x="468" y="584" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280">external call</text>
+  <!-- ════════════════════════════════════════ -->
+  <rect x="300" y="612" width="480" height="78" rx="7" fill="#0d0d0d" stroke="#1f2937" stroke-width="1"/>
+  <text x="540" y="632" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle" letter-spacing="1">LEGEND</text>
+  <text x="540" y="653" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#9ca3af" text-anchor="middle">蓝 = 触发入口　粉 = Agent 定义　橙 = 引擎　紫 = 能力　绿 = 存储　灰 = 外部依赖</text>
+  <text x="540" y="674" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#6b7280" text-anchor="middle">实线 = 内部调用　　虚线 = 外部调用</text>
 </svg>

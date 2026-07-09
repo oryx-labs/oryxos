@@ -1,0 +1,30 @@
+<svg viewBox="0 0 820 310" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="310" fill="#ffffff"/>
+  <defs>
+    <marker id="c302" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+  </defs>
+  <rect x="40" y="40" width="170" height="80" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="125" y="68" fill="#15803d" font-size="12" font-weight="bold" text-anchor="middle">POST /agents</text>
+  <text x="125" y="88" fill="#166534" font-size="9.5" text-anchor="middle">创建：四步编排</text>
+  <text x="125" y="104" fill="#166534" font-size="9.5" text-anchor="middle">名字冲突 → 400</text>
+  <rect x="240" y="40" width="170" height="80" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="325" y="68" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">GET /agents[/{name}]</text>
+  <text x="325" y="88" fill="#1e40af" font-size="9.5" text-anchor="middle">查看：Skill 内容 +</text>
+  <text x="325" y="104" fill="#1e40af" font-size="9.5" text-anchor="middle">Profile 绑定一起返回</text>
+  <rect x="440" y="40" width="170" height="80" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="525" y="68" fill="#b45309" font-size="12" font-weight="bold" text-anchor="middle">PUT /agents/{name}</text>
+  <text x="525" y="88" fill="#92400e" font-size="9.5" text-anchor="middle">更新：覆写 Skill 即时生效</text>
+  <text x="525" y="104" fill="#92400e" font-size="9.5" text-anchor="middle">schedules 变 → 先注销再注册</text>
+  <rect x="640" y="40" width="150" height="80" rx="8" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+  <text x="715" y="68" fill="#b91c1c" font-size="12" font-weight="bold" text-anchor="middle">DELETE /agents/{name}</text>
+  <text x="715" y="88" fill="#991b1b" font-size="9.5" text-anchor="middle">注销定时 → 移出索引</text>
+  <text x="715" y="104" fill="#991b1b" font-size="9.5" text-anchor="middle">→ 文件归档不物理删</text>
+  <line x1="125" y1="120" x2="125" y2="158" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c302)"/>
+  <line x1="325" y1="120" x2="325" y2="158" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c302)"/>
+  <line x1="525" y1="120" x2="525" y2="158" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c302)"/>
+  <line x1="715" y1="120" x2="715" y2="158" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c302)"/>
+  <rect x="40" y="160" width="750" height="70" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="415" y="190" fill="#b45309" font-size="13" font-weight="bold" text-anchor="middle">同一套底层能力：AgentLifecycleService + ProfileRegistry + AgentScheduler（29 节）</text>
+  <text x="415" y="212" fill="#92400e" font-size="10.5" text-anchor="middle">四个端点只是包装，不各写一套逻辑——API 建的 Agent 和手写文件建的 Agent，行为必须一模一样</text>
+  <text x="410" y="272" fill="#64748b" font-size="11.5" text-anchor="middle">对外资源是"Agent"这一个概念——不把 Skill 和 Profile 拆成两套 CRUD 让业务方自己拼</text>
+</svg>

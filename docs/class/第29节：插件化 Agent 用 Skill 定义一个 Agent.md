@@ -1,0 +1,162 @@
+# 插件化 Agent：用 Skill 定义一个 Agent
+
+前面 28 节做完，一个事实值得停下来看清楚：我们搭了一整套能跑、跑得稳的系统，但**还没有真正"定义"过一个业务 Agent**——测试用的 Profile 都是顺手配的。这节讲这门课最关键的一次视角转换：底座是底座、Agent 是 Agent；然后动手做第一件"在底座上定义 Agent"的事——用 Skill 把一个 Agent 声明式地配出来，让它跟定时模块联动、自己跑起来。照旧：是什么、想清楚、代码怎么写、做完怎么验。
+
+---
+
+## 一、插件化 Agent 是什么
+
+一句话：**一个业务 Agent = 一份 Skill（做什么）+ 一份绑定它的 Profile（怎么跑）——前面 28 节做的所有东西都是底座，不是 Agent。**
+
+这个区分是"OS"这个词的关键体现。类比操作系统：进程调度、内存管理、系统调用是 OS 的能力，但 OS 本身不是任何一个程序——程序是跑在上面的可执行文件。对应过来：Provider、ReAct、Tool、Memory、Sandbox、定时、Web Service 是 OryxOS 的内核能力，而**Skill 就是这里的"可执行文件"**——业务方定义一个新 Agent，写的就是一份 Skill。
+
+![Skill + Profile = 一个完整的业务 Agent](../../website/public/images/class-29-1.svg)
+
+两个角色各管一半，不越界：
+
+- **Skill（`SKILL.md`）**：这个 Agent 该做什么、什么时候该做。业务能力的定义本体，一份带 frontmatter 的 markdown。
+- **Profile（YAML）**：这个 Agent 怎么跑起来——用哪个 provider/model、能用哪些 Tool、往哪推通知、要不要定时。底座提供的运行时绑定。
+
+没绑任何 Skill 的 Profile 只是一个通用助手骨架，能聊天，但不是这个项目要交付的"业务 Agent"。
+
+"插件化"说的就是这件事的形态：**定义一个新 Agent 不写一行 Java、不动一行底座代码**——写两份文本文件、插进 `.oryxos/` 工作区，它就成了这台"OS"上一个新"程序"。
+
+---
+
+## 二、动手前先想清楚几件事
+
+**第一，Skill 是 prompt 的输入，不是 Tool。** 20 节讲过这个归属：`SKILL.md` 由 `ContextLoader` 加载、注入 system prompt，跟 Bootstrap 文件同类——它是给 LLM 看的任务说明，不是可执行的东西。LLM 读完 Skill 自己理解任务、自己决定调哪些工具、自己组合完成，OryxOS 不解析任务步骤、不做工作流引擎。把 Skill 塞进 ToolRegistry 是最经典的概念错位，执行时必报错。
+
+**第二，声明式，别命令式。** 定义 Agent 的方式是"声明它是什么"（两份文件），不是"编码它怎么做"（写类、注册 Bean）。这决定了后面 30 节能做出"通过 API 创建 Agent"——文件能通过 API 写，代码不能。
+
+**第三，手动路径的生效边界要摸清。** 两份文件的生效时机不一样：**Skill 正文改动即时生效**——`ContextLoader` 每次组装 prompt 都重新读文件、不缓存（跟 22 节 Memory 不缓存是同一个设计），改完保存、下一轮对话就是新的；**新增 Profile 却要重启**——`ProfileRegistry` 和 `AgentScheduler` 都只在启动时扫描注册。这个不对称就是本节代码要补的短板。
+
+![手动定义路径四步：写 Skill、写 Profile、加载生效、自己跑起来](../../website/public/images/class-29-2.svg)
+
+**第四，能力和入口分两步走。** 补短板的办法是给 `ProfileRegistry` 和 `AgentScheduler` 各加一个**运行时注册方法**。但这节只把方法立好、单独验证，**不做 HTTP 入口**——入口是 30 节 `POST /api/v1/agents` 的事。能力和入口拆开，各自都好验，也不会让这节膨胀。
+
+---
+
+## 三、代码怎么写
+
+**第一步：写一份 Skill。** 用一个最小但五脏俱全的例子——每天早上向团队问好并播报今天日期的 Agent（天气和日报两个正式 Demo 留给 31 节，这里刻意用个简单的，把注意力放在机制上）：
+
+```markdown
+---
+name: daily-greeting
+description: 每天早上向团队群问好
+trigger: 每天早上定时触发
+required_tools:
+  - notify
+---
+
+你是团队的晨间助手。被触发时：
+1. 组织一句简短、友好的早安问候，包含今天的日期和星期几；
+2. 调用 notify 工具把问候发送出去；
+3. 不需要等待任何回复。
+```
+
+存成 `.oryxos/skills/daily-greeting.md`。frontmatter 四个字段：`name`（唯一标识）、`description`（干什么的）、`trigger`（什么时候该做）、`required_tools`（依赖哪些工具，加载时可校验）；正文就是给 LLM 的任务说明——写给"人"看的清晰程度，就是它执行的准确程度。
+
+**第二步：写 Profile 绑定它。**
+
+```yaml
+# .oryxos/profiles/daily-greeting.yaml
+name: daily-greeting
+description: 晨间问候 Agent
+identity:
+  agent_name: 晨间小欧
+  prompt: 你是一个简洁友好的助手。
+provider:
+  name: deepseek
+  model: deepseek-chat
+tools:
+  - notify
+skills:
+  - daily-greeting          # 绑定上面那份 Skill
+notify_channels:
+  - type: webhook
+    url: ${TEAM_WEBHOOK_URL}
+schedules:
+  - id: morning-greeting
+    cron: "0 0 9 * * *"
+    zone: Asia/Shanghai
+    message: 到点了，按你的技能说明执行晨间问候。
+bootstrap:
+  - AGENTS.md
+settings:
+  max_iterations: 5
+```
+
+注意各字段跟前面各节一一对应：`tools` 只给它 `notify`（20 节的最小权限）、`notify_channels` 是 19 节的、`schedules` 是 25 节的。**两份文件写完，这个 Agent 就定义完了**——重启一次 `oryxos serve`，第二天早上九点它自己会说话。
+
+**第三步：补运行时注册，去掉"重启"这个尾巴。**
+
+![现在只在启动时注册 vs 本节补上的运行时注册方法](../../website/public/images/class-29-3.svg)
+
+两个方法，各自都是把启动时那套逻辑抽出来复用，不写第二套：
+
+```java
+// ProfileRegistry：启动扫描和运行时注册走同一个入口
+public class ProfileRegistry {
+
+    private final Map<String, Profile> profiles = new ConcurrentHashMap<>();
+
+    public void register(Profile profile) {
+        profileValidator.validate(profile);       // 复用启动时那套校验：
+        profiles.put(profile.getName(), profile); // provider 存在、tool 已注册、skill 文件存在
+    }
+}
+```
+
+```java
+// AgentScheduler：把 25 节 registerAll() 里的循环体抽成单个 Profile 的注册
+public class AgentScheduler {
+
+    public void registerProfile(Profile profile) {
+        for (ScheduleConfig sc : profile.getSchedules()) {
+            ScheduledFuture<?> future = taskScheduler.schedule(
+                () -> runOnce(profile, sc),
+                new CronTrigger(sc.getCron(), sc.getZoneId()));
+            scheduledTasks.put(sc.getId(), future);   // 留着句柄，将来注销/更新要用（30 节）
+        }
+    }
+
+    @PostConstruct
+    public void registerAll() {
+        profileRegistry.all().forEach(this::registerProfile);   // 启动时就是逐个调它
+    }
+}
+```
+
+两处共同的讲究：**运行时路径和启动路径必须是同一段代码**。如果 `register()` 另写一套校验、`registerProfile()` 另写一套注册，两条路径迟早行为漂移——"API 建的 Agent 和文件建的 Agent 表现不一样"这种 bug 最难查。另外 `scheduledTasks` 这个句柄表是给 30 节埋的：更新、删除 Agent 时要能把旧定时任务注销掉，现在不留句柄，将来就只能重启。
+
+**有几样先别做。** Skill 的版本管理、Skill 市场/共享、`trigger` 字段的自动解析（现在只是给人和 LLM 看的说明，不驱动任何机制）、Profile 热更新的文件监听——都放扩展阶段。这节做到"两份文件定义一个 Agent + 运行时注册能力就位"就够。
+
+**本节交付物**（Spec-Kit 拆解锚点）：
+
+- 代码：`ProfileRegistry.register(profile)`（复用启动校验）、`AgentScheduler.registerProfile(profile)` + `scheduledTasks` 句柄表
+- 文件：`daily-greeting` 示例的 SKILL.md + Profile YAML（手动路径的参照物）
+- 校验：`required_tools` 与 Profile `tools` 的一致性检查（缺失告警）
+
+---
+
+## 四、怎么用，做完怎么验
+
+```bash
+vim .oryxos/skills/daily-greeting.md       # 定义"做什么"
+vim .oryxos/profiles/daily-greeting.yaml   # 绑定"怎么跑"
+oryxos serve                               # 重启注册（30 节之后这步就免了）
+oryxos profile list                        # 能看到 daily-greeting
+```
+
+做完对着下面几条验：
+
+- 全程没写一行 Java：两份文本文件，`daily-greeting` 就出现在 `profile list` 和 `GET /api/v1/profiles` 里。
+- 到点（或把 cron 临时改成每分钟）它自动执行：webhook 收到问候，`llm_calls`/`tool_invocations` 有账。
+- **Skill 即时生效**：改正文里的问候风格，不重启，下一次触发就用了新说明——验证 `ContextLoader` 无缓存。
+- `required_tools` 里写一个 Profile 没给的工具，加载时有明确告警——定义和绑定的一致性有人管。
+- 运行时注册单独验证：写个测试（或临时命令）调 `profileRegistry.register()` + `agentScheduler.registerProfile()` 注册一个新 Profile，**不重启**就能在 `profile list` 里看到、到点能触发。
+- 校验复用验证：给 `register()` 传一个引用了不存在 provider 的 Profile，报错信息跟启动时加载坏 Profile 的报错一致——证明是同一套校验。
+
+到这里，"在底座上定义一个 Agent"这件事在机制上完全成立了，只是入口还停在"登录服务器改文件"。下一节把最后一块拼上：把这套能力包成 `POST /api/v1/agents`，让业务系统一次 API 调用就定义出一个会自己跑的 Agent——管理平台也从"只能看"升级成"真能管"。

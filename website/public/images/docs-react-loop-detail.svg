@@ -1,0 +1,22 @@
+<svg viewBox="0 0 820 320" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="320" fill="#ffffff"/>
+  <defs>
+    <marker id="tram1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#f59e0b"/></marker>
+    <marker id="trgy1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
+  </defs>
+  <rect x="45" y="70" width="200" height="70" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="145" y="100" fill="#1d4ed8" font-size="16" font-weight="bold" text-anchor="middle">Reason 想</text>
+  <text x="145" y="122" fill="#334155" font-size="12" text-anchor="middle">想下一步做什么</text>
+  <rect x="310" y="70" width="200" height="70" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
+  <text x="410" y="100" fill="#b45309" font-size="16" font-weight="bold" text-anchor="middle">Act 做</text>
+  <text x="410" y="122" fill="#334155" font-size="12" text-anchor="middle">调一个工具执行</text>
+  <rect x="575" y="70" width="200" height="70" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="675" y="100" fill="#15803d" font-size="16" font-weight="bold" text-anchor="middle">Observe 看</text>
+  <text x="675" y="122" fill="#334155" font-size="12" text-anchor="middle">拿结果，并回上下文</text>
+  <line x1="245" y1="105" x2="306" y2="105" stroke="#f59e0b" stroke-width="2" marker-end="url(#tram1)"/>
+  <line x1="510" y1="105" x2="571" y2="105" stroke="#f59e0b" stroke-width="2" marker-end="url(#tram1)"/>
+  <path d="M675,140 L675,200 L145,200 L145,144" fill="none" stroke="#f59e0b" stroke-width="2" marker-end="url(#tram1)"/>
+  <text x="410" y="222" fill="#b45309" font-size="13" text-anchor="middle">还没完成 → 带着新状态回到 Reason</text>
+  <line x1="145" y1="140" x2="145" y2="264" stroke="#94a3b8" stroke-width="2" marker-end="url(#trgy1)"/>
+  <text x="150" y="286" fill="#64748b" font-size="13" text-anchor="start">这轮没有工具调用 → 返回最终响应   ｜   转够最大轮数（默认 10）→ 强制结束</text>
+</svg>

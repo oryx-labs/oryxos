@@ -141,18 +141,18 @@ API 覆盖六类操作：
 
 | 术语 | 定义 |
 |------|------|
-| **Agent（智能体）** | 一个具象的智能体，有工种、人格设定、任务范围、可用工具、绑定渠道。通过 Profile 配置出来，不是写代码写出来的 |
-| **Profile（配置）** | 一个 Agent 的完整配置，包括系统提示词、绑定的 LLM Provider、可用 Tool 列表、绑定 Channel、Tool Policy、引用的 Skill。一个 Profile 对应一个 Agent |
+| **Agent（智能体）** | 一个具象的业务智能体，"这个 Agent 是干什么的"由 Skill 定义（做什么、什么时候该做），"这个 Agent 怎么跑起来"由 Profile 绑定（用哪个模型、能用哪些工具、绑定哪个渠道、要不要定时）。Skill + Profile 绑定后才是一个完整可用的业务 Agent，不是写代码写出来的 |
+| **Profile（配置）** | Agent 的运行时宿主配置，是 Agent OS 内核层的能力，不是 Agent 本身——它决定一个 Agent"怎么跑"：绑定的 LLM Provider、可用 Tool 列表、绑定 Channel、Tool Policy、引用的 Skill、定时规则。没有绑定任何 Skill 的 Profile 只是一个通用助手骨架，不是这个项目要交付的业务 Agent |
 | **Provider（供应商）** | LLM API 服务的抽象，实现统一接口让 Agent 不感知具体调的是哪家模型 |
 | **ReAct 循环** | Agent 的核心工作机制，Reason + Act。LLM 思考是否调用工具，调用后看结果，再决定下一步，直到给出最终响应 |
-| **Tool（工具）** | Agent 可以调用的外部能力。内置 Tool 是 OryxOS 自带的（文件、Shell、HTTP）；Plugin Tool 是业务方自己写的 |
+| **Tool（工具）** | Agent 可以调用的外部能力。内置 Tool 是 OryxOS 自带的（文件、Shell、HTTP、通知推送）；Plugin Tool 是业务方自己写的 |
 | **Memory（记忆）** | Agent 跨对话保留的状态，分三层：会话记忆、长期记忆（MEMORY.md）、情景记忆（扩展阶段） |
 | **Channel（渠道）** | Agent 对外接入的消息入口，包括 CLI、企业微信、飞书、钉钉、Slack 等 |
 | **Web Service** | OryxOS 对外暴露的完整 REST API，是业务系统集成 OryxOS 的唯一通道 |
 | **Session（会话）** | 用户和 Agent 一次对话的上下文容器，包含对话历史、当前上下文、临时变量 |
 | **Sandbox（沙箱）** | 工具执行的隔离环境。核心阶段是应用层白名单校验，扩展阶段补容器级隔离 |
 | **Tool Policy（工具策略）** | 控制 Agent 可用工具的允许或拒绝规则，在 Profile 级别配置 |
-| **Skill（技能）** | 可复用的指令模板，用 SKILL.md 文件描述，兼容 agentskills.io 开放标准 |
+| **Skill（技能）** | Agent 的定义本体——"这个业务 Agent 该做什么"，用 SKILL.md 文件描述（frontmatter 加任务说明正文），兼容 agentskills.io 开放标准。业务方定义一个新 Agent，写的就是一份 Skill |
 | **Bootstrap（引导文件）** | 加载到系统提示词中的上下文文件：AGENTS.md（项目级 agent 行为说明）、SOUL.md（agent 人格定义）、USER.md（用户偏好） |
 | **Workspace（工作区）** | OryxOS 实例的工作目录，默认是 `.oryxos/`，包含配置、Bootstrap 文件、记忆、会话、技能的子目录 |
 
@@ -232,7 +232,7 @@ oryxos init   # 在当前目录下创建 .oryxos/ 工作区
 
 ### 5.2 Profile 配置
 
-Profile 是 Agent 的完整配置，用 YAML 文件描述，一个 Profile 对应一个 Agent。
+Profile 是 Agent 的运行时宿主配置，用 YAML 文件描述——决定一个 Agent 绑定哪个 Skill、用哪个 Provider/模型、能用哪些 Tool、绑定哪个 Channel、要不要定时。Profile 本身是 Agent OS 内核层的能力（底座），"这个 Agent 具体做什么"由它引用的 Skill 定义，两者绑定在一起才构成一个完整的业务 Agent。
 
 **Profile YAML 结构：**
 
@@ -798,9 +798,10 @@ OryxOS 核心功能的实施按 **4 周节奏**组织，每周 3 小时，合计
 - [ ] Provider 抽象（至少跑通 DeepSeek 和 Kimi 两个）
 - [ ] ReAct 循环（多轮 Tool 调用、正确累积消息历史、达到最大迭代次数时正确终止）
 - [ ] Memory 长期记忆（save_memory 写入、recall_memory 关键词检索、启动时注入 system prompt）
-- [ ] 内置 Tool（文件、HTTP、Shell、save_memory、recall_memory）
+- [ ] 内置 Tool（文件、HTTP、Shell、save_memory、recall_memory、notify）
 - [ ] Plugin Tool 接入（方式一零代码 SKILL.md + MCP 跑通；方式三 @Tool 注解示例跑通）
 - [ ] MCP Client 集成、CLI Channel
+- [ ] 定时任务 `AgentScheduler`（第三触发源，cron 到点自动触发，跟 CLI/Web Service 复用同一条 `AgentService` 链路）
 - [ ] Web Service 核心 10 个 REST 端点全部跑通
 - [ ] Session 持久化（SQLite，跨重启恢复）
 - [ ] 12 个命令行工具
@@ -820,17 +821,16 @@ OryxOS 核心功能的实施按 **4 周节奏**组织，每周 3 小时，合计
 - 命令行工具有清晰的帮助和错误提示
 - 项目主页可访问，讲清楚 OryxOS 是什么、怎么快速开始
 
-### 场景验收（五个 Demo）
+### 场景验收（两个 Demo）
 
-通过五个 Demo Agent 验证五个核心能力，五个 Demo 跑通是核心功能发布的**硬条件**：
+早期按"一个 Demo 验证一个能力"拆了五个 Demo，但真实场景从来不是单一能力独立跑的——一个能打动人的 Agent，一定是多个能力叠在一起、自己到点跑起来的。改成两个**每日自动运行**的端到端 Demo，每个 Demo 横向串起多个核心能力，两个 Demo 加起来覆盖全部五大核心能力加定时任务这个第三触发源。两个 Demo 跑通是核心功能发布的**硬条件**：
 
 | Demo | 验证能力 | 场景描述 | 验收标准 |
 |------|---------|---------|---------|
-| **Demo 一** | 能力一+二（LLM + ReAct） | 查北京天气并推荐穿搭 | `oryxos chat` 多轮对话，Agent 调 HTTP Tool，Session 日志完整 |
-| **Demo 二** | 能力三（Memory） | 跨对话记住用户偏好 | 重启后 Agent 仍能引用之前记录的 Spring Boot + K8s 偏好 |
-| **Demo 三** | 能力四（Tool） | 零代码 GitHub PR 日报 | 写 SKILL.md + 配 MCP，不写代码，Agent 自动拉 PR 汇总推 Slack |
-| **Demo 四** | 能力五（Web Service） | Web Service 同步调用 | 外部系统通过 REST 完整走完：创建 Session → 发消息 → 查历史 → 归档 |
-| **Demo 五** | 能力五（Web Service） | Web Service 多端点联动 | 5 个端点协同完成一次业务流程 |
+| **Demo 一：每日天气** | 能力一+二（LLM + ReAct）、能力四（内置 HTTP Tool）、定时任务（`AgentScheduler`） | 每天早上到点自动查天气、生成穿搭建议，推送到企业 IM 群 | 不需要人工触发，到点自动跑完整 ReAct 循环；查天气和推送各一次 HTTP 调用，都过 Sandbox 域名白名单且都写入 `tool_invocations`；`GET /api/v1/sessions/{id}` 能查到这次自动触发的完整对话记录 |
+| **Demo 二：每日科技日报** | 能力四（Plugin Tool 方式一 SKILL.md 零代码 + 方式二 MCP）、能力三（Memory）、定时任务（`AgentScheduler`） | 每天到点自动汇总当日科技新闻并推送，且日报内容会体现用户之前说过的关注方向（比如"更关注 AI 和芯片"） | 业务方全程不写 Java 代码，只写 SKILL.md + `mcp_servers.yaml` + Profile 的 `schedules` 字段；LLM 自己决定调新闻 MCP 工具、自己组织日报、自己调推送 MCP 工具，OryxOS 不解析任务步骤；日报内容能体现 `MEMORY.md` 里记住的偏好 |
+
+两个 Demo 都是"钟推"（`AgentScheduler` 到点自动触发），但都要能同时支持"人推"手动补跑一次做验证（`oryxos chat` 或 `POST /agents/{name}/invoke`），验证同一个 Agent 不管从哪个入口触发，走的都是同一条 `AgentService` 链路。
 
 ---
 
