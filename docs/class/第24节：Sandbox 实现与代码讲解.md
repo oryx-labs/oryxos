@@ -248,19 +248,55 @@ public ToolResult httpGet(String url) {
 
 这张图想说明的是：**Sandbox 拒绝和 Sandbox 放行，走的是完全同一条后续路径**，唯一的差别就是 `success` 是 `true` 还是 `false`。这也从侧面验证了当初的设计是对的——如果 Sandbox 违规需要一条专门的处理逻辑，说明它没有被自然地融进已有的工具执行框架。
 
+## 四、验收 harness：把验收标准变成可执行的测试
+
+安全模块的 harness 有个特殊性：**测的重点不是"放行对不对"，是"绕得过绕不过"**。`WhitelistSandboxTest` 按三类校验组织，每类"允许 + 拒绝"成对，再加绕过场景：
+
+| 测试组 | 用例 |
+|---|---|
+| 文件路径 | 白名单内放行 / 白名单外拒绝 / **相对路径穿越（`..` 爬出白名单目录）被拦**（normalize 回归） |
+| Shell 命令 | 白名单内放行 / 白名单外拒绝 / 首 token 带前导空格、大小写变体的处理 |
+| HTTP 域名 | 精确匹配放行 / 白名单外拒绝 / **通配符 `*.example.com` 命中 `api.example.com` 但不命中 `evil-example.com`** |
+| 接线回归 | `FileTools`/`ShellTools`/`HttpTools`/`NotifyTools` 各一条：白名单外的输入被拦、真正的 IO **没有发生** |
+
+两个最容易翻车的绕过场景写出来：
+
+```java
+@Test
+void 相对路径穿越必须被拦() {
+    // 白名单只有 /workspace，构造 .. 序列爬到白名单之外
+    assertThrows(SandboxViolationException.class,
+        () -> sandbox.enforce(new SandboxAction(FILE_ACCESS, "/workspace/../../outside/secret.txt")));
+}
+
+@Test
+void 通配符域名_不能被形似域名绕过() {
+    // 白名单：*.example.com
+    assertDoesNotThrow(() -> sandbox.enforce(new SandboxAction(HTTP_REQUEST, "https://api.example.com/x")));
+    assertThrows(SandboxViolationException.class,   // evil-example.com 以 "example.com" 结尾但不是子域！
+        () -> sandbox.enforce(new SandboxAction(HTTP_REQUEST, "https://evil-example.com/x")));
+}
+```
+
+第二个用例点的是 `endsWith` 实现的经典漏洞：`"evil-example.com".endsWith("example.com")` 为真——匹配逻辑必须带上点号边界（`.example.com`）。这类测试写在实现之前最划算：它直接决定 `matchesDomain` 该怎么写。
+
+接线回归里"IO 没有发生"的断言方式：mock 底层执行器（进程/HTTP client），`verify(executor, never())`——只断言抛了异常不够，得证明危险动作真的没跑。
+
+## 五、做完怎么验
+
+原"做完怎么验"里的单测要求（三类各两条 + 穿越）已全部落进上面的 harness；剩下的人工项：
+
+- **集成验证**（真实链路）：配一个只允许 `ls` 的白名单，真跑一次白名单外的命令，确认链路上抛了 `SandboxViolationException`、`tool_invocations` 有 `success=false` 记录、`error_message` 人能读懂。
+- **接口中立性自查**（思维练习）：`Sandbox.enforce(SandboxAction)` 这个签名，换成 `KataMicroVmSandbox` 实现需要加方法吗？不需要才算墙立住了。
+- **配置边界写进文档**：白名单配置项为空 = "什么都不允许"而非"不校验"，在配置说明里写明。
+- 回归：改造后的四个 Tool 原有测试全绿。
+
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - 代码：`Sandbox` 接口、`SandboxAction`、`ActionType`、`SandboxViolationException`、`WhitelistSandbox`、三个 `@ConfigurationProperties`（file/shell/http）
+- 测试：`WhitelistSandboxTest`、四个 Tool 的拦截回归用例（见验收 harness）
 - 配置：`application.yaml` 的 `file.allowed_paths`、`shell.allowed_commands`、`http.allowed_domains`
 - 改造点：`FileTools`/`ShellTools`/`HttpTools`/`NotifyTools` 各在执行首行加 `sandbox.enforce(...)`
-
-## 四、做完怎么验
-
-- **单元测试**：给 `WhitelistSandbox` 三类校验各写允许和拒绝两个用例，一共至少 6 个测试；`checkFilePath` 额外补一个 `../` 路径穿越的用例，确认会被拒绝。
-- **集成验证**：配一个只允许 `ls` 的 `shell.allowed_commands`，跑一次 `rm -rf /tmp/x`，确认执行链路里抛出了 `SandboxViolationException`，并且 `tool_invocations` 表里对应记录 `success=false`、`error_message` 里能看到"命令不在白名单内: rm"。
-- **配置边界要在文档里写清楚**：某个白名单配置项为空时，代表"什么都不允许"而不是"不校验"——这一点很容易被误解成放行，一定要在 Profile / `application.yaml` 的说明文档里明确写出来，避免有人以为留空等于关闭沙箱。
-- **接口中立性自查**：合上代码，把 `Sandbox.enforce(SandboxAction)` 这个签名读一遍，问自己——如果换成 `KataMicroVmSandbox implements Sandbox`，需要往接口上加任何新方法或者新字段吗？答案应该是不需要，`SandboxAction` 的 `type + target` 足够表达"在受控环境里执行这个动作"的意图，隔离手段是实现类自己的事。
-- **回归**：确认改造后的 `FileTools`/`ShellTools`/`HttpTools` 原有单元测试仍然全绿——因为真正的 IO 逻辑代码没有变化，唯一新增的是开头那一行 `sandbox.enforce(...)`。
 
 ## 结语
 

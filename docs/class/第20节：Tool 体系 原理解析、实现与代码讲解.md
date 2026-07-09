@@ -114,7 +114,7 @@ public String httpGet(@ToolParam("要请求的完整 URL") String url) {
 
 ![Tool 执行链路：LLM 想调、校验白名单、执行、写审计](../../website/public/images/class-20-3.svg)
 
-**看测试用例。** Plugin Tool 写完得能验。一个 Java Plugin Tool 的测试其实很朴素——给输入、调 execute、断言结果，顺便验一下白名单会拦：
+**看测试用例。** Plugin Tool 写完得能验。一个 Java Plugin Tool 的测试其实很朴素——给输入、调 execute、断言结果，顺便验一下白名单会拦（这两个用例会收编进下面第四部分的 harness）：
 
 ```java
 @Test
@@ -138,12 +138,50 @@ void http_get_命中白名单外域名应被拦下() {
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - 代码：`OryxTool` 接口（含 `getInputSchema`）、`ToolResult`、`ToolRegistry`、`FileTools`（3 个）、`ShellTools`、`HttpTools`（2 个）、`McpClientService`、`McpToolAdapter`；`NotifyTools`（19 节）在此完成 `@Tool` 注册
+- 测试：`OryxToolContractTest`、`ToolRegistryTest`、`FileToolsTest`/`ShellToolsTest`/`HttpToolsTest`、`McpClientServiceTest`、`McpToolAdapterTest`（见验收 harness）
 - 配置：`.oryxos/mcp_servers.yaml`（name/transport/command/env）；Profile 的 `tools` 字段过滤
 - 说明：白名单校验先以接口调用形式接入，`Sandbox` 本体 23/24 节交付
 
 ---
 
-## 四、怎么用，做完怎么验
+## 四、验收 harness：把验收标准变成可执行的测试
+
+Tool 体系的 harness 分四块，前三块纯单测，第四块 mock 掉 MCP 连接也不碰网：
+
+| 测试类 | 覆盖的验收点 |
+|---|---|
+| `OryxToolContractTest` | **参数化测试遍历 Registry 里每个工具**：name/description/inputSchema 都非空——任何一个工具漏实现 `getInputSchema()`，这里立刻红（"动手前先检查"那条的自动化版） |
+| `ToolRegistryTest` | 三种来源的工具都以 `OryxTool` 身份注册进来；按 Profile 的 `tools` 字段过滤后，子集精确匹配、不多不少 |
+| `FileToolsTest` / `ShellToolsTest` / `HttpToolsTest` | 各自"正常能跑通 + 越界会被拦"两条（正文里 `http_get` 那两个用例就是模板） |
+| `McpToolAdapterTest` / `McpClientServiceTest` | mock `McpClient`：listTools 返回的工具被包装注册；execute 转发参数原样、结果包成 `ToolResult`；**连接失败只 WARN、其余工具照常注册、启动不炸** |
+
+两个最值钱的：
+
+```java
+@ParameterizedTest
+@MethodSource("allRegisteredTools")   // 遍历 ToolRegistry，新工具自动纳入契约检查
+void 每个工具的契约三件套都不能缺(OryxTool tool) {
+    assertNotNull(tool.getName());
+    assertNotNull(tool.getDescription());
+    assertNotNull(tool.getInputSchema());   // 缺了它，Provider 翻译 Function Calling 时直接卡死
+}
+
+@Test
+void 某个MCP_server失联_不能拖垮启动和其他工具() {
+    when(badClient.listTools()).thenThrow(new ConnectException("refused"));
+
+    mcpClientService.connectAll();          // 不抛异常——外部依赖的可用性不是自己的可用性
+
+    assertTrue(toolRegistry.contains("good_mcp_tool"));   // 好的 server 照常注册
+    assertFalse(toolRegistry.contains("bad_mcp_tool"));
+}
+```
+
+按 Profile 过滤的测试有个"不多不少"的讲究：断言子集**恰好等于**声明列表，多一个（没过滤干净）和少一个（过滤过头）都是错。
+
+---
+
+## 五、怎么用，做完怎么验
 
 给 Agent 加工具，对着三档来：
 
@@ -156,13 +194,11 @@ void http_get_命中白名单外域名应被拦下() {
 
 用 `oryxos tool list` 能看到当前注册了哪些工具。
 
-做完对着下面几条验：
+harness 全绿后，剩下的人工确认：
 
-- 九个内置 Tool（文件三个、Shell 一个、HTTP 两个、save_memory、recall_memory、notify）都能被 Agent 正常调到。
-- 方式三：写一个 `@Tool` 注解的示例工具，启动后能在 `tool list` 里看到、Agent 能调通。
-- 方式一：写一份 SKILL.md + 复用一个现成 MCP server，Agent 能读懂意图并调用外部工具完成任务。
-- 三种来源的工具，ReAct 循环调起来一视同仁，感知不到区别（说明 `OryxTool` 抽象立住了）。
-- 白名单生效：故意用一个白名单外的路径 / 命令 / 域名，工具会被拦下、不执行——具体这道白名单怎么设计，23、24 节 Sandbox 模块会详细展开，这里先知道"会被拦"就够。
-- 每次工具调用都写进了 `tool_invocations`，可查可审计。
+- 方式一真跑一次：写一份 SKILL.md + 连一个真实 MCP server，Agent 能读懂意图并调用外部工具完成任务（依赖真模型和真 server，测不了）。
+- 方式三真跑一次：`@Tool` 示例工具在 `tool list` 里可见、Agent 能调通。
+- 契约三件套、注册过滤、白名单拦截、MCP 失联隔离——已由 harness 覆盖，`mvn test` 绿即打勾。
+- 每次工具调用都写进 `tool_invocations`（17 节 ToolExecutorTest 已覆盖，这里跑真链路时顺带目检一眼）。
 
 Tool 是 Agent"能干事"的关键。到这一步，配合 Provider、ReAct、CLI，Demo 一（每日天气）的对话版（问天气、给穿搭建议）里那个"真的去查天气"的动作，就落地了。

@@ -128,12 +128,51 @@ public class AgentLifecycleService {
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - 代码：`AgentApiController` 四个端点、`AgentLifecycleService`（create 四步编排含回滚 / get / update / delete）、`AgentScheduler.unregisterProfile`、`skillStore`/`profileStore` 的 write/archive
+- 测试：`AgentLifecycleServiceTest`、`AgentApiControllerTest`（见验收 harness）
 - 目录：`.oryxos/archive/`（删除归档，不物理删）
 - 前端：管理平台新增 "Agent 管理" 页（列表 + 新建表单 + 编辑/删除）
 
 ---
 
-## 四、怎么用，做完怎么验
+## 四、验收 harness：把验收标准变成可执行的测试
+
+这节的复杂度全在**编排顺序和失败路径**，恰好是单测的主场——`skillStore`/`profileStore`/`registry`/`scheduler` 全部 mock，用 `InOrder` 钉顺序、用异常注入钉回滚：
+
+| 测试类 | 覆盖的验收点 |
+|---|---|
+| `AgentLifecycleServiceTest` | create 四步按序执行（InOrder）；**name 冲突在第①步就拒绝、一个文件都不写**；**第③步失败回滚已写的 Skill 文件**；delete 按"注销定时 → 移出索引 → 归档"顺序；update 改 schedules 时先 unregister 后 register |
+| `AgentApiControllerTest`（@WebMvcTest） | 四个端点薄转发；冲突 → 400、不存在 → 404，走统一 ErrorBody |
+
+两个最值钱的：
+
+```java
+@Test
+void 第三步注册失败_必须回滚已写的Skill文件_不留半个Agent() {
+    doThrow(new ProfileValidationException("bad")).when(profileRegistry).register(any());
+
+    assertThrows(ProfileValidationException.class, () -> lifecycle.create(validRequest("half-agent")));
+
+    verify(skillStore).delete(any());                          // 第②步写的文件被删回去
+    verify(agentScheduler, never()).registerProfile(any());    // 第④步根本没走到
+    assertFalse(profileRegistry.exists("half-agent"));         // 系统里干干净净
+}
+
+@Test
+void 删除必须先停定时_再动索引和文件() {
+    lifecycle.delete("weather-daily");
+
+    InOrder inOrder = inOrder(agentScheduler, profileRegistry, skillStore);
+    inOrder.verify(agentScheduler).unregisterProfile(any());   // 顺序反了的后果：
+    inOrder.verify(profileRegistry).remove("weather-daily");   // 定时器还在跑，Profile 已经没了
+    inOrder.verify(skillStore).archive("weather-daily");       // ——触发即空指针
+}
+```
+
+第二个测试的注释说明了为什么顺序值得一个专门断言：先删索引后停定时，中间那个窗口里 cron 一触发就是空指针——这种时序 bug 靠人工验收几乎撞不上，只有测试能稳定钉住。
+
+---
+
+## 五、怎么用，做完怎么验
 
 ```bash
 curl -X POST localhost:8080/api/v1/agents \
@@ -142,13 +181,12 @@ curl localhost:8080/api/v1/agents/daily-greeting     # 看定义
 curl -X DELETE localhost:8080/api/v1/agents/daily-greeting
 ```
 
-做完对着下面几条验：
+harness 全绿后，剩下的人工确认：
 
-- **创建即可用**：POST 成功后不重启，`GET /profiles` 里立刻有它、`oryxos profile list` 也能看到（API 建的和文件建的在同一个索引里）；把 cron 临时设成每分钟，到点真的自己跑、webhook 收到消息、审计有账。
-- **文件落对了地方**：POST 完去 `.oryxos/skills/` 和 `.oryxos/profiles/` 看，两份文件跟 29 节手写的格式一模一样——手动路径和 API 路径产物一致。
-- **冲突和非法**：同名再 POST 一次拿 400；引用不存在的 provider 拿 400，且报错文案跟启动时加载坏 Profile 的一致（同一套校验）；此时 `.oryxos/skills/` 里**没有**留下半个刚写的文件（回滚生效）。
-- **更新语义**：PUT 改 Skill 正文，下一次触发用的是新说明；PUT 改 cron，旧时间点不再触发、新时间点触发（旧句柄真的注销了）。
-- **删除语义**：DELETE 后 GET 拿 404、到点不再触发；文件出现在 `.oryxos/archive/` 里而不是消失；它历史上的 `llm_calls`/`tool_invocations` 还查得到。
-- **管理平台**：不碰命令行，纯界面走一遍"新建 → 看它自己跑 → 编辑 → 删除"。
+- **创建即可用**（真实链路）：POST 成功后不重启，`profile list` 立刻可见；cron 临时设每分钟，到点真的自己跑、webhook 收到消息。
+- **文件落对了地方**：POST 完目检 `.oryxos/skills/` 和 `.oryxos/profiles/`，格式跟 29 节手写的一模一样。
+- **删除的审计连续性**：DELETE 后文件在 `.oryxos/archive/`，历史 `llm_calls`/`tool_invocations` 还查得到。
+- **管理平台**：纯界面走一遍"新建 → 看它自己跑 → 编辑 → 删除"。
+- 编排顺序、失败回滚、冲突 400、删除时序——已由 harness 覆盖，`mvn test` 绿即打勾。
 
 到这里，技术方案里"业务系统通过 API 定义一个新 Agent 并让它定时自动运行"的完整闭环合上了。底座（第一部分）和定义 Agent（第二部分）都齐了——下一节交付验收：用这套机制做出天气、日报两个真实 Agent，打包发布第一个版本。

@@ -57,6 +57,8 @@
 
 ## 六、Demo 前置条件清单，做完怎么验
 
+> **把对账固化下来**：钟推对账和跨重启检查同样值得固化成 `@Tag("integration")` 的 `SchedulerFlowIT` / `RestartRecoveryIT`——尤其跨重启那组，手动做一次要五分钟，固化后每次发版前一键重跑。
+
 31 节两个 Demo 要用的环境，这节末尾一次配齐、逐项打勾：
 
 ![六项前置条件：白名单、通知渠道、新闻 MCP、记忆偏好、定时配置、跨重启](../../website/public/images/class-28-2.svg)

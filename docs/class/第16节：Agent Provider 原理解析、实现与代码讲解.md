@@ -137,22 +137,87 @@ public Response chat(String sessionId, Profile profile, Prompt prompt) {
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - 代码：`Profile`、`ProfileLoader`、`ProfileRegistry`、`ProviderService`（含 `chat(sessionId, Profile, Prompt)`）、工具格式适配器、`LlmCall` 实体 + `LlmCallRepository`
+- 测试：`ProfileLoaderTest`、`ProviderServiceTest`、`ToolSchemaAdapterTest`、`LlmCallRepositoryTest`、`ProviderSmokeIT`（见第四部分的验收 harness）
 - 配置：`application.yaml` 的 `oryxos.providers` 全局层；Profile YAML 的 `provider` 段
 - 表：`llm_calls`（含 `success`/`error_message` 列，手工建表脚本）
 
 ---
 
-## 四、做完怎么验
+## 四、验收 harness：把验收标准变成可执行的测试
 
-对着下面几条打勾就行：
+第 6 节讲过：SDD 给目标，**Harness 给边界**。这一节的 Harness 就是一套测试——AI 写的实现对不对，不靠人盯着代码看，靠这套测试跑绿。所以测试清单要在实现之前（或同时）定下来，`/speckit-implement` 产出的代码必须让它们全绿，这就是"验收"的工程化形态。
 
-- 用到的 provider，对应的 Spring AI（Alibaba）starter 依赖已确认在项目锁定的 BOM 里能下载、能解析——不是照着教程的名字就假设一定能用。
-- 配一个 provider，能跑通一次真实调用、拿到响应。
-- 同时配两个 provider，按 Profile 里的名字路由，不串台；Profile 引用了全局层没有的 provider 名字时，有清晰报错，不是静默失败。
-- 传了工具 schema，模型能返回"想调某工具"的请求，而 Provider 不去执行它（执行留给 ToolExecutor）。
-- 每次**成功**调用都写进了 `llm_calls`，`success` 为 `true`。
-- 故意让一次调用失败（比如断网、给个假 key），确认 `llm_calls` 里多了一条 `success=false`、带 `error_message` 的记录，而不是什么都没留下。
-- 区分 provider 用的是显式映射表，不是类型扫描；Spring AI 的自动执行确认关掉了（拿一个会触发工具的请求验一下，工具只被调一次就对了）。
-- key 走环境变量，配置和代码里都没有明文。
+**先定分层：什么用单测，什么用集成冒烟。** 判断标准就一条——要不要碰真实网络：
+
+- **单测（默认全跑）**：路由、校验、审计、翻译，全部把 `ChatModel` mock 掉，不花一分钱、不依赖网络，秒级跑完。这是 harness 的主体。
+- **集成冒烟（打 `@Tag("integration")`，本地手动跑）**：真调一次模型，验证"key 对、依赖对、真的通"。CI 里默认跳过——不能让外部 API 的可用性变成自己流水线的可用性。
+
+**四个单测类，逐条对应验收标准：**
+
+| 测试类 | 覆盖的验收点 |
+|---|---|
+| `ProfileLoaderTest` | 合法 YAML 全字段解析；引用不存在的 provider 报错清晰；坏文件不阻断其余加载；`${ENV}` 占位从环境变量解析 |
+| `ProviderServiceTest` | 双 provider 按名路由不串台；未知名抛异常；成功/失败都落审计；自动执行关闭 |
+| `ToolSchemaAdapterTest` | `OryxTool` 的 schema 翻译成 Spring AI 格式后字段一一对齐；只翻译、产物里不含任何执行逻辑 |
+| `LlmCallRepositoryTest` | 手工建表脚本建出的 `llm_calls` 能存能读，`success`/`error_message` 两列真实存在 |
+
+**最值钱的三个测试方法，写出来看。** 都在 `ProviderServiceTest` 里，mock 两个 `ChatModel` 就能测：
+
+```java
+@Test
+void 按名路由_两个provider不串台() {
+    var deepseek = mock(ChatModel.class);
+    var kimi = mock(ChatModel.class);
+    var service = new ProviderService(Map.of("deepseek", deepseek, "kimi", kimi), adapter, audit);
+
+    service.chat("s-1", profileUsing("kimi"), prompt);
+
+    verify(kimi, times(1)).call(any());       // 调的是 kimi
+    verify(deepseek, never()).call(any());    // deepseek 一次都没被碰——"不串台"的直接证据
+}
+
+@Test
+void 调用失败_审计必须留下success为false的记录() {
+    when(chatModel.call(any())).thenThrow(new RuntimeException("connect timeout"));
+
+    assertThrows(RuntimeException.class,
+        () -> service.chat("s-1", profileUsing("deepseek"), prompt));   // 异常继续上抛
+
+    verify(audit).record(eq("s-1"), eq("deepseek"), any(), isNull(),
+        eq(false), contains("timeout"), anyLong());   // 但审计先落了：success=false + 原因
+}
+
+@Test
+void 带工具schema调用_请求里关闭了自动执行() {
+    service.chat("s-1", profileUsing("deepseek"), promptWithTools(httpGetTool));
+
+    var captor = ArgumentCaptor.forClass(Request.class);
+    verify(chatModel).call(captor.capture());
+    assertFalse(captor.getValue().autoExecuteTools());   // 坑二的回归测试：一旦有人改回自动执行，这里立刻红
+    assertNotNull(captor.getValue().tools());            // 翻译过的 schema 确实带上了
+}
+```
+
+第一个测的是坑一（显式映射），第三个测的是坑二（关自动执行）——**每个"想清楚"阶段点过名的坑，都应该有一个对应的回归测试**，这样坑就被永久钉死了，后来的人改不回去。第二个测的是最容易漏的失败审计路径：注意断言的不是"没抛异常"，而是"抛了异常**并且**审计先落了账"。
+
+**`LlmCallRepositoryTest` 的一个讲究**：建表要走那份手工脚本（测试里执行 `schema.sql`），不要让 Hibernate 自动建——不然测试绿了、生产上跑真脚本时列名对不上，白测。
+
+**集成冒烟 `ProviderSmokeIT`**：一个方法，读环境变量里的真 key、真调一次、断言拿到非空响应且 `llm_calls` 多了一条 `success=true`。跑法：
+
+```bash
+mvn test                                    # 日常：只跑单测，全绿才算实现完成
+DEEPSEEK_API_KEY=xxx mvn test -Dgroups=integration   # 手动：冒烟验真连通
+```
+
+---
+
+## 五、做完怎么验
+
+harness 全绿之后，剩下这几条需要人工确认（自动化覆盖不到或不值得自动化的部分）：
+
+- 用到的 provider，对应的 Spring AI（Alibaba）starter 依赖已确认在项目锁定的 BOM 里能下载、能解析——不是照着教程的名字就假设一定能用（`mvn dependency:tree` 看一眼）。
+- 集成冒烟真跑过一次：配真 key，`ProviderSmokeIT` 通过，拿到过真实响应。
+- key 走环境变量：`grep -r "sk-"`（或你的 key 前缀）在代码和配置里搜不到明文。
+- 其余验收点——双 provider 路由、错误名报错、成功/失败审计、自动执行关闭、只翻译不执行——已由第四部分的单测覆盖，`mvn test` 绿就等于打勾。
 
 Provider 自己没有独立入口，它要和下一节的 ReAct 一起，才能撑起 Demo 一（每日天气）的对话版（问天气、给穿搭建议）。所以这块跑通的标准很直接：能撑住 Demo 一里的那次大模型调用。
