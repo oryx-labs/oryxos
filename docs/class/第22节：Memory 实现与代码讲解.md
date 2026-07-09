@@ -134,21 +134,58 @@ public class MemoryTools {
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - 代码：`MemoryService` 接口 + 实现、`MemoryScope` 枚举、`LongTermMemory`（append/load/recallByKeyword/truncateIfNeeded）、`MemoryTools`（save_memory/recall_memory）
+- 测试：`LongTermMemoryTest`、`MemoryToolsTest`、`MemoryServiceTest`（见验收 harness）
 - 文件：`.oryxos/memory/MEMORY.md`（`## 核心记忆` / `## 归档记忆` 两区块约定）
 - 集成点：`PromptBuilder` 组装时调 `memoryService.buildContext(session)`
 
 ---
 
-## 四、做完怎么验
+## 四、验收 harness：把验收标准变成可执行的测试
 
-对着下面几条打勾：
+Memory 全是文件和内存操作，用 `@TempDir` 临时目录就能测干净，harness 全单测。四个坑各有一个回归测试钉死：
 
-- 在核心记忆区写一条（比如"用户叫小王，偏好用 Java"），开一个新会话，系统提示里还带着这条——验证核心记忆"始终在场"。
-- 调一次 `save_memory` 写归档记忆，**不重启进程**，紧接着下一轮对话就能通过 `recall_memory` 或直接在系统提示里查到——验证坑一（不缓存）。
-- 往归档区堆很多条记录直到超过阈值，确认触发截断后**核心记忆区完整无损**，只有归档区被裁短——验证坑二。
-- `save_memory` 不传 `scope` 参数时默认写进归档区，传 `core` 时能正确写进核心记忆区。
-- `recall_memory` 传一个归档区里存在的关键词，能查到；传一个不存在的，返回"没有找到相关记忆"而不是报错。
-- `MEMORY.md` 和 `USER.md` 的角色分清：`USER.md` 全程只读、`MEMORY.md` 能被 Agent 通过 `save_memory` 写入。
-- 写几个单元测试：`LongTermMemoryTest`（append/load/截断/关键词检索）、`MemoryToolsTest`（两个 Tool 的输入输出），覆盖上面这几条。
+| 测试类 | 覆盖的验收点 |
+|---|---|
+| `LongTermMemoryTest` | **写后立读**（坑一：无缓存）；**截断只裁归档、核心区一字不动**（坑二）；`scope` 路由到正确区块（坑三）；`recallByKeyword` 只搜归档区（坑四附带） |
+| `MemoryToolsTest` | `scope` 缺省写归档；关键词未命中返回"没有找到相关记忆"而不是抛异常 |
+| `MemoryServiceTest` | `buildContext` 返回核心记忆 + 会话历史的组合，归档区不整体注入 |
+
+两个最值钱的：
+
+```java
+@Test
+void 截断只裁归档区_核心记忆一字不能少() {
+    memory.append("用户叫小王，偏好用 Java", MemoryScope.CORE);
+    for (int i = 0; i < 500; i++) {
+        memory.append("归档流水 " + i, MemoryScope.ARCHIVAL);   // 把归档区灌到远超 4000 字
+    }
+
+    String loaded = memory.load();
+
+    assertTrue(loaded.contains("用户叫小王，偏好用 Java"));   // 核心区完整——"始终在场"的底线
+    assertFalse(loaded.contains("归档流水 0"));               // 归档区最早的内容被裁掉了
+    assertTrue(loaded.contains("归档流水 499"));              // 保留的是最近的
+}
+
+@Test
+void 写入后立刻可读_不允许有缓存() {
+    memory.append("刚记的事", MemoryScope.ARCHIVAL);
+    assertTrue(memory.load().contains("刚记的事"));           // 同一进程内下一次 load 立即可见
+    assertFalse(memory.recallByKeyword("刚记的事").isEmpty()); // 检索同样立即命中
+}
+```
+
+第一个测试是这节最重要的一道保险：截断逻辑将来任何"优化"（比如有人改成对全文件掐头去尾），这里立刻红。
+
+---
+
+## 五、做完怎么验
+
+harness 全绿后，剩下的人工确认：
+
+- 用真模型完整走一遍：对话里说一句值得记的话，Agent 主动调 `save_memory`；开新会话，系统提示里带着核心记忆——"始终在场"在真实链路里的体感。
+- 跨进程验证：重启后 `MEMORY.md` 里的记忆还在（文件天然跨重启，目检一眼）。
+- `MEMORY.md` 和 `USER.md` 的角色分清：`USER.md` 全程只读、`MEMORY.md` 能被 Agent 写入（code review 确认没有写 USER.md 的代码路径）。
+- 无缓存、截断保核心、scope 路由、未命中不报错——已由 harness 覆盖，`mvn test` 绿即打勾。
 
 到这一步，Agent 不但会想（ReAct）、会动手（Tool），还记得住事（Memory）——三大能力凑齐了。Demo 二（每日科技日报）里"日报要体现用户之前说过的偏好"这一环，靠的就是这节的 `save_memory` 写入、下次组装 Prompt 时自动带上，具备了跑通的条件。

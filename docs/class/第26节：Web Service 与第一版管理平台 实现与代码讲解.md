@@ -124,12 +124,43 @@ public class GlobalExceptionHandler {
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - 代码：六个 Controller（Session/Agent/Profile/Memory/Tool/System）、`GlobalExceptionHandler`、`ErrorBody`；`springdoc-openapi` 集成
+- 测试：`SessionApiControllerTest`、`GlobalExceptionHandlerTest`、`WebSmokeIT`（见验收 harness）
 - 配置：`spring.threads.virtual.enabled=true`、端口 8080、消息 32KB / 历史 100 条限制
 - 前端：`static/admin/` 下 AI 生成的只读管理页（五个页面调五个 GET 端点）
 
 ---
 
-## 四、怎么用，做完怎么验
+## 四、验收 harness：把验收标准变成可执行的测试
+
+Web 层的 harness 用 `@WebMvcTest` 切片——只起 MVC 层、mock 掉 `AgentService`，不碰模型不碰库，跑得飞快：
+
+| 测试类 | 覆盖的验收点 |
+|---|---|
+| `SessionApiControllerTest` | 超 32KB → 400；Session 不存在 → 404；正常请求 `agentService.process` 恰被调一次（Controller 没夹带私货） |
+| `GlobalExceptionHandlerTest` | 每类异常映射到约定状态码；响应体都是统一 `ErrorBody` 三字段；**500 时响应里不含内部异常的 message**（不泄漏） |
+| `WebSmokeIT`（`@SpringBootTest` 起真实上下文，不依赖模型） | `/health`、`/info`、`/profiles`、`/tools` 真实链路可达——验证 Bean 装配和扫描范围没炸 |
+
+最值钱的一个——"门面的分寸"回归：
+
+```java
+@Test
+void 内部异常细节_绝不能出现在500响应里() {
+    when(agentService.process(any(), any()))
+        .thenThrow(new IllegalStateException("jdbc:sqlite:/data/oryxos.db connect failed"));
+
+    mockMvc.perform(post("/api/v1/sessions/s-1/messages").contentType(JSON).content(body))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.errorCode").value("INTERNAL_ERROR"))
+        .andExpect(jsonPath("$.message").value("内部错误"))                    // 统一话术
+        .andExpect(content().string(not(containsString("jdbc:sqlite"))));    // 连接串这类内幕一个字不漏
+}
+```
+
+`WebSmokeIT` 有一个特别的价值：它会真实触发 JPA repository 扫描——18 节那个 "Found 0 repositories" 的坑如果在 web 模块复发，这里第一时间红，不用等到手动 `serve`。
+
+---
+
+## 五、怎么用，做完怎么验
 
 ```bash
 oryxos serve                          # 启动，默认 8080
@@ -141,13 +172,13 @@ open http://localhost:8080/admin                     # 管理平台
 open http://localhost:8080/swagger-ui                # 接口文档
 ```
 
-做完对着下面几条验：
+harness 全绿后，剩下的人工确认：
 
-- 10 个端点 curl 全部走通；`POST /sessions/{id}/messages` 触发的是完整 ReAct 循环，`llm_calls`/`tool_invocations` 有对应记录。
-- CLI 里聊过的 Session，通过 `GET /sessions/{id}` 能查到同样的历史——验证两个人推入口共享同一套 Session 存储。
-- 故意传超长消息、查不存在的 Session、断掉 Provider，分别拿到 400 / 404 / 503，格式都是统一的错误 JSON；构造一个超过 60 秒的调用拿到 504。
-- 并发压一把（比如 200 个并发 invoke），确认虚拟线程扛得住、没有线程池打满的报错。
-- 管理平台五个页面都能正常渲染真实数据；界面上没有任何写操作入口。
-- `/swagger-ui` 能打开，10 个端点的文档齐全。
+- 10 个端点 curl 真链路全走通（含真模型的 `POST /sessions/{id}/messages`），审计有账。
+- CLI 聊过的 Session 从 `GET /sessions/{id}` 能查到——两个人推入口共享存储。
+- 断掉 Provider 拿 503、构造超 60 秒调用拿 504（这两个依赖真实故障注入，切片测试模拟不了完整链路）。
+- 并发压一把（200 并发 invoke），虚拟线程扛得住。
+- 管理平台五个页面渲染真实数据、无写操作入口；`/swagger-ui` 文档齐全。
+- 400/404 映射、错误格式统一、500 不泄漏——已由 harness 覆盖，`mvn test` 绿即打勾。
 
 到这一步，底座的五大核心能力全部有了对外出口。但现在的 Agent 还是散装的——模块都在，整条链路没有从头到尾拉通过。接下来两节就干这件事：串联。

@@ -109,21 +109,58 @@ public String process(Session session, String userMessage) {
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - 代码：`ReActLoop`、`PromptBuilder`、`ToolExecutor`、`AgentService`、`ProfileContext`、`ContextLoader`、`ToolInvocation` 实体 + `ToolInvocationRepository`
+- 测试：`ReActLoopTest`、`PromptBuilderTest`、`ToolExecutorTest`、`AgentServiceTest`、`ContextLoaderTest`（见验收 harness）
 - 表：`tool_invocations`（含 `success`/`error_message` 列，手工建表脚本）
 - 约定：最大轮数默认 10；历史截断默认 20 轮；prompt 末尾附当前日期时间
 
 ---
 
-## 四、做完怎么验
+## 四、验收 harness：把验收标准变成可执行的测试
 
-对着下面几条打勾：
+这节的东西全部不碰网络——`ProviderService`、工具、文件系统都能 mock 或用临时目录，所以 harness 全是单测，`mvn test` 秒级跑完。五个测试类对应五个交付物：
 
-- Demo 一（每日天气）的对话版（问天气、给穿搭建议）能跑通：多轮对话里，Agent 调了 http_get 工具、拿到数据、给出建议。
-- 死循环防住了：故意构造一个模型反复要调工具的场景，转到第 10 轮会强制停。
-- Session 里能看到完整一条链：每轮的模型响应和工具结果都累积在里面。
-- 上下文按最近 N 轮截断，转很多轮也不会把 context 撑爆。
-- 工具是走 ToolExecutor 加沙箱执行的，不是 Provider 自动执行；同一个工具不会被调两次。
-- 故意让一次工具调用失败，确认 `tool_invocations` 里多了一条 `success=false` 的记录，不是什么都没留下。
-- 循环是自己实现的，没用框架现成的 Agent 封装。
+| 测试类 | 覆盖的验收点 |
+|---|---|
+| `ReActLoopTest` | 无工具调用一轮收尾；有工具调用则执行并回填进下一轮；**转满最大轮数强制停**（坑一回归）；每轮响应和工具结果都累积进 Session（坑三回归） |
+| `PromptBuilderTest` | 四部分顺序正确；历史超 N 轮被截断（坑二回归）；system prompt 末尾含当前日期时间 |
+| `ToolExecutorTest` | 成功写审计 `success=true`；失败也写 `success=false` 带原因，异常不吞 |
+| `AgentServiceTest` | 处理期间 `ProfileContext` 可取到当前 Profile；**处理抛异常时 finally 也把它清掉**；结束后 Session 被持久化 |
+| `ContextLoaderTest` | 改文件后下一次 build 立即读到新内容（无缓存回归）；Skill 引用缺失报错、Bootstrap 缺失 WARN |
+
+两个最值钱的回归测试写出来：
+
+```java
+@Test
+void 模型一直要调工具_转满最大轮数强制停() {
+    when(providerService.chat(any(), any(), any()))
+        .thenReturn(responseWithToolCall(httpGetCall));   // 每轮都要调工具，永不收敛
+
+    String reply = loop.run(session, "查天气", profileWithMaxIterations(10));
+
+    verify(providerService, times(10)).chat(any(), any(), any());  // 恰好 10 轮，一轮不多
+    assertTrue(reply.contains("达到最大轮数"));
+}
+
+@Test
+void 处理中抛异常_ProfileContext也必须被清掉() {
+    when(reActLoop.run(any(), any(), any())).thenThrow(new RuntimeException("boom"));
+
+    assertThrows(RuntimeException.class, () -> agentService.process(session, "hi"));
+
+    assertNull(ProfileContext.current());   // finally 没清，下一个复用此线程的请求会拿到别人的 Profile
+}
+```
+
+第二个测试守的是最阴险的一类 bug：ThreadLocal 泄漏在单请求测试里永远不报错，只在并发复用时串号——所以必须在 harness 里显式钉死。
+
+---
+
+## 五、做完怎么验
+
+harness 全绿后，剩下的人工确认：
+
+- Demo 一（每日天气）的对话版（问天气、给穿搭建议）用真模型跑通一次：多轮对话里，Agent 调了 http_get 工具、拿到数据、给出建议。
+- 循环是自己实现的，没用框架现成的 Agent 封装（code review 确认，测不出来）。
+- 其余验收点——死循环兜底、累积、截断、失败审计——已由 harness 覆盖，`mvn test` 绿即打勾。
 
 ReAct 要和上一节的 Provider 一起，才撑得起 Demo 一。所以这块跑通的标准很直接：Demo 一能从头到尾完整走下来。

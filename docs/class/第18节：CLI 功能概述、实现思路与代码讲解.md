@@ -114,12 +114,40 @@ public class ProfileListCommand implements Runnable {
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - 代码：`OryxOsCli` 主入口、12 个 `@Command` 子命令类、`CliChannel`（chat 交互）、`Session` 实体 + `SessionRepository`、`SessionManager`
+- 测试：`SessionManagerTest`、`SessionRepositoryTest`（见验收 harness）
 - 表：`sessions`（`session_id` 由 SessionManager 按 channel+user+profile 唯一拼接，手工建表脚本）
 - 约定：轻命令不启动 Spring；重命令启动类显式声明 `@EnableJpaRepositories`/`@EntityScan` 的 `basePackages`
 
 ---
 
-## 四、怎么用，做完怎么验
+## 四、验收 harness：把验收标准变成可执行的测试
+
+CLI 本身是薄壳，值得自动化的是这节交付的**会话层**——它是后面所有入口共用的地基，出口径问题最难查（27 节的缝隙③），所以在这就钉死：
+
+| 测试类 | 覆盖的验收点 |
+|---|---|
+| `SessionManagerTest` | 同一三元组两次 `getOrCreate` 返回**同一个** Session（幂等）；channel/user/profile 任一不同则是不同 Session；id 生成只此一处 |
+| `SessionRepositoryTest` | 手工建表脚本建出的 `sessions` 表能存能读；`messages_json` 序列化回读后消息完整；模拟"重启"（新建 context 重查）历史还在 |
+
+关键的一个：
+
+```java
+@Test
+void 同一三元组_历次getOrCreate都是同一个Session() {
+    var first  = sessionManager.getOrCreate("cli", "wang", "default");
+    var second = sessionManager.getOrCreate("cli", "wang", "default");
+    assertEquals(first.id(), second.id());          // 幂等：多轮对话靠它串起来
+
+    var other = sessionManager.getOrCreate("web", "wang", "default");
+    assertNotEquals(first.id(), other.id());        // channel 不同就是不同会话
+}
+```
+
+命令分流（轻命令不起 Spring）和 12 个命令的 `--help` 属于进程级行为，写自动化测试的成本大于收益，留在人工清单里。
+
+---
+
+## 五、怎么用，做完怎么验
 
 装好之后，常用的几条命令：
 
@@ -134,13 +162,13 @@ oryxos status               # 看当前状态
 
 `chat` 进去后就是一问一答，输入 `/quit` 退出。
 
-做完对着下面几条验：
+harness 全绿后，剩下的人工确认：
 
-- `oryxos chat` 能进入交互，能跟 Agent 完成一次多轮对话，`/quit` 能正常退出。
-- Demo 一（每日天气）的对话版（问天气、给穿搭建议）能在 `chat` 里从头走通：你问一句，Agent 内部调了工具、给出建议。
-- 轻命令（`init`、`profile list`）秒回，没有等 Spring 启动的几秒卡顿；重命令（`chat`、`serve`）才启动 Spring。
-- `chat` 启动时日志里能看到"Found N JPA repository interfaces"（N > 0），不是 0——确认审计表的 Repository 真的被扫描到了，能正常写 `llm_calls`/`tool_invocations`。
-- 三种运行模式（`chat` / `serve` / `gateway`）用的是同一份 Profile 配置和同一套 Session 存储，切换模式数据不丢。
-- 12 个子命令都能跑、`--help` 有正常的帮助信息（Picocli 自带）。
+- `oryxos chat` 能进入交互，完成一次多轮对话，`/quit` 正常退出；Demo 一的对话版能从头走通。
+- 轻命令（`init`、`profile list`）秒回；重命令（`chat`、`serve`）才启动 Spring。
+- `chat` 启动日志里 "Found N JPA repository interfaces" 的 N > 0。
+- 三种运行模式共享同一份 Profile 和 Session 存储，切换模式数据不丢。
+- 12 个子命令都能跑、`--help` 正常（Picocli 自带）。
+- 会话幂等、隔离、持久化——已由 harness 覆盖，`mvn test` 绿即打勾。
 
 CLI 是 Provider、ReAct 之后第一个"看得见摸得着"的东西——到这一步，你能在终端里真正跟自己搭的 Agent 说上话了。它和 Provider、ReAct 一起，撑起 Demo 一的完整体验。
