@@ -1,4 +1,4 @@
-package io.oryxos.provider;
+package io.oryxos.core.provider;
 
 /**
  * llm_calls 审计写入口（宪法 V：Day One 落库）。

@@ -122,3 +122,15 @@
 109. 你写skill 之前，能写个我们如何设计harness的md吗。也就是我们刚刚聊的内容。门禁，保证每个功能开发都能尽量符合预期
 110. 开始写skill
 111. 把对话中，docs/prompt/prompt.md 中没有的提示词，都要写入到docs/prompt/prompt.md 中
+
+## 第三轮（逐节开发执行期：16/17 节落地）
+
+112. scripts/package.sh 执行完成后，不会commit 本地代码
+113. 切换到远程的class-16 分支
+114. /oryxos-lesson-dev 16
+115. 继续（tasks 停点：确认 OryxTool.getInputSchema 补齐、ProviderRequest 值对象、两项 clarify 默认后放行 implement）
+116. 给我总结一下代码的改动点和重点review的部分
+117. /oryxos-lesson-dev 17
+118. 1. 不一定是当前9个模块，可以根据需要新建，调整模块名称。比如增加orysox-sandbox模块。按照agent 的模块来。 这点可以写入到claude.md 或者.specify/memory/constitution.md 2. 3、4 其他的按你的来（17 节 tasks 停点：批准 D1 契约上移，并把"模块结构可按需演进"写入宪法 v1.1.0）
+119. 总结一下代码变更，重点reveiw，如何验证。 并把这个环节加入到skill中国呢
+120. 把对话中新增的提示词存储docs/prompt/prompt.md 中
