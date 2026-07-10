@@ -152,6 +152,16 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!-- Tests: exclude @Tag("integration") by default (CI skips smoke ITs);
+                     run locally with: mvn test -Dgroups=integration -DexcludedGroups= -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <configuration>
+                        <excludedGroups>integration</excludedGroups>
+                    </configuration>
+                </plugin>
+
                 <!-- Format: Spotless + google-java-format -->
                 <plugin>
                     <groupId>com.diffplug.spotless</groupId>
