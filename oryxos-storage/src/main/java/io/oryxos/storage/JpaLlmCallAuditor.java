@@ -1,7 +1,7 @@
 package io.oryxos.storage;
 
-import io.oryxos.provider.LlmCallAuditor;
-import io.oryxos.provider.Usage;
+import io.oryxos.core.provider.LlmCallAuditor;
+import io.oryxos.core.provider.Usage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

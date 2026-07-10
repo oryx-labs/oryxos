@@ -14,3 +14,17 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     created_at TIMESTAMP NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_llm_calls_session ON llm_calls (session_id);
+
+-- tool_invocations：工具调用审计（宪法 V：Day One 落库，成功要记、失败也要记）
+CREATE TABLE IF NOT EXISTS tool_invocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id VARCHAR(255) NOT NULL,
+    tool_name VARCHAR(128) NOT NULL,
+    input_json TEXT,
+    result_json TEXT,
+    success BOOLEAN NOT NULL,
+    error_message TEXT,
+    duration_ms INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tool_invocations_session ON tool_invocations (session_id);

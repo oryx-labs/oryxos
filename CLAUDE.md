@@ -47,6 +47,8 @@ oryxos/
 
 模块之间通过接口解耦。新增 Channel 或 Tool 只加新模块，不改 `oryxos-core`。
 
+**模块结构可按需演进**（宪法 v1.1.0）：模块划分跟随 Agent 的能力域，不锁死上面 9 个——可以新建模块（比如把沙箱独立为 `oryxos-sandbox`）或调整模块边界。新建/改名必须在对应特性的 plan 里声明理由，并同步更新本表与 `docs/TechnicalSolution.md` §10。跨模块契约（接口 + 值对象）放 `oryxos-core`，由下游模块实现（依赖倒置），禁止模块间循环依赖。
+
 ---
 
 ## 不可违背的原则（Constitution）

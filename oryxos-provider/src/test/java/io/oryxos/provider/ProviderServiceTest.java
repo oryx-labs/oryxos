@@ -18,6 +18,10 @@ import static org.mockito.Mockito.when;
 
 import io.oryxos.core.OryxTool;
 import io.oryxos.core.profile.Profile;
+import io.oryxos.core.provider.LlmCallAuditor;
+import io.oryxos.core.provider.ProviderRequest;
+import io.oryxos.core.provider.ProviderResponse;
+import io.oryxos.core.provider.ProviderService;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,7 +48,7 @@ class ProviderServiceTest {
     kimi = mock(ChatModel.class);
     audit = mock(LlmCallAuditor.class);
     service =
-        new ProviderService(
+        new SpringAiProviderServiceImpl(
             Map.of("deepseek", deepseek, "kimi", kimi), new ToolSchemaAdapter(), audit);
   }
 

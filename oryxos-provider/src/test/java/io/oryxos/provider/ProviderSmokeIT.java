@@ -5,6 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import io.oryxos.core.profile.Profile;
+import io.oryxos.core.provider.LlmCallAuditor;
+import io.oryxos.core.provider.ProviderRequest;
+import io.oryxos.core.provider.ProviderResponse;
+import io.oryxos.core.provider.ProviderService;
+import io.oryxos.core.provider.Usage;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Tag;
@@ -48,7 +53,7 @@ class ProviderSmokeIT {
                     "deepseek", apiKey, "https://api.deepseek.com")));
     RecordingAuditor auditor = new RecordingAuditor();
     ProviderService service =
-        new ProviderService(
+        new SpringAiProviderServiceImpl(
             new ProviderChatModelFactory().build(properties), new ToolSchemaAdapter(), auditor);
     Profile profile =
         new Profile(
