@@ -23,6 +23,24 @@ import io.oryxos.storage.JpaToolInvocationAuditor;
 import io.oryxos.storage.LlmCallRepository;
 import io.oryxos.storage.SessionRepository;
 import io.oryxos.storage.ToolInvocationRepository;
+import io.oryxos.tool.ToolRegistry;
+import io.oryxos.tool.builtin.FileTools;
+import io.oryxos.tool.builtin.HttpTools;
+import io.oryxos.tool.builtin.InteractionTools;
+import io.oryxos.tool.builtin.NotifyTools;
+import io.oryxos.tool.builtin.ShellTools;
+import io.oryxos.tool.builtin.WebSearchTools;
+import io.oryxos.tool.interaction.ConsoleUserInteraction;
+import io.oryxos.tool.mcp.McpClientService;
+import io.oryxos.tool.mcp.McpConfigLoader;
+import io.oryxos.tool.notify.DingTalkNotifyAdapter;
+import io.oryxos.tool.notify.FeishuNotifyAdapter;
+import io.oryxos.tool.notify.NotifyChannelAdapter;
+import io.oryxos.tool.notify.WeComNotifyAdapter;
+import io.oryxos.tool.notify.WebhookNotifyAdapter;
+import io.oryxos.tool.sandbox.PermissiveSandbox;
+import io.oryxos.tool.sandbox.Sandbox;
+import io.oryxos.tool.web.DuckDuckGoSearchProvider;
 import java.nio.file.Path;
 import java.util.Map;
 import org.springframework.ai.chat.model.ChatModel;
@@ -31,6 +49,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.web.client.RestClient;
 
 /**
  * 重命令（chat/serve/gateway）的 Spring 装配。轻命令不进这里（课件坑二：为列个目录不值得等 4 秒）。
@@ -81,9 +100,45 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  Map<String, OryxTool> tools() {
-    // 内置工具与 MCP 工具 20 节经 ToolRegistry 接线；本节先以空表装配链路
-    return Map.of();
+  Sandbox sandbox() {
+    // 24 节替换为 WhitelistSandbox；Permissive 每次放行记 WARN，不静默裸奔
+    return new PermissiveSandbox();
+  }
+
+  @Bean
+  RestClient restClient() {
+    return RestClient.create();
+  }
+
+  @Bean
+  ToolRegistry toolRegistry(Sandbox sandbox, RestClient restClient) {
+    ToolRegistry registry = new ToolRegistry();
+    // 内置工具走 @Tool 注解管道（schema 自动生成，宪法 II 第二件事）
+    registry.registerAnnotated(new FileTools(sandbox)); // read/write/list/edit/grep/glob
+    registry.registerAnnotated(new ShellTools(sandbox));
+    registry.registerAnnotated(new HttpTools(sandbox, restClient));
+    registry.registerAnnotated(
+        new WebSearchTools(sandbox, new DuckDuckGoSearchProvider(restClient)));
+    // chat 是交互终端，ask_user 读控制台；serve/gateway 无人值守时应换 UnsupportedUserInteraction
+    registry.registerAnnotated(new InteractionTools(new ConsoleUserInteraction()));
+    // notify（19 节 OryxTool 形态）直接注册——渠道实现按 channelType 路由
+    Map<String, NotifyChannelAdapter> notifyAdapters =
+        Map.of(
+            "webhook", new WebhookNotifyAdapter(restClient),
+            "wecom", new WeComNotifyAdapter(restClient),
+            "feishu", new FeishuNotifyAdapter(restClient),
+            "dingtalk", new DingTalkNotifyAdapter(restClient));
+    registry.register(new NotifyTools(notifyAdapters));
+    // MCP：失联的 server 只 WARN 跳过，不拖垮启动
+    new McpClientService(new McpConfigLoader(ORYXOS_ROOT.resolve("mcp_servers.yaml")))
+        .connectAll(registry);
+    return registry;
+  }
+
+  @Bean
+  Map<String, OryxTool> tools(ToolRegistry toolRegistry) {
+    // 20 节起：全部来源统一经 ToolRegistry 供给（PromptBuilder 按 Profile.tools 过滤）
+    return toolRegistry.asMap();
   }
 
   @Bean
