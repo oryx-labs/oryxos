@@ -24,6 +24,14 @@ public class Session {
     this.profileName = profileName;
   }
 
+  /** 恢复构造器（18 节）：从持久化历史还原会话——17 节 research D2 预告的改造点。 */
+  public Session(String sessionId, String profileName, List<Message> restored) {
+    this(sessionId, profileName);
+    if (restored != null) {
+      this.messages.addAll(restored);
+    }
+  }
+
   public String sessionId() {
     return sessionId;
   }

@@ -28,3 +28,18 @@ CREATE TABLE IF NOT EXISTS tool_invocations (
     created_at TIMESTAMP NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_tool_invocations_session ON tool_invocations (session_id);
+
+-- sessions：会话元数据 + JSON 序列化的对话历史（18 节）
+-- session_id 由 SessionManager 按 channel:user:profile 唯一拼接（全库唯一拼接点，H4④）
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id VARCHAR(512) PRIMARY KEY,
+    profile_name VARCHAR(255) NOT NULL,
+    channel VARCHAR(64) NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
+    messages_json TEXT,
+    status VARCHAR(32) NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    last_active_at TIMESTAMP,
+    archived_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_profile ON sessions (profile_name);

@@ -1,0 +1,15 @@
+name: weather
+description: 描述这个 Agent 做什么
+identity:
+  agent_name: weather
+  prompt: 你是一个乐于助人的助手。
+provider:
+  name: deepseek
+  model: deepseek-chat
+tools: []
+skills: []
+bootstrap:
+  - AGENTS.md
+settings:
+  max_iterations: 10
+  max_history_turns: 20
