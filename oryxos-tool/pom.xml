@@ -19,6 +19,16 @@
             <groupId>io.oryxos</groupId>
             <artifactId>oryxos-core</artifactId>
         </dependency>
+        <!-- RestClient（WebhookNotifyAdapter 出站 POST）——版本由 Boot BOM 管理 -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>
