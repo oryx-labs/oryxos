@@ -16,11 +16,22 @@ spring:
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
-      ddl-auto: create-drop
+      # 宪法 VIII：表结构唯一权威是手工 schema.sql；create-drop 会在重启时毁掉全部数据（18 节纠正）
+      ddl-auto: none
     show-sql: false
+  sql:
+    init:
+      mode: always   # 启动执行 schema.sql（CREATE TABLE IF NOT EXISTS，幂等）
 
 server:
   port: 8080
+
+# Provider 清单（宪法 III 显式映射的数据源；凭证走环境变量占位，缺失时启动校验点名报错）
+oryxos:
+  providers:
+    - name: deepseek
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: https://api.deepseek.com
 
 # Observability: Actuator + Micrometer/Prometheus
 management:
