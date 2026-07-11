@@ -19,6 +19,24 @@
             <groupId>io.oryxos</groupId>
             <artifactId>oryxos-core</artifactId>
         </dependency>
+        <!-- @Tool schema 生成管道（宪法 II 第二件事）与 MCP 协议接入——版本由 Spring AI BOM 管理 -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-mcp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <!-- RestClient（WebhookNotifyAdapter 出站 POST）——版本由 Boot BOM 管理 -->
         <dependency>
             <groupId>org.springframework</groupId>

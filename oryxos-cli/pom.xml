@@ -32,6 +32,10 @@
             <artifactId>oryxos-storage</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.oryxos</groupId>
+            <artifactId>oryxos-tool</artifactId>
+        </dependency>
+        <dependency>
             <groupId>info.picocli</groupId>
             <artifactId>picocli</artifactId>
         </dependency>

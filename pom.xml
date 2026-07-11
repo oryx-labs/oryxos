@@ -126,6 +126,14 @@
                 <version>${sqlite-jdbc.version}</version>
             </dependency>
 
+            <!-- SpotBugs 局部抑制注解（带 justification 的显式声明，provided 不进运行时） -->
+            <dependency>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-annotations</artifactId>
+                <version>4.8.6</version>
+                <scope>provided</scope>
+            </dependency>
+
             <!-- Spring AI Alibaba -->
             <dependency>
                 <groupId>com.alibaba.cloud.ai</groupId>
