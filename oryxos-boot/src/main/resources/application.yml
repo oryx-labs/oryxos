@@ -26,6 +26,23 @@ spring:
 server:
   port: 8080
 
+# Sandbox 白名单（第 24 节 WhitelistSandbox；宪法 VI 第一档：应用层校验）。
+# 三块各自独立；**空列表 = 该类什么都不允许（deny-all）**，绝非"不校验"——按最小权限收窄。
+# 文件路径支持相对/绝对（运行时归一为绝对再比对，挡相对路径穿越）；域名 *. 通配带点号边界（不被形似域名绕过）。
+file:
+  allowed_paths:
+    - .oryxos          # Agent 工作区（Profile/记忆/技能/日志）
+shell:
+  allowed_commands:    # 只放最小只读命令集；写/删类命令默认不在内
+    - ls
+    - cat
+    - echo
+    - grep
+http:
+  allowed_domains:
+    - api.deepseek.com   # Provider 端点（精确匹配）
+    - "*.feishu.cn"      # 飞书 webhook（通配真子域）
+
 # 长期记忆后端（第 22 节可插拔）：markdown（默认，零依赖）| sqlite（结构化）| mem0（自托管外部服务）
 memory:
   backend: markdown

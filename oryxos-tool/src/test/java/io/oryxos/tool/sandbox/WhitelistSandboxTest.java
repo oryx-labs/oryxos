@@ -1,0 +1,153 @@
+package io.oryxos.tool.sandbox;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import java.nio.file.Path;
+import java.util.List;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+/**
+ * 课件《第24节》验收 harness：WhitelistSandboxTest——安全模块测的重点不是"放行对不对"，而是"绕得过绕不过"。 三类校验各"允许 +
+ * 拒绝"成对，再加两个关键绕过场景（路径穿越 normalize 回归、通配符点号边界回归）。
+ *
+ * <p>只经 {@code enforce(SandboxAction)} 公共入口断言——三个 {@code check*} 是 private，不直测（接口中立性）。
+ */
+class WhitelistSandboxTest {
+
+  private static WhitelistSandbox sandbox(
+      List<String> paths, List<String> commands, List<String> domains) {
+    return new WhitelistSandbox(
+        new FileSandboxProperties(paths),
+        new ShellSandboxProperties(commands),
+        new HttpSandboxProperties(domains));
+  }
+
+  @Nested
+  @DisplayName("文件路径白名单")
+  class FilePathWhitelist {
+
+    @Test
+    @DisplayName("白名单内路径_读写放行")
+    void insideWhitelistAllowed(@TempDir Path allowed) {
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+      String inside = allowed.resolve("report.txt").toString();
+
+      assertDoesNotThrow(() -> sb.enforce(new SandboxAction(ActionType.FILE_READ, inside)));
+      assertDoesNotThrow(() -> sb.enforce(new SandboxAction(ActionType.FILE_WRITE, inside)));
+    }
+
+    @Test
+    @DisplayName("白名单外路径_拒绝")
+    void outsideWhitelistRejected(@TempDir Path allowed) {
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, "/etc/passwd")));
+    }
+
+    @Test
+    @DisplayName("相对路径穿越_爬出白名单目录_被拦")
+    void relativePathTraversalIsBlocked(@TempDir Path allowed) {
+      // 关键回归：normalize 前形似落在白名单内，normalize 后爬到 /etc/passwd——必须在标准化后判定越界
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+      String traversal = allowed.resolve("../../../../../../etc/passwd").toString();
+
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, traversal)));
+    }
+  }
+
+  @Nested
+  @DisplayName("Shell 命令白名单")
+  class ShellCommandWhitelist {
+
+    private final WhitelistSandbox sb = sandbox(List.of(), List.of("ls", "cat"), List.of());
+
+    @Test
+    @DisplayName("白名单内命令_首token放行")
+    void firstTokenInWhitelistAllowed() {
+      assertDoesNotThrow(() -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "ls -la")));
+    }
+
+    @Test
+    @DisplayName("白名单外命令_拒绝")
+    void commandOutsideWhitelistRejected() {
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "rm -rf /")));
+    }
+  }
+
+  @Nested
+  @DisplayName("HTTP 域名白名单")
+  class HttpDomainWhitelist {
+
+    private final WhitelistSandbox sb =
+        sandbox(List.of(), List.of(), List.of("*.example.com", "api.deepseek.com"));
+
+    @Test
+    @DisplayName("通配符命中真子域_精确项命中裸域_放行")
+    void allowedDomainsPass() {
+      assertDoesNotThrow(
+          () ->
+              sb.enforce(new SandboxAction(ActionType.HTTP_REQUEST, "https://api.example.com/v1")));
+      assertDoesNotThrow(
+          () ->
+              sb.enforce(
+                  new SandboxAction(ActionType.HTTP_REQUEST, "https://a.b.example.com/deep")));
+      assertDoesNotThrow(
+          () ->
+              sb.enforce(
+                  new SandboxAction(ActionType.HTTP_REQUEST, "https://api.deepseek.com/v1")));
+    }
+
+    @Test
+    @DisplayName("通配符域名_命中真子域_不被形似域名绕过")
+    void wildcardDomainRespectsDotBoundary() {
+      // 关键回归：endsWith("example.com") 的经典漏洞——"evil-example.com".endsWith("example.com") 为真；
+      // 匹配逻辑必须带点号边界（.example.com），形似域名与裸域都不得命中
+      assertThrows(
+          SandboxViolationException.class,
+          () ->
+              sb.enforce(new SandboxAction(ActionType.HTTP_REQUEST, "http://evil-example.com/x")));
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.HTTP_REQUEST, "http://example.com/x")));
+    }
+
+    @Test
+    @DisplayName("畸形URL无主机名_拒绝")
+    void malformedUrlWithoutHostRejected() {
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.HTTP_REQUEST, "not-a-url")));
+    }
+  }
+
+  @Nested
+  @DisplayName("空白名单 = deny-all")
+  class EmptyWhitelistDeniesAll {
+
+    private final WhitelistSandbox sb = sandbox(List.of(), List.of(), List.of());
+
+    @Test
+    @DisplayName("三类白名单全空_一律拒绝而非放行")
+    void emptyWhitelistRejectsEverything() {
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, "/tmp/x")));
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "ls")));
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.HTTP_REQUEST, "https://api.example.com")));
+    }
+  }
+}

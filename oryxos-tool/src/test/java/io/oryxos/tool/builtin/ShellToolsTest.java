@@ -7,10 +7,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
+import io.oryxos.tool.sandbox.FileSandboxProperties;
+import io.oryxos.tool.sandbox.HttpSandboxProperties;
 import io.oryxos.tool.sandbox.PermissiveSandbox;
 import io.oryxos.tool.sandbox.Sandbox;
 import io.oryxos.tool.sandbox.SandboxViolationException;
+import io.oryxos.tool.sandbox.ShellSandboxProperties;
+import io.oryxos.tool.sandbox.WhitelistSandbox;
 import java.time.Duration;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -53,5 +58,20 @@ class ShellToolsTest {
     doThrow(new SandboxViolationException("命令不在白名单")).when(denying).enforce(any());
 
     assertThrows(SandboxViolationException.class, () -> new ShellTools(denying).shell("echo hi"));
+  }
+
+  @Test
+  @DisplayName("白名单外命令_起进程前被拦")
+  void commandOutsideWhitelist_processNeverStarts() {
+    // 真 WhitelistSandbox（只允许 ls），跑 rm——若进程真起了会有副作用；抛 SandboxViolationException 证明起进程前被拦
+    Sandbox whitelist =
+        new WhitelistSandbox(
+            new FileSandboxProperties(List.of()),
+            new ShellSandboxProperties(List.of("ls")),
+            new HttpSandboxProperties(List.of()));
+
+    assertThrows(
+        SandboxViolationException.class,
+        () -> new ShellTools(whitelist).shell("rm -rf /tmp/oryxos-should-never-run"));
   }
 }

@@ -52,11 +52,14 @@ public record SandboxAction(ActionType type, String target) {
 package io.oryxos.tool.sandbox;
 
 public enum ActionType {
-    FILE_ACCESS,
-    SHELL_EXEC,
+    FILE_READ,
+    FILE_WRITE,
+    SHELL_COMMAND,
     HTTP_REQUEST
 }
 ```
+
+> 说明：`ActionType` 取四值——文件读 / 文件写 / Shell 命令 / HTTP 请求。文件读写分开，便于未来按读 / 写分权限；本节 `WhitelistSandbox` 的 `enforce` 把 `FILE_READ`、`FILE_WRITE` 两个 case 同路由到 `checkFilePath`（读写共用同一份路径白名单）。这四值在第 20 节接线时已定死，本节沿用。
 
 ```java
 package io.oryxos.tool.sandbox;
@@ -130,8 +133,8 @@ public class WhitelistSandbox implements Sandbox {
     @Override
     public void enforce(SandboxAction action) {
         switch (action.type()) {
-            case FILE_ACCESS -> checkFilePath(action.target());
-            case SHELL_EXEC -> checkShellCommand(action.target());
+            case FILE_READ, FILE_WRITE -> checkFilePath(action.target());
+            case SHELL_COMMAND -> checkShellCommand(action.target());
             case HTTP_REQUEST -> checkHttpUrl(action.target());
         }
     }
@@ -197,7 +200,7 @@ public class ShellTools {
 
     @Tool(description = "执行一条 shell 命令")
     public ToolResult shell(String command) {
-        sandbox.enforce(new SandboxAction(ActionType.SHELL_EXEC, command));
+        sandbox.enforce(new SandboxAction(ActionType.SHELL_COMMAND, command));
         return doExecute(command);
     }
 
@@ -213,13 +216,13 @@ public class ShellTools {
 ```java
 @Tool(description = "读文件")
 public ToolResult readFile(String path) {
-    sandbox.enforce(new SandboxAction(ActionType.FILE_ACCESS, path));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
     return doRead(path);
 }
 
 @Tool(description = "写文件")
 public ToolResult writeFile(String path, String content) {
-    sandbox.enforce(new SandboxAction(ActionType.FILE_ACCESS, path));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     return doWrite(path, content);
 }
 ```
@@ -266,7 +269,7 @@ public ToolResult httpGet(String url) {
 void 相对路径穿越必须被拦() {
     // 白名单只有 /workspace，构造 .. 序列爬到白名单之外
     assertThrows(SandboxViolationException.class,
-        () -> sandbox.enforce(new SandboxAction(FILE_ACCESS, "/workspace/../../outside/secret.txt")));
+        () -> sandbox.enforce(new SandboxAction(FILE_READ, "/workspace/../../outside/secret.txt")));
 }
 
 @Test
@@ -301,3 +304,5 @@ void 通配符域名_不能被形似域名绕过() {
 ## 结语
 
 这一节做的事情量不大：一个接口、三个值对象、一个实现类、三处一行的改动。但它验证了 23 节的核心判断——**当接口设计对了，接入成本会小到不成比例**。三个已经写好的 Tool，接入 Sandbox 只多了一行代码，审计不用碰，`ToolExecutor` 不用碰。这也是为什么"接口先行"值得在核心阶段就花时间想清楚：现在多花的这一点设计成本，换来的是以后升级到容器、升级到 microVM 时，`FileTools`/`ShellTools`/`HttpTools` 这几处调用代码大概率一行都不用再改。
+
+最后留一个往前看的坐标。23 节业界评审里，Hermes Agent 那个坑值得记住：**只把 shell 和文件工具关进沙箱，不等于关住了整个 Agent**——代码执行、MCP 子进程、进程内直调的工具，都是 `enforce` 现在还没覆盖到的暴露面。业界成熟系统最终会走向"whole-process 隔离"，把整个进程树塞进容器或 microVM，让每一条路径都受同一套策略约束。这节我们只在"工具执行"这一条路径上砌墙，是核心阶段的克制；但 `enforce(SandboxAction)` 这个抽象已经为更大的覆盖面留好了位——将来把 MCP 调用、代码执行也纳进来，或整体升级到 whole-process 隔离，都是"加实现、扩调用点"，而不是推倒这道墙重来。这就是把接口设计对了、又想清楚了演进方向，才敢在当下只做一档的底气。

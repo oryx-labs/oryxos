@@ -2,6 +2,7 @@ package io.oryxos.tool.builtin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -15,6 +16,12 @@ import io.oryxos.core.ToolResult;
 import io.oryxos.core.agent.ProfileContext;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.tool.notify.NotifyChannelAdapter;
+import io.oryxos.tool.sandbox.FileSandboxProperties;
+import io.oryxos.tool.sandbox.HttpSandboxProperties;
+import io.oryxos.tool.sandbox.PermissiveSandbox;
+import io.oryxos.tool.sandbox.SandboxViolationException;
+import io.oryxos.tool.sandbox.ShellSandboxProperties;
+import io.oryxos.tool.sandbox.WhitelistSandbox;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -37,8 +44,11 @@ class NotifyToolsTest {
   @BeforeEach
   void setUp() {
     adapter = mock(NotifyChannelAdapter.class);
-    // 同一 mock 挂两个 type：路由正确性由 send 收到的 NotifyTarget.channelType 断言
-    notifyTools = new NotifyTools(Map.of("webhook", adapter, "feishu", adapter));
+    // 同一 mock 挂两个 type：路由正确性由 send 收到的 NotifyTarget.channelType 断言。
+    // 既有用例的推送地址（hooks.example.com/open.feishu.cn）与域名白名单无关——用 Permissive 隔离沙箱变量，
+    // 让本组仍只测渠道路由/报错语义；沙箱拦截单列 pushToDomainOutsideWhitelist_adapterNeverSends 用真 WhitelistSandbox。
+    notifyTools =
+        new NotifyTools(Map.of("webhook", adapter, "feishu", adapter), new PermissiveSandbox());
   }
 
   @AfterEach
@@ -176,5 +186,52 @@ class NotifyToolsTest {
     assertFalse(result.success());
     assertTrue(result.errorMessage().contains("content"));
     verify(adapter, never()).send(any(), any());
+  }
+
+  @Test
+  @DisplayName("白名单外域名推送_adapter从不发送")
+  void pushToDomainOutsideWhitelist_adapterNeverSends() {
+    // 真 WhitelistSandbox（只允许 *.example.com），推送目标 hooks.evil.com——校验先于 send，
+    // enforce 抛 SandboxViolationException 上抛不吞（走 ToolExecutor 失败审计），adapter.send 从未被调用
+    NotifyTools guarded =
+        new NotifyTools(
+            Map.of("webhook", adapter),
+            new WhitelistSandbox(
+                new FileSandboxProperties(List.of()),
+                new ShellSandboxProperties(List.of()),
+                new HttpSandboxProperties(List.of("*.example.com"))));
+    ProfileContext.set(
+        profileWith(
+            List.of(
+                new Profile.NotifyChannel("webhook", Map.of("url", "https://hooks.evil.com/x")))));
+    var input = MAPPER.createObjectNode();
+    input.put("content", "hello");
+
+    assertThrows(SandboxViolationException.class, () -> guarded.execute(input));
+    verify(adapter, never()).send(any(), any());
+  }
+
+  @Test
+  @DisplayName("白名单内域名推送_校验放行正常发送")
+  void pushToDomainInsideWhitelist_sendsNormally() {
+    NotifyTools guarded =
+        new NotifyTools(
+            Map.of("webhook", adapter),
+            new WhitelistSandbox(
+                new FileSandboxProperties(List.of()),
+                new ShellSandboxProperties(List.of()),
+                new HttpSandboxProperties(List.of("*.example.com"))));
+    ProfileContext.set(
+        profileWith(
+            List.of(
+                new Profile.NotifyChannel(
+                    "webhook", Map.of("url", "https://hooks.example.com/a")))));
+    var input = MAPPER.createObjectNode();
+    input.put("content", "hello");
+
+    ToolResult result = guarded.execute(input);
+
+    assertTrue(result.success());
+    verify(adapter).send(any(), eq("hello"));
   }
 }

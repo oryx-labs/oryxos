@@ -8,9 +8,13 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
 import com.sun.net.httpserver.HttpServer;
+import io.oryxos.tool.sandbox.FileSandboxProperties;
+import io.oryxos.tool.sandbox.HttpSandboxProperties;
 import io.oryxos.tool.sandbox.PermissiveSandbox;
 import io.oryxos.tool.sandbox.Sandbox;
 import io.oryxos.tool.sandbox.SandboxViolationException;
+import io.oryxos.tool.sandbox.ShellSandboxProperties;
+import io.oryxos.tool.sandbox.WhitelistSandbox;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -82,5 +86,21 @@ class HttpToolsTest {
 
     assertThrows(RuntimeException.class, () -> guarded.httpGet(url())); // 课件断言形态
     assertEquals(0, receivedBodies.size(), "校验不过，请求根本不该发出");
+  }
+
+  @Test
+  @DisplayName("白名单外域名_底层请求从未发出")
+  void requestOutsideWhitelist_serverNeverReceives() {
+    // 真 WhitelistSandbox（只允许 *.example.com），请求本地假服务（127.0.0.1）——域名不在白名单，
+    // 断言假服务零收报文，证明白名单逻辑经工具接线真正拦住了对外 IO
+    Sandbox whitelist =
+        new WhitelistSandbox(
+            new FileSandboxProperties(List.of()),
+            new ShellSandboxProperties(List.of()),
+            new HttpSandboxProperties(List.of("*.example.com")));
+    HttpTools guarded = new HttpTools(whitelist, RestClient.create());
+
+    assertThrows(SandboxViolationException.class, () -> guarded.httpGet(url()));
+    assertEquals(0, receivedBodies.size(), "白名单外域名，请求根本不该到达服务");
   }
 }

@@ -8,12 +8,17 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 
+import io.oryxos.tool.sandbox.FileSandboxProperties;
+import io.oryxos.tool.sandbox.HttpSandboxProperties;
 import io.oryxos.tool.sandbox.PermissiveSandbox;
 import io.oryxos.tool.sandbox.Sandbox;
 import io.oryxos.tool.sandbox.SandboxViolationException;
+import io.oryxos.tool.sandbox.ShellSandboxProperties;
+import io.oryxos.tool.sandbox.WhitelistSandbox;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -75,6 +80,22 @@ class FileToolsTest {
     assertThrows(SandboxViolationException.class, () -> guarded.writeFile(target.toString(), "x"));
     assertThrows(SandboxViolationException.class, () -> guarded.listDir(dir.toString()));
     assertFalse(Files.exists(target), "校验不过，文件根本不该被创建");
+  }
+
+  @Test
+  @DisplayName("白名单外文件_读取被拦_文件根本不碰")
+  void readOutsideWhitelist_fileNeverTouched() {
+    // 真 WhitelistSandbox（白名单只含 @TempDir），读白名单外且不存在的路径——
+    // 若 enforce 未先拦，会因文件缺失抛 IllegalArgumentException；抛 SandboxViolationException 才证明校验先于 IO
+    Sandbox whitelist =
+        new WhitelistSandbox(
+            new FileSandboxProperties(List.of(dir.toString())),
+            new ShellSandboxProperties(List.of()),
+            new HttpSandboxProperties(List.of()));
+    FileTools guarded = new FileTools(whitelist);
+
+    assertThrows(
+        SandboxViolationException.class, () -> guarded.readFile("/etc/oryxos-nonexistent.secret"));
   }
 
   @Test
