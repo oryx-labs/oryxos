@@ -26,6 +26,13 @@ spring:
 server:
   port: 8080
 
+# 长期记忆后端（第 22 节可插拔）：markdown（默认，零依赖）| sqlite（结构化）| mem0（自托管外部服务）
+memory:
+  backend: markdown
+  mem0:
+    base-url: ${MEM0_BASE_URL:}   # 仅 backend=mem0 时使用；自托管实例，走环境变量不落明文
+    user-id: ${MEM0_USER_ID:oryxos}
+
 # Provider 清单（宪法 III 显式映射的数据源；凭证走环境变量占位，缺失时启动校验点名报错）
 oryxos:
   providers:

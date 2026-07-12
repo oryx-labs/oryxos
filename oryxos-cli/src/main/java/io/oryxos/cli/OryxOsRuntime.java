@@ -8,11 +8,18 @@ import io.oryxos.core.agent.ReActLoop;
 import io.oryxos.core.agent.ToolExecutor;
 import io.oryxos.core.agent.ToolInvocationAuditor;
 import io.oryxos.core.context.ContextLoader;
+import io.oryxos.core.memory.MemoryService;
 import io.oryxos.core.profile.ProfileLoader;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.LlmCallAuditor;
 import io.oryxos.core.provider.ProviderService;
 import io.oryxos.core.session.SessionManager;
+import io.oryxos.memory.LongTermMemoryStore;
+import io.oryxos.memory.MarkdownMemoryStore;
+import io.oryxos.memory.Mem0MemoryStore;
+import io.oryxos.memory.MemoryServiceImpl;
+import io.oryxos.memory.SqliteMemoryStore;
+import io.oryxos.memory.builtin.MemoryTools;
 import io.oryxos.provider.ProviderChatModelFactory;
 import io.oryxos.provider.ProvidersProperties;
 import io.oryxos.provider.SpringAiProviderServiceImpl;
@@ -21,6 +28,7 @@ import io.oryxos.storage.JpaLlmCallAuditor;
 import io.oryxos.storage.JpaSessionManager;
 import io.oryxos.storage.JpaToolInvocationAuditor;
 import io.oryxos.storage.LlmCallRepository;
+import io.oryxos.storage.MemoryEntryRepository;
 import io.oryxos.storage.SessionRepository;
 import io.oryxos.storage.ToolInvocationRepository;
 import io.oryxos.tool.ToolRegistry;
@@ -110,8 +118,32 @@ public class OryxOsRuntime {
     return RestClient.create();
   }
 
+  /** 长期记忆后端：按 memory.backend 选一档（默认 markdown）——这是第 21/22 节"接口墙"的装配落点。 */
   @Bean
-  ToolRegistry toolRegistry(Sandbox sandbox, RestClient restClient) {
+  LongTermMemoryStore longTermMemoryStore(
+      @org.springframework.beans.factory.annotation.Value("${memory.backend:markdown}")
+          String backend,
+      MemoryEntryRepository memoryEntryRepository,
+      RestClient restClient,
+      @org.springframework.beans.factory.annotation.Value("${memory.mem0.base-url:}")
+          String mem0BaseUrl,
+      @org.springframework.beans.factory.annotation.Value("${memory.mem0.user-id:oryxos}")
+          String mem0UserId) {
+    return switch (backend) {
+      case "sqlite" -> new SqliteMemoryStore(memoryEntryRepository);
+      case "mem0" ->
+          new Mem0MemoryStore(restClient.mutate().baseUrl(mem0BaseUrl).build(), mem0UserId);
+      default -> new MarkdownMemoryStore(ORYXOS_ROOT);
+    };
+  }
+
+  @Bean
+  MemoryService memoryService(LongTermMemoryStore store) {
+    return new MemoryServiceImpl(store);
+  }
+
+  @Bean
+  ToolRegistry toolRegistry(Sandbox sandbox, RestClient restClient, MemoryService memoryService) {
     ToolRegistry registry = new ToolRegistry();
     // 内置工具走 @Tool 注解管道（schema 自动生成，宪法 II 第二件事）
     registry.registerAnnotated(new FileTools(sandbox)); // read/write/list/edit/grep/glob
@@ -129,6 +161,8 @@ public class OryxOsRuntime {
             "feishu", new FeishuNotifyAdapter(restClient),
             "dingtalk", new DingTalkNotifyAdapter(restClient));
     registry.register(new NotifyTools(notifyAdapters));
+    // 记忆工具：save_memory / recall_memory（补齐 20 节预留的两工具面），只认门面对后端无感
+    registry.registerAnnotated(new MemoryTools(memoryService));
     // MCP：失联的 server 只 WARN 跳过，不拖垮启动
     new McpClientService(new McpConfigLoader(ORYXOS_ROOT.resolve("mcp_servers.yaml")))
         .connectAll(registry);
@@ -142,8 +176,11 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  PromptBuilder promptBuilder(ContextLoader contextLoader, Map<String, OryxTool> tools) {
-    return new PromptBuilder(contextLoader, tools);
+  PromptBuilder promptBuilder(
+      ContextLoader contextLoader, Map<String, OryxTool> tools, MemoryService memoryService) {
+    // 22 节起：注入 MemoryService，长期记忆段由门面供给（会话历史段仍由 PromptBuilder 独立负责）
+    return new PromptBuilder(
+        contextLoader, tools, memoryService, java.time.Clock.systemDefaultZone());
   }
 
   @Bean
