@@ -2,6 +2,7 @@ package io.oryxos.core.agent;
 
 import io.oryxos.core.OryxTool;
 import io.oryxos.core.context.ContextLoader;
+import io.oryxos.core.memory.MemoryService;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.session.Message;
@@ -27,15 +28,26 @@ public class PromptBuilder {
 
   private final ContextLoader contextLoader;
   private final Map<String, OryxTool> tools;
+  private final MemoryService memoryService;
   private final Clock clock;
 
   public PromptBuilder(ContextLoader contextLoader, Map<String, OryxTool> tools) {
-    this(contextLoader, tools, Clock.systemDefaultZone());
+    this(contextLoader, tools, null, Clock.systemDefaultZone());
   }
 
   public PromptBuilder(ContextLoader contextLoader, Map<String, OryxTool> tools, Clock clock) {
+    this(contextLoader, tools, null, clock);
+  }
+
+  /** 22 节起：注入 MemoryService，长期记忆段由它供给；memoryService 为 null 时该段留空（向后兼容旧构造）。 */
+  public PromptBuilder(
+      ContextLoader contextLoader,
+      Map<String, OryxTool> tools,
+      MemoryService memoryService,
+      Clock clock) {
     this.contextLoader = contextLoader;
     this.tools = Map.copyOf(tools);
+    this.memoryService = memoryService;
     this.clock = clock;
   }
 
@@ -45,7 +57,10 @@ public class PromptBuilder {
     content.append(contextLoader.load(profile));
     // 模型自己不知道今天几号——定时场景里的"今天"全靠这一行
     content.append("当前日期时间：").append(DATE_TIME.format(ZonedDateTime.now(clock))).append('\n');
-    // ② 长期记忆：22 节 Memory 就位前恒空跳过，四段顺序框架先立好
+    // ② 长期记忆：经门面注入（核心区全量 + 归档区截断后 + 会话历史）；未装配 Memory 时该段留空
+    if (memoryService != null) {
+      content.append(memoryService.buildContext(session)).append('\n');
+    }
     // ③ 会话历史：只留最近 N 轮（坑二——不截断，转几轮 context 就撑爆了）
     content.append("对话历史：\n");
     for (Message message : recentTurns(session, profile.settings().maxHistoryTurns())) {
