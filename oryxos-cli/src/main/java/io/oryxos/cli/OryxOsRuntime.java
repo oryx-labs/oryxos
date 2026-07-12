@@ -46,8 +46,11 @@ import io.oryxos.tool.notify.FeishuNotifyAdapter;
 import io.oryxos.tool.notify.NotifyChannelAdapter;
 import io.oryxos.tool.notify.WeComNotifyAdapter;
 import io.oryxos.tool.notify.WebhookNotifyAdapter;
-import io.oryxos.tool.sandbox.PermissiveSandbox;
+import io.oryxos.tool.sandbox.FileSandboxProperties;
+import io.oryxos.tool.sandbox.HttpSandboxProperties;
 import io.oryxos.tool.sandbox.Sandbox;
+import io.oryxos.tool.sandbox.ShellSandboxProperties;
+import io.oryxos.tool.sandbox.WhitelistSandbox;
 import io.oryxos.tool.web.DuckDuckGoSearchProvider;
 import java.nio.file.Path;
 import java.util.Map;
@@ -71,7 +74,12 @@ import org.springframework.web.client.RestClient;
 @SpringBootApplication(scanBasePackages = "io.oryxos")
 @EnableJpaRepositories(basePackages = "io.oryxos.storage")
 @EntityScan(basePackages = "io.oryxos.storage")
-@EnableConfigurationProperties(ProvidersProperties.class)
+@EnableConfigurationProperties({
+  ProvidersProperties.class,
+  FileSandboxProperties.class,
+  ShellSandboxProperties.class,
+  HttpSandboxProperties.class
+})
 public class OryxOsRuntime {
 
   private static final Path ORYXOS_ROOT = Path.of(".oryxos");
@@ -108,9 +116,15 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  Sandbox sandbox() {
-    // 24 节替换为 WhitelistSandbox；Permissive 每次放行记 WARN，不静默裸奔
-    return new PermissiveSandbox();
+  WhitelistSandbox sandbox(
+      FileSandboxProperties fileProps,
+      ShellSandboxProperties shellProps,
+      HttpSandboxProperties httpProps) {
+    // 24 节：真正的白名单校验（宪法 VI 第一档）。三块白名单来自 application.yml，空列表 = deny-all。
+    // PermissiveSandbox 保留在 tool 模块留档（Demo 验证专用），生产装配不再引用。
+    // 返回具体类型（而非 Sandbox 接口）：同一实例既是校验墙 Sandbox 又是可管理白名单 SandboxWhitelist，
+    // 具体类型让 Spring 同时按两个接口装配（工具注 Sandbox，Web 管理端点注 SandboxWhitelist）。
+    return new WhitelistSandbox(fileProps, shellProps, httpProps);
   }
 
   @Bean
@@ -160,7 +174,7 @@ public class OryxOsRuntime {
             "wecom", new WeComNotifyAdapter(restClient),
             "feishu", new FeishuNotifyAdapter(restClient),
             "dingtalk", new DingTalkNotifyAdapter(restClient));
-    registry.register(new NotifyTools(notifyAdapters));
+    registry.register(new NotifyTools(notifyAdapters, sandbox));
     // 记忆工具：save_memory / recall_memory（补齐 20 节预留的两工具面），只认门面对后端无感
     registry.registerAnnotated(new MemoryTools(memoryService));
     // MCP：失联的 server 只 WARN 跳过，不拖垮启动

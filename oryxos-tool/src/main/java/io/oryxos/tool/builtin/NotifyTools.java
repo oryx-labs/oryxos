@@ -7,6 +7,9 @@ import io.oryxos.core.agent.ProfileContext;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.tool.notify.NotifyChannelAdapter;
 import io.oryxos.tool.notify.NotifyTarget;
+import io.oryxos.tool.sandbox.ActionType;
+import io.oryxos.tool.sandbox.Sandbox;
+import io.oryxos.tool.sandbox.SandboxAction;
 import java.util.List;
 import java.util.Map;
 
@@ -24,8 +27,12 @@ public class NotifyTools implements OryxTool {
   /** channelType → 实现（webhook/wecom/feishu/dingtalk…）；多档并存按 type 路由（课件 6.4 路一）。 */
   private final Map<String, NotifyChannelAdapter> adapters;
 
-  public NotifyTools(Map<String, NotifyChannelAdapter> adapters) {
+  /** 推送前过 HTTP 域名白名单（宪法 VI）——与 http_post 共享同一份 http.allowed_domains（24 节接线）。 */
+  private final Sandbox sandbox;
+
+  public NotifyTools(Map<String, NotifyChannelAdapter> adapters, Sandbox sandbox) {
     this.adapters = Map.copyOf(adapters);
+    this.sandbox = sandbox;
   }
 
   @Override
@@ -78,8 +85,10 @@ public class NotifyTools implements OryxTool {
           "渠道类型 " + resolved.type() + " 没有对应的通知实现（已装配: " + adapters.keySet() + "）", false);
     }
     NotifyTarget target = new NotifyTarget(resolved.type(), resolved.config());
-    // 沙箱检查位：24 节 Sandbox.enforce(HTTP_REQUEST, target.config().get("url")) 在此接线，
-    // 与 http_post 共享同一份 http.allowed_domains 白名单——校验必须先于发送（宪法 VI）
+    // 校验必须先于发送（宪法 VI）：推送地址过 HTTP 域名白名单，与 http_post 共享同一份 http.allowed_domains。
+    // enforce 不过抛 SandboxViolationException 不 catch——上抛至 ToolExecutor 走既有失败审计（success=false），
+    // 与 FileTools/HttpTools 同一路径，不为校验单独新增审计逻辑。
+    sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, resolved.config().get("url")));
     adapter.send(target, contentNode.asText());
     return ToolResult.ok("已推送");
   }
