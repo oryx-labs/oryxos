@@ -2,6 +2,7 @@ package io.oryxos.cli;
 
 import io.oryxos.channel.cli.CliChannel;
 import io.oryxos.core.OryxTool;
+import io.oryxos.core.agent.AgentScheduler;
 import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.agent.PromptBuilder;
 import io.oryxos.core.agent.ReActLoop;
@@ -60,6 +61,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -222,5 +224,29 @@ public class OryxOsRuntime {
   @Bean
   CliChannel cliChannel(AgentService agentService, SessionManager sessionManager) {
     return new CliChannel(agentService, sessionManager);
+  }
+
+  /**
+   * 定时任务的调度线程池（25 节）。setDaemon(true)：chat 是一次性命令，跑完对话进程应正常退出——非 daemon 的调度线程会挂住 JVM 不退出（spec Edge
+   * Case）；serve/gateway 常驻时靠主线程 join 保活，daemon 调度线程照跑。
+   */
+  @Bean
+  ThreadPoolTaskScheduler taskScheduler() {
+    ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+    scheduler.setPoolSize(2);
+    scheduler.setThreadNamePrefix("oryxos-sched-");
+    scheduler.setDaemon(true);
+    scheduler.initialize();
+    return scheduler;
+  }
+
+  /** 第三触发源"钟推"（25 节）：initMethod=registerAll 启动即扫描所有 Profile.schedules 逐条注册。 */
+  @Bean(initMethod = "registerAll")
+  AgentScheduler agentScheduler(
+      ThreadPoolTaskScheduler taskScheduler,
+      ProfileRegistry profileRegistry,
+      AgentService agentService,
+      SessionManager sessionManager) {
+    return new AgentScheduler(taskScheduler, profileRegistry, agentService, sessionManager);
   }
 }
