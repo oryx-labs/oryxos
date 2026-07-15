@@ -28,7 +28,9 @@
 
 **第三，核心阶段明确不做的，列出来别手痒。** 认证（假设内网部署，扩展阶段补 API Key + JWT）、SSE 流式响应、WebSocket、限流、RBAC——全部不做。请求大小限制倒是要有：单条消息最大 32KB，Session 历史返回最多最近 100 条，这两条是防呆不是治理。
 
-**第四，管理平台的边界：这一版只读。** 能看会话、看 Profile、看 Tool、看记忆、看状态，但**不能**创建或修改 Agent——"通过 API 定义一个 Agent"需要的那套端点（29、30 节）现在还不存在，界面上也不该出现假按钮。另外这个前端本身是一次"用提示词做前端"的实战：把页面需求描述清楚交给 AI 生成静态页，我们只验收不手写。
+**第四，`serve` 要能只靠一个 provider key 就起得来（坑：Spring AI eager 装配）。** 这是本节第一次真正让人跑 `serve` 常驻，一个启动坑会集中暴露：deepseek 走的是 spring-ai-openai starter，它的 `OpenAiAutoConfiguration` 会**急切实例化**一个 `OpenAiChatModel` Bean，启动即索要 `spring.ai.openai.api-key`——哪怕 OryxOS 根本不用这个自动 Bean（Provider 由 `ProviderChatModelFactory` 按宪法 III 显式构造）。不处理的话，`serve` 会因为"缺 spring.ai.openai.api-key"直接启动失败，逼运营方配两个 key，还会卡死 31 节"干净机器 30 分钟部署"。解法跟 16 节排除 `DashScopeAutoConfiguration` 是同一招（宪法 II：禁用 Spring AI 的 eager 模型自动装配）——在 `application.yaml` 的 `spring.autoconfigure.exclude` 里把 `OpenAiAutoConfiguration` 也排掉，让 `serve` 只认 `DEEPSEEK_API_KEY` 一个环境变量。
+
+**第五，管理平台的边界：这一版只读。** 能看会话、看 Profile、看 Tool、看记忆、看状态，但**不能**创建或修改 Agent——"通过 API 定义一个 Agent"需要的那套端点（29、30 节）现在还不存在，界面上也不该出现假按钮。另外这个前端本身是一次"用提示词做前端"的实战：把页面需求描述清楚交给 AI 生成静态页，我们只验收不手写。
 
 想清楚就这几句：Controller 薄、跟 CLI 共享引擎；异常单出口、错误码定死；不做认证流式限流；管理平台这版只读。
 
@@ -43,11 +45,18 @@ spring:
   threads:
     virtual:
       enabled: true
+  # 宪法 II：禁用 Spring AI 的 eager 模型自动装配。deepseek 走 spring-ai-openai starter，
+  # OpenAiAutoConfiguration 会急切实例化 OpenAiChatModel 并索要 spring.ai.openai.api-key；
+  # OryxOS 不用这个自动 Bean（Provider 由 ProviderChatModelFactory 显式构造），排掉后 serve 只需 DEEPSEEK_API_KEY。
+  autoconfigure:
+    exclude:
+      - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAutoConfiguration
+      - org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
 server:
   port: 8080
 ```
 
-同步阻塞的代码直进直出，虚拟线程负责在 LLM 调用这种 IO 等待时自动让出——不引入 WebFlux、不写一行响应式代码，这是决策三、决策五定好的。
+同步阻塞的代码直进直出，虚拟线程负责在 LLM 调用这种 IO 等待时自动让出——不引入 WebFlux、不写一行响应式代码，这是决策三、决策五定好的。两个 `autoconfigure.exclude` 是决策四的落地：不排掉 `OpenAiAutoConfiguration`，`serve` 会因缺 `spring.ai.openai.api-key` 启动失败（排除类的确切全限定名以 `mvn dependency:tree` 里锁定的 spring-ai 版本为准）。
 
 **第二步：最典型的 Controller。** 拿承载 ReAct 循环的那个端点举例：
 

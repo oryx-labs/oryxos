@@ -63,6 +63,8 @@
 
 ![六项前置条件：白名单、通知渠道、新闻 MCP、记忆偏好、定时配置、跨重启](../../website/public/images/class-28-2.svg)
 
+> **最容易被自己绊倒的一条：白名单会拦自己的 Demo。** 24 节的 Sandbox 默认 deny-all，`notify` 推送（19/24 节接线）和 `http_get` 查天气都要过 `http.allowed_domains`。所以配环境时必须把三样域名显式加进白名单，否则 31 节 Demo 全是 `tool_invocations` 里的 `success=false`：① 天气源 `api.open-meteo.com`（Demo 一）；② 团队通知 webhook 的域名（如飞书 `*.feishu.cn`、企业微信 `qyapi.weixin.qq.com`——按实际渠道填）；③ 若日报走 http_get 拉新闻，则新闻源域名。`file`/`shell` 两类白名单两个 Demo 用不上、保持 deny-all 即可。另外确认 26 节已排除 `OpenAiAutoConfiguration`——否则 `serve` 起不来，这轮串联根本跑不起来（26 节决策四）。
+
 验收合并成一句话能说清的三条：
 
 - **钟推全链路**：测试 Profile 到点自动跑完"查天气 → 推送"，对账不多不少；Session 复用、失败不崩调度器。

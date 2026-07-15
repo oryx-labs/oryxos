@@ -131,6 +131,11 @@ public class AgentScheduler {
 
 两处共同的讲究：**运行时路径和启动路径必须是同一段代码**。如果 `register()` 另写一套校验、`registerProfile()` 另写一套注册，两条路径迟早行为漂移——"API 建的 Agent 和文件建的 Agent 表现不一样"这种 bug 最难查。另外 `scheduledTasks` 这个句柄表是给 30 节埋的：更新、删除 Agent 时要能把旧定时任务注销掉，现在不留句柄，将来就只能重启。
 
+> **对齐既有实现（上面是示意，按 16/25 节已落地的真实代码改，别照抄示意）：**
+> - `ProfileRegistry`（16 节）现在是**不可变**的（构造注入 `Map.copyOf`，无 `register`）。本节把它改成持有可变并发 Map，新增 `register(Profile)` / `remove(String)` / `exists(String)`——这是 16 节 javadoc 里就预告过的"29 节补运行时 register"，属课件明列的改造点。校验要复用 16 节 `ProfileLoader` 那套（provider 存在 / tool 已注册 / skill 文件存在），不新写一套。
+> - `AgentScheduler`（25 节）实际是**构造注入的纯 POJO**，启动注册走 `@Bean(initMethod="registerAll")`（**不是** `@PostConstruct`，别把 Spring 注解塞回 core 类）；`ScheduleConfig` 是 `Profile.ScheduleConfig` **record**，用 `sc.id()/cron()/zone()/message()`、`profile.name()/schedules()`（**不是** getter），时区经 `ZoneId.of(sc.zone())`、空则系统默认。本节把 25 节 `registerAll` 里的循环体抽成 `registerProfile(Profile)`，并保留 25 节**每条 try/catch 跳过非法 cron**（FR-007）；`registerAll` 改成 `profileRegistry.all().forEach(this::registerProfile)`。
+> - 25 节已有一张按任务 id 的 `taskLocks`（防重叠锁）。本节**新增**一张 `scheduledTasks`（`Map<String, ScheduledFuture<?>>` 句柄表，为 30 节注销用）——两张表并存、各管一事，别合并、别互相覆盖。
+
 **有几样先别做。** Skill 的版本管理、Skill 市场/共享、`trigger` 字段的自动解析（现在只是给人和 LLM 看的说明，不驱动任何机制）、Profile 热更新的文件监听——都放扩展阶段。这节做到"两份文件定义一个 Agent + 运行时注册能力就位"就够。
 
 **本节交付物**（Spec-Kit 拆解锚点）：
