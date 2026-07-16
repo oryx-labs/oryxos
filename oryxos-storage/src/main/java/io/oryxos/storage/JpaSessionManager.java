@@ -59,6 +59,19 @@ public class JpaSessionManager implements SessionManager {
     repository.save(entity);
   }
 
+  @Override
+  public boolean archive(String sessionId) {
+    Optional<Session> found = repository.findById(sessionId);
+    if (found.isEmpty()) {
+      return false; // 不存在：调用方（Web）据此返 404，核心层不依赖 Web 异常
+    }
+    Session entity = found.get();
+    entity.setStatus("archived");
+    entity.setArchivedAt(Instant.now());
+    repository.save(entity);
+    return true;
+  }
+
   /** 全库唯一的 session_id 拼接点。 */
   private static String sessionId(String channel, String userId, String profileName) {
     return channel + ":" + userId + ":" + profileName;

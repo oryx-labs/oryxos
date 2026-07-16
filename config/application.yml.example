@@ -1,0 +1,13 @@
+# OryxOS 运行配置（外部 yaml）——deepseek 等 Provider 凭证从这里读。
+#
+# 用法：复制本文件为 config/application.yml，填入你的真实 api-key。
+#   cp config/application.yml.example config/application.yml
+# 真实的 config/application.yml 已在 .gitignore（勿提交密钥）；start.sh 会自动加载它。
+#
+# 只需覆盖 oryxos.providers 一段；其余配置（端口、虚拟线程、autoconfigure.exclude、
+# 数据库、记忆后端等）继承自 jar 内置的 application.yml，无需在此重复。
+oryxos:
+  providers:
+    - name: deepseek
+      api-key: ""          # ← 填入你的 DeepSeek API Key（留空启动会点名报错）
+      base-url: https://api.deepseek.com

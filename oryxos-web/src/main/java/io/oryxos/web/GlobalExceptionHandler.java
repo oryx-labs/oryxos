@@ -1,6 +1,10 @@
 package io.oryxos.web;
 
 import io.oryxos.web.common.ApiResponse;
+import io.oryxos.web.error.AgentTimeoutException;
+import io.oryxos.web.error.ProviderUnavailableException;
+import io.oryxos.web.error.ResourceNotFoundException;
+import io.oryxos.web.error.SessionNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -34,12 +38,28 @@ public class GlobalExceptionHandler {
         .body(ApiResponse.error(HttpStatus.NOT_FOUND.value(), "Resource not found"));
   }
 
+  /** 404 — 领域资源（会话 / Agent 等）不存在。消息可读、点名资源。 */
+  @ExceptionHandler({SessionNotFoundException.class, ResourceNotFoundException.class})
+  public ResponseEntity<ApiResponse<Void>> handleResourceNotFound(RuntimeException ex) {
+    LOG.warn("Resource not found: {}", sanitize(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+        .body(ApiResponse.error(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+  }
+
   /** 503 — a downstream dependency (provider, tool, storage) is unavailable. */
-  @ExceptionHandler(IllegalStateException.class)
-  public ResponseEntity<ApiResponse<Void>> handleUnavailable(IllegalStateException ex) {
+  @ExceptionHandler({IllegalStateException.class, ProviderUnavailableException.class})
+  public ResponseEntity<ApiResponse<Void>> handleUnavailable(RuntimeException ex) {
     LOG.error("Service unavailable: {}", sanitize(ex.getMessage()));
     return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
         .body(ApiResponse.error(HttpStatus.SERVICE_UNAVAILABLE.value(), ex.getMessage()));
+  }
+
+  /** 504 — Agent 调用超过 60 秒上限。 */
+  @ExceptionHandler(AgentTimeoutException.class)
+  public ResponseEntity<ApiResponse<Void>> handleTimeout(AgentTimeoutException ex) {
+    LOG.error("Agent call timed out: {}", sanitize(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
+        .body(ApiResponse.error(HttpStatus.GATEWAY_TIMEOUT.value(), ex.getMessage()));
   }
 
   /** 500 — catch-all for everything else. */

@@ -179,3 +179,28 @@
 160. AgentService 是在哪节课实现的
 161. profile 的列表数据是哪里来的
 162. 记录下还没记录到 docs/prompt/prompt.md 中的提示词，记录到 docs/prompt/prompt.md 中
+
+## 第五轮（第26节 Web Service + 管理台迭代、启动脚本与文档）
+
+163. 切换到远程的 class-26 分支
+165. /oryxos-lesson-dev 26
+166. 1. 用 ApiResponse（反向同步课件的 ErrorBody） 2. 没问题（H0 停点确认）
+
+167. 没问题（tasks 停点：确认接口扩展 SessionManager.archive/MemoryService.readAll + frontend-maven-plugin）
+168. 在 bin 目录下生成 start.sh 和 stop.sh 启动 server 和 manager；deepseek 从 yaml 配置文件读取
+169. bin/start.sh 启动后管理台 http://localhost:8080/admin/ 不能访问
+170. bin/start.sh 8080 启动成功后报错：line 46: PORT 变量 unbound variable
+171. 启动后列表中没有 profile、tool、长期记忆，这些数据哪里来，初始化几个？
+172. 就是 profile 列表、tool 列表、记忆列表没有数据
+173. A（选择把 .oryxos/ 加入 .gitignore，示例数据只作本地演示）
+174. 管理控制台侧边栏只有 profile 能用
+175. 这是 bug
+176. 不管有没有数据，点击侧边切换需要对应不同的列表；现在点击 tool 都只是展示 agent 列表
+177. 侧边栏无法切换列表，点击侧边栏需要有不同的列表，现在无法切换
+178. 用开发模式启动 manager
+179. 的命令是什么
+180. 顶部增加一个 overview 页面，展示 OryxOS 的预览信息，当前为静态数据，慢慢完善为动态数据
+181. 1. 概览下面放 agent 2. 侧边栏加上 sandbox 白名单的 tab，为列表，内容暂时为空 3. 加上 provider 列表，为列表
+182. 优化 readme：1. 根据最新内容规划展示内容 2. 加上编译、启动说明（一键启动 server 和 manager）3. 把 website/public/images/manager.jpg 放到 readme
+183. 在 readme 中加上 manager 开发模式 npm run dev 的说明
+184. 新增的提示词写入 docs/prompt/prompt.md

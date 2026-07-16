@@ -7,6 +7,10 @@ spring:
   autoconfigure:
     exclude:
       - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAutoConfiguration
+      # 宪法 II：禁用 Spring AI eager 模型自动装配。deepseek 走 spring-ai-openai starter，
+      # OpenAiAutoConfiguration 会急切建 OpenAiChatModel 并索要 spring.ai.openai.api-key；
+      # OryxOS 不用它（Provider 由 ProviderChatModelFactory 显式构造），排掉后 serve 只需 DEEPSEEK_API_KEY。
+      - org.springframework.ai.autoconfigure.openai.OpenAiAutoConfiguration
   threads:
     virtual:
       enabled: true

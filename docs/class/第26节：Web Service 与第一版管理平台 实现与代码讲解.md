@@ -30,7 +30,7 @@
 
 **第四，`serve` 要能只靠一个 provider key 就起得来（坑：Spring AI eager 装配）。** 这是本节第一次真正让人跑 `serve` 常驻，一个启动坑会集中暴露：deepseek 走的是 spring-ai-openai starter，它的 `OpenAiAutoConfiguration` 会**急切实例化**一个 `OpenAiChatModel` Bean，启动即索要 `spring.ai.openai.api-key`——哪怕 OryxOS 根本不用这个自动 Bean（Provider 由 `ProviderChatModelFactory` 按宪法 III 显式构造）。不处理的话，`serve` 会因为"缺 spring.ai.openai.api-key"直接启动失败，逼运营方配两个 key，还会卡死 31 节"干净机器 30 分钟部署"。解法跟 16 节排除 `DashScopeAutoConfiguration` 是同一招（宪法 II：禁用 Spring AI 的 eager 模型自动装配）——在 `application.yaml` 的 `spring.autoconfigure.exclude` 里把 `OpenAiAutoConfiguration` 也排掉，让 `serve` 只认 `DEEPSEEK_API_KEY` 一个环境变量。
 
-**第五，管理平台的边界：这一版只读。** 能看会话、看 Profile、看 Tool、看记忆、看状态，但**不能**创建或修改 Agent——"通过 API 定义一个 Agent"需要的那套端点（29、30 节）现在还不存在，界面上也不该出现假按钮。另外这个前端本身是一次"用提示词做前端"的实战：把页面需求描述清楚交给 AI 生成静态页，我们只验收不手写。
+**第五，管理平台的边界：这一版只读。** 能看会话、看 Profile、看 Tool、看记忆、看状态，但**不能**创建或修改 Agent——"通过 API 定义一个 Agent"需要的那套端点（29、30 节）现在还不存在，界面上也不该出现假按钮。另外这个前端本身是一次"用提示词做前端"的实战：把页面需求描述清楚交给 AI 生成 Vue 页面（跟 `website/` 首页同栈 Vue 3 + Vite），我们只验收不手写。
 
 想清楚就这几句：Controller 薄、跟 CLI 共享引擎；异常单出口、错误码定死；不做认证流式限流；管理平台这版只读。
 
@@ -87,44 +87,69 @@ public class SessionApiController {
 
 **第三步：统一异常出口。**
 
+统一信封用既有的 `ApiResponse`（`code`/`message`/`data`/`timestamp`，第24节随白名单端点已建于 `oryxos-web`）——本节复用、不另建 `ErrorBody`；`GlobalExceptionHandler` 在既有类上**扩展**新的异常映射：
+
 ```java
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(SessionNotFoundException.class)
-    public ResponseEntity<ErrorBody> notFound(SessionNotFoundException e) {
-        return ResponseEntity.status(404)
-                .body(new ErrorBody("SESSION_NOT_FOUND", e.getMessage(), Instant.now()));
+    // 404 —— 领域资源不存在（会话 / Agent）
+    @ExceptionHandler({SessionNotFoundException.class, ResourceNotFoundException.class})
+    public ResponseEntity<ApiResponse<Void>> notFound(RuntimeException e) {
+        return ResponseEntity.status(404).body(ApiResponse.error(404, e.getMessage()));
     }
 
-    @ExceptionHandler(ProviderUnavailableException.class)
-    public ResponseEntity<ErrorBody> providerDown(ProviderUnavailableException e) {
-        return ResponseEntity.status(503)
-                .body(new ErrorBody("PROVIDER_UNAVAILABLE", e.getMessage(), Instant.now()));
+    // 503 —— Provider 故障
+    @ExceptionHandler({IllegalStateException.class, ProviderUnavailableException.class})
+    public ResponseEntity<ApiResponse<Void>> providerDown(RuntimeException e) {
+        return ResponseEntity.status(503).body(ApiResponse.error(503, e.getMessage()));
+    }
+
+    // 504 —— Agent 调用超时（60s 上限）
+    @ExceptionHandler(AgentTimeoutException.class)
+    public ResponseEntity<ApiResponse<Void>> timeout(AgentTimeoutException e) {
+        return ResponseEntity.status(504).body(ApiResponse.error(504, e.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)   // 兜底
-    public ResponseEntity<ErrorBody> internal(Exception e) {
-        return ResponseEntity.status(500)
-                .body(new ErrorBody("INTERNAL_ERROR", "内部错误", Instant.now()));
+    public ResponseEntity<ApiResponse<Void>> internal(Exception e) {
+        return ResponseEntity.status(500).body(ApiResponse.error(500, "Internal server error"));
     }
 }
 ```
 
-注意兜底那条不把 `e.getMessage()` 原样吐给外部——内部异常细节进日志，对外只说"内部错误"，这是门面该有的分寸。
+注意兜底那条不把 `e.getMessage()` 原样吐给外部——内部异常细节进日志，对外只说"内部错误"，这是门面该有的分寸。（既有的 `IllegalArgumentException→400`、`NoResourceFoundException→404` 映射保留不动。）
 
 **第四步：其余端点都很直。** `POST /agents/{name}/invoke` 临时建一个一次性 Session、跑完返回；`GET /profiles`、`GET /tools` 分别列 `ProfileRegistry` 和 `ToolRegistry` 的内容；`GET /memory` 返回 `MEMORY.md` 全文；`GET /health` 回一个 ok；`GET /info` 多带一份各 Provider 的连通状态。OpenAPI 文档用 `springdoc-openapi` 自动生成，暴露在 `/swagger-ui`，不用手写接口文档。
 
-**第五步：管理平台，用提示词做出来。** 前端不手写，给 AI 一段这样的提示词：
+**第五步：管理平台，用提示词做出来（Vue，跟官网首页同栈）。** 前端不手写，给 AI 一段这样的提示词——技术栈跟 `website/` 首页保持一致（Vue 3 + Vite），别用裸 HTML，视觉和工程习惯统一：
 
 ```text
-做一个单页静态管理界面，纯 HTML + 原生 JS，不用构建工具：
+做一个 Vue 3 + Vite 的单页管理界面（跟项目 website/ 首页同栈、同风格）：
 左侧导航五项：会话列表、Profile 列表、Tool 列表、长期记忆、运行状态；
 分别调 GET /api/v1/sessions、/profiles、/tools、/memory、/info 渲染成表格或文本；
-只读，不要任何新建/编辑/删除按钮；出错时把统一错误 JSON 里的 message 显示出来。
+只读，不要任何新建/编辑/删除按钮；出错时把统一错误 JSON 里的 message 显示出来；
+vite base 配成 '/admin/'，build 产物用相对资源路径，好让 Spring 托在 /admin 子路径下。
 ```
 
-产物是一个 `index.html`（可拆几个 js），放进 `oryxos-web` 模块的 `src/main/resources/static/admin/` 下，由 Spring 直接托管，`serve` 起来后访问 `http://localhost:8080/admin` 就能看：
+前端源码放 `oryxos-web/src/main/frontend/`（Vue+Vite 工程），`npm run build` 产出到 `oryxos-web/src/main/resources/static/admin/`（`vite.config` 的 `base: '/admin/'` + `build.outDir` 指过去），由 Spring 直接托管——`serve` 起来后访问 `http://localhost:8080/admin` 就能看。构建串联有两种做法，plan 里二选一说明：用 `frontend-maven-plugin` 把 `npm ci && npm run build` 绑进 `mvn package`（一条命令出全量 fat JAR），或前端单独 `npm run build` 后再 `mvn package`（构建更快、CI 更简单）。**注意 SPA 的前端路由**：Spring 要对 `/admin/**` 的未命中路径回落到 `admin/index.html`（`GET /api/v1/**` 不受影响），否则刷新子路由会 404。
+
+**页面风格：钉死到官网首页的设计语言，不引外部 skill。** 页面好不好看不靠碰运气，靠把风格写进提示词、且钉到已有的一套设计 token 上——`website/` 首页那套（见 `website/.vitepress/theme/custom.css`）就是唯一风格来源。生成提示词里追加这段视觉约束（值直接抄首页 token，一个字别自创）：
+
+```text
+视觉风格（与 OryxOS 官网首页完全一致，值取自 website/.vitepress/theme/custom.css）：
+- 深色主题：背景 #000000 / 卡片 #111111 / 悬浮块 #1a1a1a；分隔线与边框 #222222；
+- 主色（橙）：#f97316 为主、hover/强调用 #ea6a00 / #c2550a；主色仅用于强调（激活项、链接、数值高亮），不铺大面积；
+- 文字：主 #f5f5f5 / 次 #a3a3a3 / 弱 #666666；
+- 字体：正文 Inter，代码/ID/JSON 用 JetBrains Mono（等宽）；
+- 左侧竖直导航（深色）+ 右侧内容区；表格深色、行分隔用 #222；状态用小圆点/标签（成功绿、失败红、警告橙）；
+- 顶部放 /logo.svg + "OryxOS 管理台"；整体克制、留白足、圆角小（4–6px），跟首页一个气质；
+- 响应式，窄屏导航收起；空数据/加载中/错误三态都要有明确占位，别白屏。
+```
+
+**把这套风格固化成一个项目内 skill：`oryxos-admin-ui`。** 上面的 token 和组件规范不要每次手抄进提示词——管理台这一版要建、30 节还要加"Agent 管理"页，同一套风格会用不止一次。所以本节顺手把它沉淀成一个**项目内** skill `.claude/skills/oryxos-admin-ui/SKILL.md`：里面装着这套设计 token（深色 + 橙、Inter/JetBrains Mono）、工程约定（`base:'/admin/'`、产物落 `static/admin`、SPA 回落、只调 `/api/v1`）、布局/三态/响应式规范和验收清单。之后无论"生成整套只读管理台"还是"给管理台加一页"，都**调这个 skill**，产出天然跟首页同源、可复现。
+
+> **为什么是项目内 skill，而不是引外部 skill（如 `mattpocock/skills`、superskill）？** 我核过 `mattpocock/skills` 的内容——它是"给工程师的工作流 skills"（PRD、TDD、重构、git 安全那类**流程**技能），不是 UI/设计技能，套到"管理台长什么样"上牛头不对马嘴；外部通用件也带不来"跟 OryxOS 首页一致"这件事。真正决定一致性的是**项目自己的设计 token**，所以把它做成**项目内**、直接引用首页 token 的 skill，而不是外挂一个跟本项目审美无关的第三方件。确需组件库时也只选可被 token 完全覆盖的 headless 方案。
 
 ![管理平台 v1 页面结构：左导航五项，右侧内容区渲染 GET 端点数据](../../website/public/images/class-26-3.svg)
 
@@ -132,10 +157,11 @@ public class GlobalExceptionHandler {
 
 **本节交付物**（Spec-Kit 拆解锚点）：
 
-- 代码：六个 Controller（Session/Agent/Profile/Memory/Tool/System）、`GlobalExceptionHandler`、`ErrorBody`；`springdoc-openapi` 集成
+- 代码：六个 Controller（Session/Agent/Profile/Memory/Tool/System）、`GlobalExceptionHandler`（扩展既有、复用 `ApiResponse` 信封）；`springdoc-openapi` 集成
 - 测试：`SessionApiControllerTest`、`GlobalExceptionHandlerTest`、`WebSmokeIT`（见验收 harness）
 - 配置：`spring.threads.virtual.enabled=true`、端口 8080、消息 32KB / 历史 100 条限制
-- 前端：`static/admin/` 下 AI 生成的只读管理页（五个页面调五个 GET 端点）
+- 前端：`oryxos-web/src/main/frontend/` 下 AI 生成的 Vue 3 + Vite 只读管理台（五页调五个 GET 端点），`npm run build` 产出到 `static/admin/`、Spring 托在 `/admin`；构建串联方式（frontend-maven-plugin 绑进 mvn / 手动 npm build）plan 里二选一，SPA 路径回落 `/admin/**`→`index.html`
+- 风格 skill：`.claude/skills/oryxos-admin-ui/SKILL.md`（固化首页设计 token + 工程约定 + 组件/三态规范 + 验收清单）——生成管理台就调它，30 节加 Agent 管理页复用同一套
 
 ---
 
@@ -146,7 +172,7 @@ Web 层的 harness 用 `@WebMvcTest` 切片——只起 MVC 层、mock 掉 `Agen
 | 测试类 | 覆盖的验收点 |
 |---|---|
 | `SessionApiControllerTest` | 超 32KB → 400；Session 不存在 → 404；正常请求 `agentService.process` 恰被调一次（Controller 没夹带私货） |
-| `GlobalExceptionHandlerTest` | 每类异常映射到约定状态码；响应体都是统一 `ErrorBody` 三字段；**500 时响应里不含内部异常的 message**（不泄漏） |
+| `GlobalExceptionHandlerTest` | 每类异常映射到约定状态码；响应体都是统一 `ApiResponse` 信封；**500 时响应里不含内部异常的 message**（不泄漏） |
 | `WebSmokeIT`（`@SpringBootTest` 起真实上下文，不依赖模型） | `/health`、`/info`、`/profiles`、`/tools` 真实链路可达——验证 Bean 装配和扫描范围没炸 |
 
 最值钱的一个——"门面的分寸"回归：

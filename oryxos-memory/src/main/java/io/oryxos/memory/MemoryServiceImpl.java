@@ -36,4 +36,9 @@ public class MemoryServiceImpl implements MemoryService {
   public List<String> recall(String keyword) {
     return store.recallByKeyword(keyword);
   }
+
+  @Override
+  public String readAll() {
+    return store.load();
+  }
 }
