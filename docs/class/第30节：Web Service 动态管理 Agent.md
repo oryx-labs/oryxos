@@ -123,6 +123,8 @@ public class AgentLifecycleService {
 每行带"查看/编辑/删除"，分别调 GET / PUT / DELETE；删除前要二次确认。
 ```
 
+> **对齐既有实现（上面是示意）：** `AgentApiController` 是 26 节已建的那个（已有 `POST /agents/{name}/invoke`），本节是**在它上面加** create/get/update/delete 四个方法，不新建一个 controller。`profile.getSchedules()` 等按 record 写成 `profile.schedules()`；`sc.id()` 用于 `scheduledTasks` 句柄表的 key。`agentScheduler.unregisterProfile(profile)` 的实现就是遍历 `profile.schedules()`、从 29 节的 `scheduledTasks` 取出每条的 `ScheduledFuture` 调 `cancel(false)` 再移除句柄——注销的是"定时触发"，不动 `taskLocks`（那是运行期防重叠的，随任务自然消解）。
+
 **有几样先别做。** 认证鉴权（谁能建 Agent——核心阶段内网假设，扩展阶段跟 API Key/RBAC 一起补）、Agent 的启用/停用状态位、创建时的干跑测试（dry-run）、Skill 内容的版本历史——都放扩展阶段。
 
 **本节交付物**（Spec-Kit 拆解锚点）：

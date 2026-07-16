@@ -38,6 +38,11 @@
 
 天气源钉死用 **open-meteo**（免费、免 API key、返回 JSON），白名单里加 `api.open-meteo.com`；`notify_channels` 用 28 节配好的团队 webhook——前置条件清单这时兑现价值。不自己挑 API 的原因很实际：Demo 现场最怕"接口要注册账号/要充值/被墙"这类和课程无关的意外。
 
+> **跑起来之前，先过三道环境门（不过就是空转，别急着等钟推）：**
+> 1. **启动 key**：`export DEEPSEEK_API_KEY=...`。因为 26 节已排除 `OpenAiAutoConfiguration`，`serve` 只需要这一个 key 就能起——若你发现它还索要 `spring.ai.openai.api-key`，说明 26 节那个排除没落地，回去补。
+> 2. **白名单**（24 节 Sandbox 默认 deny-all，会拦自己）：`http.allowed_domains` 里必须有 `api.open-meteo.com` **和** 团队 webhook 的域名（飞书 `*.feishu.cn` / 企业微信 `qyapi.weixin.qq.com`，按实际渠道）。少一个，`tool_invocations` 就是一片 `success=false`。
+> 3. **webhook 可达**：一个真能收消息的群机器人地址，配进 `notify_channels`。
+
 **第二步：调试，先人推再钟推。** 别干等八点。先手动补跑一次把链路调通：
 
 ```bash
@@ -55,7 +60,12 @@ oryxos chat --profile weather-daily
 
 ## 三、Demo 二：每日科技日报 Agent
 
-**第一步：声明新闻 MCP server。** 这个 Agent 需要一个拉取科技新闻的外部能力——在 `.oryxos/mcp_servers.yaml` 里声明一个新闻 MCP server，重启后 `oryxos tool list` 里能看到它暴露的工具。**兜底方案先备好**：如果一时找不到现成可用的新闻聚合 MCP，就按 20 节的方式二自己写一个最小的 `news-mcp`——读两三个科技媒体的 RSS、暴露一个 `fetch_tech_news` 工具返回标题列表，几十行任何语言都行。这本身就是方式二的实练，而且把 Demo 的命运握在自己手里，不赌社区某个 server 恰好活着。
+**第一步：搞定"拉科技新闻"这个外部能力——两条路，先保证能跑，再谈实练。** 这个 Agent 需要一个拉当日科技新闻的能力，实现上有两条路，按"Demo 必须跑起来"的优先级选：
+
+- **路一（稳，建议默认）：直接用内置 `http_get`。** 找一个免 key、返回 JSON、稳定可达的新闻源（如某科技媒体的 RSS-to-JSON、或公开新闻聚合 JSON 接口），Skill 里让 LLM 调 `http_get` 取回、自己挑选组稿。Profile 的 `tools` 加 `http_get`、白名单加该新闻源域名即可——不引入外部进程，Demo 命运完全握在自己手里。
+- **路二（MCP 实练，锦上添花）：声明一个新闻 MCP server。** 在 `.oryxos/mcp_servers.yaml` 里声明，重启后 `oryxos tool list` 能看到它暴露的工具。这是 20 节"方式二"的真实练手。**若走这条，务必提前把 `news-mcp` 写好、连通验证过，不要 Demo 现场才写**——按 20 节方式二自己写一个最小 `news-mcp`（读两三个科技媒体 RSS、暴露一个 `fetch_tech_news` 返回标题列表，几十行任何语言都行），别赌社区某个 server 恰好活着；连不上时 MCP 会被 WARN 跳过（28 节"外部依赖不拖垮启动"），届时 Demo 就哑了。
+
+两条路对 Skill 正文透明（都是"调用新闻工具拉新闻"），差别只在 Profile 怎么给这个能力：路一给 `http_get` + 白名单域名，路二给 `mcp_servers` + 对应工具名。**要点：Skill frontmatter 的 `required_tools` 与 Profile 的 `tools`/`mcp_servers` 必须跟所选路径一致**（29 节的一致性校验会查）。下面的示例按路二写，走路一就把"新闻工具"换成 `http_get` 并在 `tools` 里加上它。
 
 **第二步：种一条偏好进记忆。** 先跟任意 Agent 聊一句：
 
@@ -108,7 +118,7 @@ git tag v0.1.0 && git push --tags
 **本节交付物**（Spec-Kit 拆解锚点）：
 
 - Agent 定义：`weather-daily`（API 创建）与 `daily-tech-digest`（文件创建）的 Skill + Profile
-- 外部依赖：open-meteo（白名单 `api.open-meteo.com`）、新闻 MCP（现成的或自写 `news-mcp` 兜底）
+- 外部依赖与白名单：`api.open-meteo.com`（天气）、团队 webhook 域名（notify）、新闻源——两条路二选一：`http_get` + 新闻源域名进白名单（稳，默认），或自写 `news-mcp`（实练，需提前连通）；启动只需 `DEEPSEEK_API_KEY`（26 节已排除 OpenAiAutoConfiguration）
 - 发布物：fat JAR、`v0.1.0` tag、README 快速开始（30 分钟部署标准）
 
 ## 五、做完怎么验

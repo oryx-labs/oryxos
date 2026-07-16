@@ -1,6 +1,7 @@
 package io.oryxos.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -81,5 +82,25 @@ class SessionManagerTest {
     assertEquals("zhao", entity.getUserId());
     assertEquals("default", entity.getProfileName());
     assertTrue(entity.getCreatedAt() != null);
+  }
+
+  @Test
+  @DisplayName("archive 把会话置为 archived 并记 archived_at（26 节接线）")
+  void archiveMarksSessionArchived() {
+    JpaSessionManager manager = manager();
+    manager.getOrCreate("web", "li", "default");
+
+    boolean archived = manager.archive("web:li:default");
+
+    assertTrue(archived);
+    Session entity = repository.findById("web:li:default").orElseThrow();
+    assertEquals("archived", entity.getStatus());
+    assertTrue(entity.getArchivedAt() != null, "归档时间应被记下");
+  }
+
+  @Test
+  @DisplayName("archive 不存在的会话_返回 false 不报错")
+  void archiveMissingReturnsFalse() {
+    assertFalse(manager().archive("web:nobody:default"));
   }
 }

@@ -1,0 +1,30 @@
+/* OryxOS 管理台设计 token —— 值取自 website/.vitepress/theme/custom.css，与官网首页同源。 */
+:root {
+  --bg: #000000;
+  --bg-soft: #111111;
+  --bg-mute: #1a1a1a;
+  --border: #222222;
+  --brand: #f97316;
+  --brand-2: #ea6a00;
+  --brand-soft: rgba(249, 115, 22, 0.12);
+  --text-1: #f5f5f5;
+  --text-2: #a3a3a3;
+  --text-3: #666666;
+  --ok: #22c55e;
+  --err: #ef4444;
+  --font-base: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --radius: 5px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-base);
+  font-size: 14px;
+}
+
+code, .mono { font-family: var(--font-mono); }

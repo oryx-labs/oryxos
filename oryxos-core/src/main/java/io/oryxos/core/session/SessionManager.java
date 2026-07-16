@@ -16,4 +16,12 @@ public interface SessionManager {
   Optional<Session> get(String sessionId);
 
   void save(Session session);
+
+  /**
+   * 归档一个会话（status→archived、记 archived_at）。26 节 DELETE /sessions/{id} 接线；sessions 的
+   * status/archived_at 列自 18 节 data model 即在，此前未接对外入口。
+   *
+   * @return {@code true} 已归档，{@code false} 会话不存在（调用方据此返 404，核心层不依赖 Web 异常）
+   */
+  boolean archive(String sessionId);
 }

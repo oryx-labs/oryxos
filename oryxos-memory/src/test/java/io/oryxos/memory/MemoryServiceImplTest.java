@@ -38,4 +38,17 @@ class MemoryServiceImplTest {
     assertFalse(service.recall("OryxOS").isEmpty());
     assertTrue(service.recall("不存在的词").isEmpty());
   }
+
+  @Test
+  @DisplayName("readAll 返回长期记忆全文（委托 store.load）")
+  void readAllReturnsFullMemory() {
+    MemoryService service = service();
+    service.remember("核心偏好", MemoryScope.CORE);
+    service.remember("归档条目", MemoryScope.ARCHIVAL);
+
+    String all = service.readAll();
+
+    assertTrue(all.contains("核心偏好"));
+    assertTrue(all.contains("归档条目"));
+  }
 }

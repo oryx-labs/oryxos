@@ -85,7 +85,7 @@ Introduce agent communication infrastructure. Integrate A2A protocol. Cross-node
 
 ```text
 oryxos/
-├── oryxos-core          # OryxTool interface, Session, ReActLoop, PromptBuilder, ToolExecutor
+├── oryxos-core          # OryxTool, Session, ReActLoop, PromptBuilder, ToolExecutor, AgentScheduler
 ├── oryxos-provider      # ProviderService, Function Calling adapter, explicit multi-provider map
 ├── oryxos-memory        # MemoryService, LongTermMemory, MemoryTools (save/recall)
 ├── oryxos-tool          # Built-in tools (file/shell/http), MCP Client, ToolRegistry, SandboxChecker
@@ -100,26 +100,75 @@ Modules are decoupled through interfaces. Adding a new Channel or Tool requires 
 
 ## Quick Start
 
-**Prerequisites**: Java 21, Maven 3.9+, an LLM API key (DeepSeek / Qwen / OpenAI / Ollama)
+**Prerequisites**: Java 21, Maven 3.9+, and an LLM API key (DeepSeek / Qwen / OpenAI / Ollama). The Maven build installs a local Node.js on first run to bundle the admin UI — no global Node.js required.
+
+### 1 · Build
 
 ```bash
-# Build
 git clone https://github.com/oryx-labs/oryxos.git
 cd oryxos
-mvn package -DskipTests
-
-# Initialize the workspace
-java -jar oryxos-boot/target/oryxos-boot-*.jar init
-
-# Set your LLM API key
-export DEEPSEEK_API_KEY=your-key-here
-
-# Start chatting
-java -jar oryxos-boot/target/oryxos-boot-*.jar chat --profile default
-
-# Or launch the REST API
-java -jar oryxos-boot/target/oryxos-boot-*.jar serve --port 8080
+mvn package -DskipTests          # compiles all modules + bundles the Vue admin UI into the fat JAR
 ```
+
+### 2 · Configure the LLM key
+
+```bash
+cp config/application.yml.example config/application.yml
+# edit config/application.yml → fill in the deepseek api-key
+```
+
+`config/application.yml` is gitignored, so your key stays local and is never committed. Only **one** provider key is needed to boot — Spring AI's eager OpenAI auto-config is excluded, so `serve` starts without `spring.ai.openai.api-key`.
+
+### 3 · One-click start — server + manager
+
+```bash
+bin/start.sh                     # defaults to port 8080; or: bin/start.sh 9000
+bin/stop.sh                      # stop
+```
+
+`start.sh` launches a single process that serves **both** the REST API and the Web Manager on the same port, waits for the health check to pass, then prints the URLs (`/api/v1/health`, `/admin/`, `/swagger-ui`). Logs stream to `logs/oryxos.log`. On the first run it creates `config/application.yml` from the template and asks you to fill in the key.
+
+### CLI alternative
+
+```bash
+JAR=oryxos-boot/target/oryxos-boot-*.jar
+java -jar $JAR init                       # initialize the .oryxos/ workspace
+export DEEPSEEK_API_KEY=your-key-here      # the CLI reads the key from the environment
+java -jar $JAR chat --profile default      # interactive multi-turn chat
+java -jar $JAR serve --port 8080           # REST API + Web Manager (same as start.sh)
+```
+
+### Web Service & Web Manager
+
+`serve` (and `bin/start.sh`) exposes one process with two faces on the same port:
+
+| URL | What |
+| --- | --- |
+| `http://localhost:8080/api/v1/**` | REST API (see below) |
+| `http://localhost:8080/admin/` | **Web Manager** — Vue 3 console |
+| `http://localhost:8080/swagger-ui` | OpenAPI docs |
+
+The Web Manager is a read-only Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **overview, agents, providers, tools, sandbox whitelist, long-term memory, runtime status, and sessions**. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process.
+
+<p align="center">
+  <img src="website/public/images/manager.png" alt="OryxOS Web Manager console" width="100%"/>
+</p>
+
+#### Manager dev mode (hot reload)
+
+When iterating on the console UI, run the Vite dev server instead of rebuilding the JAR each time — it hot-reloads on save and bypasses the browser cache:
+
+```bash
+# 1. Keep the backend running — the dev server proxies the API to it
+bin/start.sh                              # REST API on :8080
+
+# 2. In another terminal, start the Vite dev server
+cd oryxos-web/src/main/frontend
+npm install                               # first time only
+npm run dev                               # → http://localhost:5173/admin/
+```
+
+The dev server runs on port **5173** with base `/admin/` and proxies `/api` → `localhost:8080` (see `vite.config.js`). Edit any file under `src/` and the page updates instantly. When finished, `npm run build` bundles the production assets into `static/admin/` so the next `mvn package` ships them in the fat JAR.
 
 ## Agent Profile
 

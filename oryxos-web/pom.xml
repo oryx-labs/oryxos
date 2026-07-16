@@ -14,6 +14,12 @@
     <name>OryxOS Web</name>
     <description>Web service: REST API controllers, GlobalExceptionHandler, OpenAPI</description>
 
+    <properties>
+        <!-- 前端构建默认随 mvn 触发；快速纯 Java 构建可 -Dfrontend.skip=true 跳过 -->
+        <frontend.skip>false</frontend.skip>
+        <frontend.node.version>v20.18.0</frontend.node.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.oryxos</groupId>
@@ -39,5 +45,49 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- 管理台 Vue 前端：npm install + vite build，产物落 src/main/resources/static/admin，
+                 随 process-resources 进 fat JAR、由 Spring 托在 /admin。绑在 generate-resources
+                 （早于 process-resources / test），一条 mvn 命令出全量包。 -->
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <version>1.15.1</version>
+                <configuration>
+                    <workingDirectory>src/main/frontend</workingDirectory>
+                    <installDirectory>target</installDirectory>
+                    <skip>${frontend.skip}</skip>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>install-node-and-npm</id>
+                        <goals><goal>install-node-and-npm</goal></goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <nodeVersion>${frontend.node.version}</nodeVersion>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-install</id>
+                        <goals><goal>npm</goal></goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <arguments>install</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>npm-build</id>
+                        <goals><goal>npm</goal></goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <arguments>run build</arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

@@ -134,3 +134,73 @@
 118. 1. 不一定是当前9个模块，可以根据需要新建，调整模块名称。比如增加orysox-sandbox模块。按照agent 的模块来。 这点可以写入到claude.md 或者.specify/memory/constitution.md 2. 3、4 其他的按你的来（17 节 tasks 停点：批准 D1 契约上移，并把"模块结构可按需演进"写入宪法 v1.1.0）
 119. 总结一下代码变更，重点reveiw，如何验证。 并把这个环节加入到skill中国呢
 120. 把对话中新增的提示词存储docs/prompt/prompt.md 中
+
+## 第四轮（逐节开发执行期：18~25 节 + 白名单动态管理端点）
+
+121. 切换到远程的 class-18 分支
+122. /oryxos-lesson-dev 18
+123. 继续
+124. 写一个文档，cli 的使用文档
+125. 放到 docs 下
+126. 切换到远程的：class-19 分支
+127. /oryxos-lesson-dev 19
+128. 继续
+129. 对接了哪些渠道，当前，给个清单
+130. 企业微信、飞书、lark、dingding 需要对接，有现成的实现吗？你能实现吗
+131. 你能解决就行。我不管了（授权：provider 回退事故按前一分支基线静默修复，免请示）
+132. 切换到 class-20 分支
+133. /oryxos-lesson-dev 20
+134. 继续
+135. 当前实现了哪些 tool，业界主流都会用哪些 tool。基础的 tool 清单给一个
+136. 实现缺的 5 个 tool，同时更新文档：docs/class/第20节：Tool 体系 原理解析、实现与代码讲解.md
+137. docs/class/第21节：Memory 原理解析、业界方案与 OryxOS 设计评审.md 中加两部分：mem0 和知识图谱
+138. 修改 docs/class/第22节：Memory 实现与代码讲解.md 的内容。插件化的 memory 实现机制。md、sqlite、mem0 三种。也就是实现三种
+139. 当前的分支是？
+140. 切换到 class-22 分支
+141. /oryxos-lesson-dev 22
+142. A，以课件为准，去修改技术方案
+143. 继续
+144. react 在哪里调用了 memory 的保存和读取
+145. 第23节：Sandbox 原理解析… 补充业界主流 sandbox 的实现思路（比如 claude code、hermes agent）、学界对 sandbox 的讨论；helix 也是 sandbox 的一种吗？先讨论要补什么、社区主流实现思路是什么
+146. 不管 helix 了，给你 https://github.com/nousresearch/hermes-agent
+147. 1. 肯定要联网核实再写的
+148. 23 改了后，24 需要改吗？
+149. 可以，你决定
+150. 切换到 class-24 分支
+151. /oryxos-lesson-dev 24
+152. 确认（第24节 H0 五处偏差 + tasks 停点）
+153. 白名单的配置方法是不是只能是 application.yml 的格式
+154. 那我能通过 http 的接口修改白名单吗？
+155. 管理员需要能够动态操作白名单。给我实现在 web service 模块，实现白名单的增加、查询和删除三个接口
+156. 给服务运行的命令和 curl 的测试命令
+157. 切换到 class-25 分支
+158. /oryxos-lesson-dev 25
+159. 继续
+160. AgentService 是在哪节课实现的
+161. profile 的列表数据是哪里来的
+162. 记录下还没记录到 docs/prompt/prompt.md 中的提示词，记录到 docs/prompt/prompt.md 中
+
+## 第五轮（第26节 Web Service + 管理台迭代、启动脚本与文档）
+
+163. 切换到远程的 class-26 分支
+165. /oryxos-lesson-dev 26
+166. 1. 用 ApiResponse（反向同步课件的 ErrorBody） 2. 没问题（H0 停点确认）
+
+167. 没问题（tasks 停点：确认接口扩展 SessionManager.archive/MemoryService.readAll + frontend-maven-plugin）
+168. 在 bin 目录下生成 start.sh 和 stop.sh 启动 server 和 manager；deepseek 从 yaml 配置文件读取
+169. bin/start.sh 启动后管理台 http://localhost:8080/admin/ 不能访问
+170. bin/start.sh 8080 启动成功后报错：line 46: PORT 变量 unbound variable
+171. 启动后列表中没有 profile、tool、长期记忆，这些数据哪里来，初始化几个？
+172. 就是 profile 列表、tool 列表、记忆列表没有数据
+173. A（选择把 .oryxos/ 加入 .gitignore，示例数据只作本地演示）
+174. 管理控制台侧边栏只有 profile 能用
+175. 这是 bug
+176. 不管有没有数据，点击侧边切换需要对应不同的列表；现在点击 tool 都只是展示 agent 列表
+177. 侧边栏无法切换列表，点击侧边栏需要有不同的列表，现在无法切换
+178. 用开发模式启动 manager
+179. 的命令是什么
+180. 顶部增加一个 overview 页面，展示 OryxOS 的预览信息，当前为静态数据，慢慢完善为动态数据
+181. 1. 概览下面放 agent 2. 侧边栏加上 sandbox 白名单的 tab，为列表，内容暂时为空 3. 加上 provider 列表，为列表
+182. 优化 readme：1. 根据最新内容规划展示内容 2. 加上编译、启动说明（一键启动 server 和 manager）3. 把 website/public/images/manager.jpg 放到 readme
+183. 在 readme 中加上 manager 开发模式 npm run dev 的说明
+184. 新增的提示词写入 docs/prompt/prompt.md
