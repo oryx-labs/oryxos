@@ -153,6 +153,47 @@ open  http://localhost:8080/swagger-ui    # 接口文档
 - **失败路径**（接 2.3 的第 ⑤ 条）：把 Provider 挂掉、Sandbox 拦截、工具抛异常各造一次，断言审计表里都有 `success=false` 的记录、系统本身不崩；
 - **三面同源**：命令行和 REST 各把"天气穿衣"走一遍，`GET /sessions/{id}` 两次数据一致；管理台"会话"页（靠新增的 `GET /sessions`）能列出、点开就是这次对话。
 
+### 无 key 也能跑：用 mock provider 把全链路搬进 gate
+
+`HumanTriggerFlowIT` 要真 key + 网络，只能手动跑。为了让"全链路能不能跑通"这件事**在 gate 里也能自动判**，加一个**独立的 mock provider**——挂在显式映射表的 `mock` 名下（宪法 III），不连任何真实模型、不需要 key。它按脚本驱动一次确定性的 ReAct：第一轮请求一次 `save_memory` 工具调用（**真写 `MEMORY.md`**，给全链路一个可观测的"文件写入"行为），第二轮（PromptBuilder 已把工具结果渲染成 `tool: …` 行）直接返回最终答复。**只有"模型"是假的**，ReActLoop / ToolExecutor / Memory / Session / 审计全部走真实路径。
+
+于是有了两层无 key 自测，都进 gate、随 `mvn verify` 自动跑：
+
+- **`MockProviderFlowTest`（手工装配、快）**：直接拼出 ReActLoop + mock provider + 真实工具/记忆/会话，一条"记住…"消息 → 断言 **ReAct 两轮**、`save_memory` **恰调一次**、`MEMORY.md` **记下事实**、**会话历史完整**、审计 `llm_calls`×2 / `tool_invocations`×1；再用同一批服务起 `/sessions`、`/memory`、`/tools` 端点，确认 **console 查得到这条链路留下的数据**。
+- **`MockAgentE2ETest`（真启动整台服务）**：`@SpringBootTest` 起**真实 HTTP 端口 + SQLite**，从测试里 `POST /sessions` 建会话、`POST …/messages` 发对话，再把会话 / 记忆 / 工具 / 审计全查回来——跟人手动点一遍完全一样，只是自动化了。为让它 hermetic，`OryxOsRuntime` 的工作区根目录支持用系统属性 `oryxos.root` 覆盖（默认仍 `.oryxos`）：测试把根指向临时工作区、SQLite 指向临时库、provider 覆盖成 `mock`。
+
+### 手动怎么测：无 key 用 mock 走一遍
+
+自动化之外想亲手验一遍，用 `mock` provider（不烧 key、不联网）。
+
+**前置**：`bin/start.sh 8080` 起服务；`config/application.yml` 里有 `- name: mock`；`.oryxos/profiles/` 下有个 `provider: mock` 的 Agent（如 `mock-agent`，`tools: [save_memory]`）。
+
+**命令行——看全链路**：
+
+```bash
+B=http://localhost:8080/api/v1
+# 1) 建会话（用 mock-agent，不烧 key）
+curl -s -X POST $B/sessions -H 'Content-Type: application/json' -d '{"profile":"mock-agent"}'
+#    → data.sessionId = web:default:mock-agent
+# 2) 发一条"记住…"（mock 会驱动一次 save_memory + 两轮 ReAct）
+curl -s -X POST $B/sessions/web:default:mock-agent/messages \
+  -H 'Content-Type: application/json' -d '{"content":"记住：我喜欢喝美式咖啡"}'
+# 3) 查会话历史（user / assistant / tool / assistant 四条）
+curl -s $B/sessions/web:default:mock-agent | python3 -m json.tool
+# 4) 会话列表   5) 长期记忆（含"美式咖啡"）   6) 工具清单（含 save_memory）
+curl -s $B/sessions | python3 -m json.tool
+curl -s $B/memory
+curl -s $B/tools | python3 -m json.tool
+```
+
+**浏览器——管理台**（先发一两条对话再开）：`http://localhost:8080/admin/`（首次 `Cmd+Shift+R` 硬刷新）。侧边栏「会话」看到刚才那条、「长期记忆」看到"美式咖啡"、「Tool」含 `save_memory`、「Provider」有 `mock`——CLI/REST/管理台三面同源。
+
+**换真模型**：把 `profile` 换成 `default`（走 deepseek，需 `config/application.yml` 已填 key），消息随便问，如"今天北京天气怎么样，穿什么合适"。
+
+**验审计（可选）**：`sqlite3 oryxos.db "select tool_name,success from tool_invocations where session_id='web:default:mock-agent';"`（`llm_calls` 同理，每轮对话 2 条）。
+
+一句话：**`mock-agent` 无 key 验全链路，`default` 验真模型；两者数据都进同一个管理台。**
+
 ### 验收清单（每条都成立才算达标）
 
 - **对话**：命令行、REST 两个入口各走一遍，答复非空，逐表对账一致、不多不少；
@@ -161,13 +202,14 @@ open  http://localhost:8080/swagger-ui    # 接口文档
 - **工具**：`GET /api/v1/tools` 返回工具清单、数量大于 0、含关键工具；
 - **审计**：三种失败路径各造一次，审计表里都有 `success=false`，系统不崩；
 - **装配**：启动日志里 JPA repositories 数量大于 0、所有 Profile 加载成功、引用的 Bootstrap / Skill 文件都在；
-- **不回退**：`mvn clean verify` 全绿，`HumanTriggerFlowIT` 打 `@Tag("integration")` 手动能跑通。
+- **不回退**：`mvn clean verify` 全绿（含 `MockProviderFlowTest` / `MockAgentE2ETest` 两个无 key 全链路测试）；`HumanTriggerFlowIT` 打 `@Tag("integration")`、需真 key 手动跑。
 
 ### 本节交付物
 
-- **代码**：`SessionManager.listRecent(int)`（oryxos-core 接口扩展）+ `JpaSessionManager` 实现；`SessionApiController` 新增 `GET /api/v1/sessions`（会话摘要列表）+ 摘要 DTO。
-- **测试（harness）**：`HumanTriggerFlowIT`（`@Tag("integration")`），覆盖上面三根支柱 + 失败路径 + 三面同源。
+- **代码**：`SessionManager.listRecent(int)`（oryxos-core 接口扩展）+ `JpaSessionManager` 实现；`SessionApiController` 新增 `GET /api/v1/sessions`（会话摘要列表）+ 摘要 DTO；**`MockChatModel`**（独立 mock provider，挂 `mock` 名下、无 key 驱动全链路）+ 工厂接线与配置校验放行；`OryxOsRuntime` 工作区根支持 `oryxos.root` 系统属性覆盖（为整机测试指向临时工作区，默认 `.oryxos` 不变）。
+- **测试（harness）**：`HumanTriggerFlowIT`（`@Tag("integration")`，真 key）覆盖三根支柱 + 失败路径 + 三面同源；**`MockProviderFlowTest`**（gate 内、无 key，手工装配全链路 + console 数据）；**`MockAgentE2ETest`**（gate 内、无 key，`@SpringBootTest` 真启动整台服务，HTTP 建会话/发对话/查回会话·记忆·工具·审计）；`MockChatModelTest` 钉 mock 脚本行为。
 - **前端**：管理台"会话"页接上 `GET /api/v1/sessions`，从占位改成真实列表。
-- **文档**：README 端点表补上 `GET /api/v1/sessions`。
+- **配置**：`config/application.yml.example` 增内置 `mock` provider 示例（无需 key）。
+- **文档**：README 端点表补上 `GET /api/v1/sessions`；本节"手动怎么测"给出无 key 走 mock 的命令行 + 管理台流程。
 
 到这里，人推主干就通了：一句话进来，走完想、查、答、记账，每一站的痕迹都对得上，会话、记忆、工具都查得到，三个入口看到的是同一份数据。下一节把另外半边接上：**定时链路**（到点自动触发 → ReAct → notify 推送）、重启不失忆、多个 Agent 并存——那是两个 Demo 上场前的最后一轮查缺补漏。

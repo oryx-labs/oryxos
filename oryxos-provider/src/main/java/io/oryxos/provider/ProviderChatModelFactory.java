@@ -14,10 +14,17 @@ import org.springframework.ai.openai.api.OpenAiApi;
  */
 public class ProviderChatModelFactory {
 
+  /** 内置 mock provider 的保留名：配置里 {@code - name: mock} 即挂一个假模型，用于无 key 全链路自测。 */
+  static final String MOCK = "mock";
+
   public Map<String, ChatModel> build(ProvidersProperties properties) {
     properties.validate();
     Map<String, ChatModel> providerMap = new LinkedHashMap<>();
     for (ProvidersProperties.ProviderConfig config : properties.providers()) {
+      if (MOCK.equals(config.name())) {
+        providerMap.put(config.name(), new MockChatModel()); // 不连真实端点，无需 key/url
+        continue;
+      }
       OpenAiApi api = new OpenAiApi(config.baseUrl(), config.apiKey());
       providerMap.put(config.name(), new OpenAiChatModel(api));
     }

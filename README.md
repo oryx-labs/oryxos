@@ -202,6 +202,7 @@ All endpoints are prefixed with `/api/v1`:
 | Method | Path | Description |
 | --- | --- | --- |
 | `POST` | `/sessions` | Create a session |
+| `GET` | `/sessions` | List recent sessions (summary; `?status=active`) |
 | `POST` | `/sessions/{id}/messages` | Send a message (triggers ReAct Loop) |
 | `GET` | `/sessions/{id}` | Get session history |
 | `DELETE` | `/sessions/{id}` | Archive a session |

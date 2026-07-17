@@ -30,6 +30,9 @@ public record ProvidersProperties(List<ProviderConfig> providers) {
       if (!seen.add(config.name())) {
         throw new IllegalStateException("oryxos.providers 中 provider 名重复: " + config.name());
       }
+      if ("mock".equals(config.name())) {
+        continue; // 内置 mock provider：不连真实端点，无需 api-key / base-url
+      }
       if (config.apiKey() == null || config.apiKey().isBlank() || config.apiKey().contains("${")) {
         throw new IllegalStateException(
             "provider " + config.name() + " 的 api-key 未配置或环境变量未解析，请检查对应环境变量");

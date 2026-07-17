@@ -1,5 +1,6 @@
 package io.oryxos.core.session;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -24,4 +25,10 @@ public interface SessionManager {
    * @return {@code true} 已归档，{@code false} 会话不存在（调用方据此返 404，核心层不依赖 Web 异常）
    */
   boolean archive(String sessionId);
+
+  /**
+   * 列出最近会话的摘要（按 last_active_at 倒序取前 {@code limit} 条），不含对话正文——供 27 节 GET /api/v1/sessions
+   * 与管理台"会话"列表。返回摘要投影而非领域 {@link Session}：领域对象不带 channel/status/时间戳等展示字段。
+   */
+  List<SessionSummary> listRecent(int limit);
 }

@@ -167,6 +167,8 @@ fi
 
 # ── Build remote delete commands (passed via env to avoid injection) ────────────
 DELETED_LIST=$(printf '%s' "$DELETED_FILES" | tr '\n' ':')
+# base64 传输：删除的文件名可能含空格（如"…为 Demo 做准备.md"），直接作为 ssh 命令行 env 赋值会被远端 shell 二次分词而崩，故编码。
+DELETED_LIST_B64=$(printf '%s' "$DELETED_LIST" | base64 | tr -d '\n')
 
 # ── Remote: pull → extract → commit → push ────────────────────────────────────
 info "Syncing remote ..."
@@ -175,7 +177,7 @@ ssh "${REMOTE_HOST}" \
   LOCAL_BRANCH="${LOCAL_BRANCH}" \
   ARCHIVE_NAME="${ARCHIVE_NAME}" \
   SKIP_ARCHIVE="${SKIP_ARCHIVE}" \
-  DELETED_LIST="${DELETED_LIST}" \
+  DELETED_LIST_B64="${DELETED_LIST_B64}" \
   COMMIT_MSG_B64="${COMMIT_MSG_B64}" \
   'bash -s' <<'REMOTE_SCRIPT' || true
 set -euo pipefail
@@ -210,6 +212,7 @@ fi
 find "${REMOTE_DIR}" -maxdepth 1 -name '*.tar.gz' -delete
 
 # Remove files deleted locally
+DELETED_LIST=$(printf '%s' "${DELETED_LIST_B64:-}" | base64 -d 2>/dev/null || true)
 if [[ -n "${DELETED_LIST}" ]]; then
   info "Removing locally-deleted files on remote ..."
   IFS=':' read -ra del_files <<< "${DELETED_LIST}"

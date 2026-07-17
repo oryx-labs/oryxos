@@ -8,6 +8,7 @@ import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.CreateSessionRequest;
 import io.oryxos.web.controller.dto.MessageRequest;
 import io.oryxos.web.controller.dto.MessageResponse;
+import io.oryxos.web.controller.dto.SessionSummaryView;
 import io.oryxos.web.controller.dto.SessionView;
 import io.oryxos.web.error.SessionNotFoundException;
 import java.util.List;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -37,6 +39,9 @@ public class SessionApiController {
 
   /** 历史返回最多最近 N 条（课件防呆位）。 */
   private static final int MAX_HISTORY = 100;
+
+  /** 会话列表默认返回最近 N 条摘要。 */
+  private static final int MAX_LIST = 100;
 
   private static final String WEB_CHANNEL = "web";
   private static final String DEFAULT_USER = "default";
@@ -69,6 +74,18 @@ public class SessionApiController {
         sessionManager.get(id).orElseThrow(() -> new SessionNotFoundException(id)); // → 404
     String reply = agentService.process(session, content); // 同一编排入口；审计在 process 内
     return ApiResponse.ok(new MessageResponse(reply));
+  }
+
+  /** 列出会话摘要（最近 ≤100 条、按活跃倒序）；可选 {@code ?status=active} 过滤。三面同源里的"列表视图"。 */
+  @GetMapping
+  public ApiResponse<List<SessionSummaryView>> list(
+      @RequestParam(name = "status", required = false) String status) {
+    List<SessionSummaryView> views =
+        sessionManager.listRecent(MAX_LIST).stream()
+            .filter(s -> status == null || status.isBlank() || status.equals(s.status()))
+            .map(SessionSummaryView::from)
+            .toList();
+    return ApiResponse.ok(views);
   }
 
   /** 查历史：返回最近 ≤100 条。 */
