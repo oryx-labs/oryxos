@@ -636,49 +636,51 @@ mvn clean package
 
 # 第二部分：定义一个 Agent（业务能力）
 
-## 11. 定义一个 Agent：Skill + Profile + Web Service
+## 11. 定义一个 Agent：一份 Skill（Profile 自动派生）+ Web Service
 
 前面十章是**底座**——让任意 Agent 都能可靠运行的引擎、能力、支撑设施，本身不是某个具体的业务 Agent。这一章讲底座之上怎么真正"定义出一个业务 Agent"，以及这个定义动作通过哪个入口对外暴露。
 
-### 11.1 先把术语理清楚：Skill 定义 Agent，Profile 绑定运行时
+### 11.1 术语：Skill 就是 Agent 的定义，Profile 由它派生
 
-- **Skill（`SKILL.md`）**：这个 Agent 该做什么、什么时候该做——业务能力的定义本体。业务方定义一个新 Agent，写的就是一份 Skill。
-- **Profile（YAML）**：这个 Agent 怎么跑起来——绑定哪个 Provider/模型、能用哪些 Tool、绑定哪个 Channel、要不要定时。这是底座提供的运行时容器配置，不是 Agent 本身。
-- 一个**业务 Agent** = 一份 Skill + 一份绑定它的 Profile。没有引用任何 Skill 的 Profile 只是一个通用助手骨架（比如第一周演示用的最简 `ops-agent`），能跑，但不是这个项目真正要交付的"业务 Agent"。
+- **Skill（`SKILL.md`）= 一个 Agent 的完整声明**：`frontmatter` 是机器可读的配置（`name`、`description`、可选 `provider`/`model`、`tools`、`notify_channels`、`schedules`——"什么时候自己跑"也在这里），正文是给 LLM 的任务指令。业务方定义一个新 Agent，写的就是这**一份**文件。形态与 Claude 自己的 SKILL.md 一致：frontmatter 管配置、正文管内容。
+- **Profile = 由 Skill 派生的运行时值对象**：底座（第 1~10 章的一切）都吃 `Profile`，所以系统用 `deriveProfile(skill)` 把 Skill 的 frontmatter 映射成一个 `Profile`，作为 Skill 与底座之间的桥——**业务方不用手写 Profile**。
+- 一个**业务 Agent** = 一份 Skill（系统据此派生 Profile 并注册）。此外仍保留"手写 Profile YAML 的通用助手骨架"（如 `ops-agent`）作为无 Skill 的基础 agent；**Skill 派生与 YAML 加载两条来源，汇进同一个 `ProfileRegistry`、过同一套校验**，下游不区分。
+- 底线不变（宪法原则四）：Skill **正文**仍只走 `ContextLoader` 注入 system prompt，`frontmatter` 交给 `SkillLoader` 解析、不进 prompt——Skill 永远不是一个 Tool。
 
-这两个概念底座部分已经分别讲过 Skill 怎么被加载（6.3）、Profile 的字段结构（8.2）、定时怎么绑定（8.5），这一章讲它们怎么组合成一个对外动作。
+Skill 怎么被加载（6.3）、Profile 字段结构（8.2）、定时怎么绑定（8.5）底座部分已分别讲过，这一章讲一份 Skill 怎么自动变成一个会自己跑的 Agent、以及这个动作怎么对外暴露。
 
-### 11.2 核心阶段：手动定义
+### 11.2 核心阶段：一份文件定义一个 Agent
 
-核心阶段业务方定义一个新 Agent，走的是文件系统：
+核心阶段业务方定义一个新 Agent，走的是文件系统，且只写**一份**文件：
 
-1. 在 `.oryxos/skills/` 下新建一份 `<name>.md`，写清楚 frontmatter（`name`、`description`、`trigger`、`required_tools`）和任务说明正文
-2. 在 `.oryxos/profiles/` 下新建一份 `<name>.yaml`，`skills` 字段引用刚写的 Skill，配好 `provider`、`tools`、`channels`，要定时再加 `schedules`
-3. `ContextLoader` 每次组装 prompt 都重新读 Skill 文件不缓存；`ProfileLoader` 在下次启动或触发 reload 时读到新 Profile
+1. 在 `.oryxos/skills/` 下新建 `<name>.md`：frontmatter 写清 `name`、`description`、`tools`、需要定时就加 `schedules`（可选 `provider`/`model`/`notify_channels`，不填走系统默认），正文写任务指令
+2. 系统启动时 `SkillLoader` 扫描 `.oryxos/skills/`，对每份 Skill `deriveProfile` → `ProfileRegistry.register`，有 `schedules` 的交 `AgentScheduler`；`ContextLoader` 每次组装 prompt 重读正文、不缓存
+3. 定时写在 Skill 的 frontmatter 里，扫到即注册、到点自动跑
 
-这条路径核心阶段够用，但依赖手动改文件加重启（或触发 reload），不是"纯 API 定义一个 Agent"。
+这条路径不用手写 Profile；配合运行时注册（见 11.3 的改造点）新增无需重启。
 
-### 11.3 扩展阶段：统一入口 `POST /api/v1/agents`
+### 11.3 扩展阶段：统一入口 `POST /api/v1/agents` + 一句话生成
 
-业务系统要完全通过 API 定义一个新 Agent、不摸文件系统，需要把"写 Skill 文件"和"写 Profile 文件并注册"这两步打包成一个对外资源——**Agent**，而不是分别暴露 Skill 和 Profile 两套 CRUD 让业务方自己拼装。
+业务系统 / 运营要完全通过 API 或页面定义一个新 Agent、不摸文件系统，需要把"写 Skill 文件 + 派生注册"打包成一个对外资源——**Agent**，而不是暴露 Skill/Profile 两套 CRUD 让调用方自己拼。
 
-**`AgentApiController` 扩展**（在已有的无状态调用端点基础上加创建/管理）：
+**`AgentApiController` 扩展**（在已有无状态调用端点基础上加生成/创建/管理）：
 
-- `POST /api/v1/agents`：body 是 `{name, description, trigger, required_tools, skill_content, provider, tools, mcp_servers, schedules}`——前四个字段对应 Skill 的 frontmatter 加正文，后面是可选的运行时绑定，不填就用系统默认 Provider/Tool 集合
-- `GET /api/v1/agents` / `GET /api/v1/agents/{name}`：查询已定义的 Agent，同时能看到它绑定的 Skill 内容和 Profile 配置
-- `PUT /api/v1/agents/{name}`：更新 Skill 内容和/或运行时绑定
-- `DELETE /api/v1/agents/{name}`：删除
+- `POST /api/v1/agents/generate`：body `{sentence}`——一句话经 LLM 生成一份规范 `SKILL.md` 草稿**原样返回**（不落盘、不注册），供页面预览、修改（尤其 cron/tools 这类敏感项要人过一眼）
+- `POST /api/v1/agents`：body `{name, description, tools, notify_channels, schedules, skill_content}`（或直接一段 skill 正文）——拼成一份 `SKILL.md` 写盘，再派生注册；可选运行时字段不填走系统默认
+- `GET /api/v1/agents` / `GET /api/v1/agents/{name}`：查询已定义的 Agent
+- `PUT /api/v1/agents/{name}`：更新正文（覆写即时生效）和/或运行时绑定（`schedules` 变则先注销旧句柄再注册新的）
+- `DELETE /api/v1/agents/{name}`：注销定时 → 移出索引 → `SKILL.md` 归档 `.oryxos/archive/`（不物理删）
 - `POST /api/v1/agents/{name}/invoke`：已有的无状态调用端点，不变
 
-**`AgentLifecycleService`（新增，归 `oryxos-core`）。** 一次 `POST /api/v1/agents` 调用，内部按顺序编排四件事：
+**`AgentLifecycleService`（新增，归 `oryxos-core`）。** 一次 `create` 内部按顺序编排、中途失败回滚：
 
 ![POST /api/v1/agents 编排流程：AgentLifecycleService 依次校验、写 Skill 文件、派生并注册 Profile、注册定时](../website/public/images/docs-agent-lifecycle.svg)
 
-步骤①复用 `ProfileLoader` 启动时那套合法性校验（Provider 是否存在、Tool 是否注册、Channel 是否支持），现在多加一项 Skill 字段本身的合法性。步骤③④分别需要给 `ProfileRegistry` 和 `AgentScheduler` 各补一个运行时注册方法——现在这两者都只在启动时扫描一次，不支持运行时插入。
+写完 `SKILL.md` 后走的 `deriveProfile → ProfileRegistry.register → AgentScheduler.registerProfile`，与启动扫描是**同一段代码**——保证"API 建的 Agent 和手写文件建的 Agent 行为一模一样"。校验复用 `ProfileLoader` 那套（Provider 存在、Tool 注册），`ProfileRegistry` 和 `AgentScheduler` 各补的运行时注册方法在核心阶段（对应课程第 29 节）就已立好，本阶段直接调；`generateSkill` 走既有 `ProviderService`（并落 `llm_calls` 审计）。
 
-### 11.4 为什么这四件事要打包在一起交付
+### 11.4 为什么这几件事要打包在一起交付
 
-单独实现其中任何一件都拼不出"业务系统调一次 API 就能定义一个会自动定时运行的新 Agent"这个完整闭环：少了 Skill 落盘，Profile 没东西可引用；少了 Profile 运行时注册，新 Agent 要等重启才可用；少了 Scheduler 运行时注册，定时的 Agent 创建了但不会自动跑。所以这四件事放在同一批扩展阶段一起交付，不拆开先做一半。
+单独做任何一件都拼不出"说一句话 / 调一次 API 就上线一个会自动定时运行的新 Agent"这个闭环：少了 Skill 落盘，无从派生 Profile；少了运行时注册，新 Agent 要等重启；少了定时注册，"会自己跑"是空话；少了一句话生成，运营还得手写 frontmatter。所以放在同一批一起交付，不拆开先做一半。
 
 ### 11.5 两个例子
 
@@ -690,7 +692,7 @@ mvn clean package
 
 ## 12. 关键流程
 
-早期按"一个 Demo 验证一个能力"拆过五个流程，但真实场景里能力从来不是分开跑的。改成两个**每日自动运行**的端到端流程，对应需求文档第 13 章验收的两个 demo。两个流程横向串起全部五大核心能力加定时任务这个第三触发源，不再一个流程只验一个能力——而且两个流程本身就是第 11 章"定义一个 Agent"的具体产出：每个流程里的 Agent 都是一份 Skill 加一份绑定它的 Profile，底座和 Agent 定义两部分在这里合到一起跑通。
+早期按"一个 Demo 验证一个能力"拆过五个流程，但真实场景里能力从来不是分开跑的。改成两个**每日自动运行**的端到端流程，对应需求文档第 13 章验收的两个 demo。两个流程横向串起全部五大核心能力加定时任务这个第三触发源，不再一个流程只验一个能力——而且两个流程本身就是第 11 章"定义一个 Agent"的具体产出：每个流程里的 Agent 都是一份 Skill（系统据此派生 Profile 并注册），底座和 Agent 定义两部分在这里合到一起跑通。
 
 ### 12.1 Demo 一：每日天气
 
@@ -712,14 +714,14 @@ mvn clean package
 
 **场景：** 每天早上 9 点，Agent 自动汇总当日科技新闻并推送，且日报内容会体现用户之前提过的关注方向。业务方全程不写 Java 代码。
 
-1. 业务方写 `.oryxos/skills/daily-tech-digest.md` 描述"每天汇总科技新闻并推送"这个任务，配 `mcp_servers.yaml` 声明一个新闻聚合 MCP server，创建 Profile 引用这个 skill、这个 mcp_server，配好 `notify_channels`（推送用内置 `NotifyTools`，不需要再找一个专用推送 MCP server），并在 `schedules` 字段声明每天 09:00 触发
+1. 业务方写 `.oryxos/skills/daily-tech-digest.md`：正文描述"每天汇总科技新闻并推送"这个任务，frontmatter 里声明用到的 `tools`、`notify_channels`（推送用内置 `NotifyTools`，不需要专用推送 MCP server）、以及每天 09:00 触发的 `schedules`；需要新闻聚合 MCP server 的话在 `mcp_servers.yaml` 里配一条。系统据此派生 Profile 并注册
 2. 用户此前在某次对话里说过"更关注 AI 和芯片方向"，DeepSeek 判断值得长期记，调 `save_memory` 写入 `MEMORY.md` 的归档记忆区
 3. OryxOS 启动时 `ContextLoader` 加载 `SKILL.md`，`McpClientService` 连接新闻 MCP server，把工具注册到 `ToolRegistry`；`AgentScheduler` 同时注册这个 Profile 的每日触发
 4. 到点，`AgentScheduler` 触发 `AgentService.process`，`PromptBuilder` 组装 Prompt 时把 `SKILL.md` 和 `MEMORY.md`（含"关注 AI 和芯片"这条记忆）一起注入 system prompt
 5. LLM 自己决定先调新闻 MCP 工具拉取当日科技新闻，`McpToolAdapter` 通过 MCP 协议转发，结果回填；LLM 自己组织日报内容，因为看到了记忆里的偏好，自然会侧重 AI 和芯片方向的条目——OryxOS 不解析任务步骤、不做工作流引擎
 6. LLM 再调内置 `notify(content="...")` 把日报发出去，跟 Demo 一共用同一套 `NotifyChannelAdapter` 机制，`ToolExecutor` 写入这次调用的 `tool_invocations`
 
-**验收要点：** 业务方全程只写 SKILL.md + `mcp_servers.yaml` + Profile YAML 三份配置，不写一行 Java 代码；`GET /api/v1/tools` 能查到新闻 MCP server 暴露的工具确实注册成功；日报内容能体现 `MEMORY.md` 里记住的偏好，验证长期记忆真正在跨天场景里生效；`notify` 的推送有独立的 `tool_invocations` 审计记录；同一个 Profile 同样能被人工触发一次做验证。
+**验收要点：** 业务方全程只写 SKILL.md（需要 MCP 时再加 `mcp_servers.yaml`），不写一行 Java 代码、也不用手写 Profile；`GET /api/v1/tools` 能查到新闻 MCP server 暴露的工具确实注册成功；日报内容能体现 `MEMORY.md` 里记住的偏好，验证长期记忆真正在跨天场景里生效；`notify` 的推送有独立的 `tool_invocations` 审计记录；同一个 Profile 同样能被人工触发一次做验证。
 
 涉及能力四方式一 + 方式二（SKILL.md 零代码 + MCP）+ 能力四内置 `NotifyTools`（推送）+ 能力三（Memory）+ 定时任务（`AgentScheduler`）。
 

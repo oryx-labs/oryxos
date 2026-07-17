@@ -5,9 +5,12 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oryxos.core.session.Message;
 import io.oryxos.core.session.SessionManager;
+import io.oryxos.core.session.SessionSummary;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 /**
  * SessionManager 的 JPA 实现。
@@ -70,6 +73,28 @@ public class JpaSessionManager implements SessionManager {
     entity.setArchivedAt(Instant.now());
     repository.save(entity);
     return true;
+  }
+
+  @Override
+  public List<SessionSummary> listRecent(int limit) {
+    // 按最后活跃倒序取前 N，只投影摘要字段（不反解析正文给外部）；条数从 messages_json 现算，≤N 条可接受
+    return repository
+        .findAll(PageRequest.of(0, limit, Sort.by(Sort.Direction.DESC, "lastActiveAt")))
+        .stream()
+        .map(this::toSummary)
+        .toList();
+  }
+
+  private SessionSummary toSummary(Session e) {
+    return new SessionSummary(
+        e.getSessionId(),
+        e.getProfileName(),
+        e.getChannel(),
+        e.getUserId(),
+        e.getStatus(),
+        e.getCreatedAt(),
+        e.getLastActiveAt(),
+        readMessages(e.getMessagesJson()).size());
   }
 
   /** 全库唯一的 session_id 拼接点。 */

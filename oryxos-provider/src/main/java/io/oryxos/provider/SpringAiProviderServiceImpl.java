@@ -1,6 +1,12 @@
 package io.oryxos.provider;
 
 import io.oryxos.core.profile.Profile;
+import io.oryxos.core.provider.LlmCallAuditor;
+import io.oryxos.core.provider.ProviderRequest;
+import io.oryxos.core.provider.ProviderResponse;
+import io.oryxos.core.provider.ProviderService;
+import io.oryxos.core.provider.ToolCallRequest;
+import io.oryxos.core.provider.Usage;
 import java.util.List;
 import java.util.Map;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -12,24 +18,26 @@ import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.ai.openai.OpenAiChatOptions;
 
 /**
- * Provider 前台：按 Profile 显式路由到对应 ChatModel，完成一次调用并落审计。
+ * Provider 前台（core {@link ProviderService} 契约的 Spring AI 实现）：按 Profile 显式路由到对应
+ * ChatModel，完成一次调用并落审计。
  *
  * <p>宪法 II/III：显式 name→ChatModel 映射、调用方式 {@code chatModel.call(new Prompt(...))}、
  * proxyToolCalls=true 关闭框架自动工具执行——工具 schema 只翻译、tool call 原样透传。
  */
-public class ProviderService {
+public class SpringAiProviderServiceImpl implements ProviderService {
 
   private final Map<String, ChatModel> providerMap;
   private final ToolSchemaAdapter adapter;
   private final LlmCallAuditor audit;
 
-  public ProviderService(
+  public SpringAiProviderServiceImpl(
       Map<String, ChatModel> providerMap, ToolSchemaAdapter adapter, LlmCallAuditor audit) {
     this.providerMap = Map.copyOf(providerMap);
     this.adapter = adapter;
     this.audit = audit;
   }
 
+  @Override
   public ProviderResponse chat(String sessionId, Profile profile, ProviderRequest request) {
     String providerName = profile.provider().name();
     ChatModel model = providerMap.get(providerName);

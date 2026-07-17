@@ -1,28 +1,39 @@
-<svg viewBox="0 0 820 270" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
-  <rect width="820" height="270" fill="#ffffff"/>
+<svg viewBox="0 0 980 238" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="980" height="238" fill="#ffffff"/>
   <defs>
     <marker id="c292" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
   </defs>
-  <text x="410" y="34" fill="#1e293b" font-size="14" font-weight="bold" text-anchor="middle">核心阶段：手动定义一个 Agent 的完整路径（不写一行 Java）</text>
-  <rect x="40" y="70" width="170" height="80" rx="8" fill="#fce7f3" stroke="#db2777" stroke-width="2"/>
-  <text x="125" y="98" fill="#be185d" font-size="11.5" font-weight="bold" text-anchor="middle">① 写 SKILL.md</text>
-  <text x="125" y="118" fill="#db2777" font-size="9" text-anchor="middle">.oryxos/skills/&lt;name&gt;.md</text>
-  <text x="125" y="134" fill="#db2777" font-size="9" text-anchor="middle">定义"做什么"</text>
-  <line x1="210" y1="110" x2="243" y2="110" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c292)"/>
-  <rect x="245" y="70" width="170" height="80" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
-  <text x="330" y="98" fill="#1d4ed8" font-size="11.5" font-weight="bold" text-anchor="middle">② 写 Profile YAML</text>
-  <text x="330" y="118" fill="#1e40af" font-size="9" text-anchor="middle">.oryxos/profiles/&lt;name&gt;.yaml</text>
-  <text x="330" y="134" fill="#1e40af" font-size="9" text-anchor="middle">skills 引用 + 运行时绑定</text>
-  <line x1="415" y1="110" x2="448" y2="110" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c292)"/>
-  <rect x="450" y="70" width="170" height="80" rx="8" fill="#ede9fe" stroke="#a855f7" stroke-width="2"/>
-  <text x="535" y="98" fill="#7c3aed" font-size="11.5" font-weight="bold" text-anchor="middle">③ 加载生效</text>
-  <text x="535" y="118" fill="#6b21a8" font-size="9" text-anchor="middle">Skill 改动即时生效（每次重读）</text>
-  <text x="535" y="134" fill="#6b21a8" font-size="9" text-anchor="middle">新 Profile 需重启注册</text>
-  <line x1="620" y1="110" x2="653" y2="110" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c292)"/>
-  <rect x="655" y="70" width="130" height="80" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.4"/>
-  <text x="720" y="98" fill="#b45309" font-size="11.5" font-weight="bold" text-anchor="middle">④ 自己跑起来</text>
-  <text x="720" y="118" fill="#92400e" font-size="9" text-anchor="middle">schedules 到点触发</text>
-  <text x="720" y="134" fill="#92400e" font-size="9" text-anchor="middle">notify 送出结果</text>
-  <text x="410" y="200" fill="#64748b" font-size="11.5" text-anchor="middle">③ 里那个"新 Profile 需重启"就是本节要补的短板——运行时注册方法立好之后，</text>
-  <text x="410" y="222" fill="#64748b" font-size="11.5" text-anchor="middle">30 节由 POST /api/v1/agents 一次调用完成①~④，免重启</text>
+
+  <text x="490" y="34" fill="#334155" font-size="15" font-weight="bold" text-anchor="middle">自动扫描：一份 Skill → 一个已注册、会自己跑的 Agent</text>
+
+  <!-- ① 放文件 -->
+  <rect x="24" y="60" width="212" height="112" rx="10" fill="#fce7f3" stroke="#db2777" stroke-width="2.4"/>
+  <text x="130" y="92" fill="#be185d" font-size="13" font-weight="bold" text-anchor="middle">① 放一份 SKILL.md</text>
+  <text x="130" y="118" fill="#db2777" font-size="10.5" text-anchor="middle">进 .oryxos/skills/</text>
+  <text x="130" y="138" fill="#db2777" font-size="10.5" text-anchor="middle">（或 30 节 API 写入）</text>
+
+  <!-- ② 解析 -->
+  <rect x="272" y="60" width="212" height="112" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2.4"/>
+  <text x="378" y="92" fill="#1d4ed8" font-size="13" font-weight="bold" text-anchor="middle">② 扫描 + 解析</text>
+  <text x="378" y="118" fill="#1e40af" font-size="10.5" text-anchor="middle">SkillLoader 读文件</text>
+  <text x="378" y="138" fill="#1e40af" font-size="10.5" text-anchor="middle">拆 frontmatter / 正文</text>
+
+  <!-- ③ 派生 -->
+  <rect x="520" y="60" width="212" height="112" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.4"/>
+  <text x="626" y="92" fill="#b45309" font-size="13" font-weight="bold" text-anchor="middle">③ 派生 Profile</text>
+  <text x="626" y="118" fill="#92400e" font-size="10.5" text-anchor="middle">deriveProfile(skill)</text>
+  <text x="626" y="138" fill="#92400e" font-size="10.5" text-anchor="middle">frontmatter → Profile</text>
+
+  <!-- ④ 注册 -->
+  <rect x="768" y="60" width="212" height="112" rx="10" fill="#dcfce7" stroke="#16a34a" stroke-width="2.4"/>
+  <text x="874" y="92" fill="#15803d" font-size="13" font-weight="bold" text-anchor="middle">④ 注册</text>
+  <text x="874" y="115" fill="#166534" font-size="10.5" text-anchor="middle">ProfileRegistry；有</text>
+  <text x="874" y="133" fill="#166534" font-size="10.5" text-anchor="middle">schedules 交 Scheduler</text>
+  <text x="874" y="153" fill="#15803d" font-size="10.5" font-weight="bold" text-anchor="middle">→ 到点自己跑</text>
+
+  <line x1="238" y1="116" x2="270" y2="116" stroke="#94a3b8" stroke-width="2" marker-end="url(#c292)"/>
+  <line x1="486" y1="116" x2="518" y2="116" stroke="#94a3b8" stroke-width="2" marker-end="url(#c292)"/>
+  <line x1="734" y1="116" x2="766" y2="116" stroke="#94a3b8" stroke-width="2" marker-end="url(#c292)"/>
+
+  <text x="490" y="212" fill="#64748b" font-size="11.5" text-anchor="middle">启动时扫描 与 30 节 API 新增，走同一段"派生 + 注册"代码——两条来源行为必须一致</text>
 </svg>

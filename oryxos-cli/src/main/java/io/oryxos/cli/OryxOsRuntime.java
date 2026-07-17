@@ -84,7 +84,8 @@ import org.springframework.web.client.RestClient;
 })
 public class OryxOsRuntime {
 
-  private static final Path ORYXOS_ROOT = Path.of(".oryxos");
+  // 工作区根目录默认 ./.oryxos；可用系统属性 oryxos.root 覆盖（集成测试指向临时工作区，默认行为不变）。
+  private static final Path ORYXOS_ROOT = Path.of(System.getProperty("oryxos.root", ".oryxos"));
 
   @Bean
   Map<String, ChatModel> providerMap(ProvidersProperties properties) {

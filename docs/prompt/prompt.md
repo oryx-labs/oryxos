@@ -204,3 +204,26 @@
 182. 优化 readme：1. 根据最新内容规划展示内容 2. 加上编译、启动说明（一键启动 server 和 manager）3. 把 website/public/images/manager.jpg 放到 readme
 183. 在 readme 中加上 manager 开发模式 npm run dev 的说明
 184. 新增的提示词写入 docs/prompt/prompt.md
+
+## 第六轮（管理台收尾 + 27~30 课件重构 + 第27节开发：GET /sessions、mock provider、集成测试）
+
+185. 侧边的 oryxos 管理控制台这里用 logo（website/public/images/logo.svg）
+186. 把"管理台"三个字去掉
+187. 切换到远程的 class-27 分支
+188. review 第27节文档：这是全流程串联/联调，结构要变——先讲本节目的（chat / REST 进来的一次完整对话、让 agent 主流程可用），再围绕它规划做哪些、怎么验收；不是在开发某个功能
+189. 标题也可以变一下
+190. 没问题，写（确认新结构 + 标题，重写第27节）
+191. 第28节：目的是定时链路（定时触发 → ReAct → notify 推送）、重启恢复、多 Agent 并存；用第27节的结构完成，同样完善 harness
+192. "钟推"改为"定时"；27/28 内容改成人能看懂的（要讲给用户听、也当 skill / spec-kit 输入），优化内容
+193. 图如果需要重新画就重新画；27/28 文件名要改吗
+194. 27、28 打好基础了。29 要实现插件化 Agent：① 插件化 agent 设计（skill 放哪、格式、页面上一句话自动变 skill）② 自动扫描 skill、按 skill 里定义的定时执行——你先理解
+195. 听你的，可以；可同时把 29、30 的标题改成更合适的
+196. 继续（按 skill-centric 重写 29/30 + 反向同步 TechSol §11 + 改配图/文件名）
+197. /oryxos-lesson-dev 27
+198. 1. 是的（引入 SessionSummary 值对象、listRecent 返回 List<SessionSummary>）2. 可以（按实现计划落地）
+199. 增加 mock 功能，不需要真 key，提供一个独立的 mock provider 模拟返回，看全链路（对话 / 记忆 / tool / react）是否正常、管理台是否返回对应数据——你先思考
+200. 1. 同意（方案 A：mock = 一个名为 mock 的 provider）2. 不用演示 http_get，直接返回结果，但要触发执行"文件写入"的 tool 让它有行为 3. 可以，加进第27节
+201. 你来增加一个集成测试：启动服务、自己发起对话、创建 session，跑完能查到 session / 记忆 / tool 调用等
+202. 我手动怎么测试，告诉我流程
+203. 这部分（手动测试流程）回写到第27节课件；并根据实际做的事情调整第27节内容
+204. 提示词回写到 docs/prompt/prompt.md 中

@@ -11,3 +11,7 @@ oryxos:
     - name: deepseek
       api-key: ""          # ← 填入你的 DeepSeek API Key（留空启动会点名报错）
       base-url: https://api.deepseek.com
+    # 内置 mock provider：不连真实模型、无需 key，用于无 key 自测全链路。
+    # 用它建/配一个 provider: mock 的 Agent，发一条"记住…"消息，即可在管理台看到
+    # 会话/记忆/工具端点被填充（一次 save_memory 工具调用 + 两轮 ReAct）。生产可删。
+    - name: mock

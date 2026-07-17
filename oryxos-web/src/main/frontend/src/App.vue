@@ -17,13 +17,7 @@ const NAV = [
   { key: 'whitelist', label: 'Sandbox 白名单' },
   { key: 'memory', label: '长期记忆', path: '/api/v1/memory' },
   { key: 'info', label: '运行状态', path: '/api/v1/info' },
-  {
-    key: 'sessions',
-    label: '会话',
-    note:
-      '本版管理台只读，未提供“列出全部会话”的端点（第 26 节有意的边界）。会话按 id 查询：GET /api/v1/sessions/{id}；' +
-      '创建 / 发消息 / 归档走 REST API 或 CLI。动态的会话与 Agent 管理是后续章节的内容。',
-  },
+  { key: 'sessions', label: '会话', path: '/api/v1/sessions' },
 ]
 
 const active = ref('overview')
@@ -58,6 +52,8 @@ function cols(key) {
   if (key === 'profiles') return ['name', 'description', 'provider', 'model', 'tools', 'skills']
   if (key === 'tools') return ['name', 'description']
   if (key === 'providers') return ['name', 'status']
+  if (key === 'sessions')
+    return ['sessionId', 'profileName', 'channel', 'status', 'messageCount', 'lastActiveAt']
   return []
 }
 
@@ -171,7 +167,7 @@ function select(key) {
               <tbody>
                 <tr v-if="!state[active].data.length"><td :colspan="cols(active).length" class="empty">（暂无数据）</td></tr>
                 <tr v-for="(row, i) in state[active].data" :key="i">
-                  <td v-for="c in cols(active)" :key="c" :class="{ mono: c === 'name' }">
+                  <td v-for="c in cols(active)" :key="c" :class="{ mono: c === 'name' || c === 'sessionId' }">
                     {{ Array.isArray(row[c]) ? row[c].join(', ') : row[c] }}
                   </td>
                 </tr>

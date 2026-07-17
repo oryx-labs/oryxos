@@ -72,11 +72,11 @@ info "Local branch: ${LOCAL_BRANCH}"
 
 # ── Collect changed files ──────────────────────────────────────────────────────
 # 1. Committed locally but not yet pushed
-COMMITTED_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --name-only --diff-filter=ACM \
+COMMITTED_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=ACM \
   "origin/${LOCAL_BRANCH}" HEAD 2>/dev/null || true)
 
 # 2. Modified in working tree but not committed
-WORKDIR_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --name-only --diff-filter=ACM \
+WORKDIR_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=ACM \
   HEAD 2>/dev/null || true)
 
 # 3. Untracked new files (entire repo, respects .gitignore)
@@ -85,11 +85,11 @@ UNTRACKED_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false ls-files --othe
 
 # 4. Files deleted locally that exist on origin → remove on remote
 _DELETED_RAW=$(printf '%s\n%s\n%s' \
-  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --name-only --diff-filter=D \
+  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=D \
       "origin/${LOCAL_BRANCH}" HEAD 2>/dev/null || true)" \
-  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --cached --name-only --diff-filter=D \
+  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --cached --name-only --diff-filter=D \
       2>/dev/null || true)" \
-  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --name-only --diff-filter=D \
+  "$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=D \
       2>/dev/null || true)" \
   | sort -u)
 # Keep only files that are truly gone from disk
@@ -167,6 +167,8 @@ fi
 
 # ── Build remote delete commands (passed via env to avoid injection) ────────────
 DELETED_LIST=$(printf '%s' "$DELETED_FILES" | tr '\n' ':')
+# base64 传输：删除的文件名可能含空格（如"…为 Demo 做准备.md"），直接作为 ssh 命令行 env 赋值会被远端 shell 二次分词而崩，故编码。
+DELETED_LIST_B64=$(printf '%s' "$DELETED_LIST" | base64 | tr -d '\n')
 
 # ── Remote: pull → extract → commit → push ────────────────────────────────────
 info "Syncing remote ..."
@@ -175,7 +177,7 @@ ssh "${REMOTE_HOST}" \
   LOCAL_BRANCH="${LOCAL_BRANCH}" \
   ARCHIVE_NAME="${ARCHIVE_NAME}" \
   SKIP_ARCHIVE="${SKIP_ARCHIVE}" \
-  DELETED_LIST="${DELETED_LIST}" \
+  DELETED_LIST_B64="${DELETED_LIST_B64}" \
   COMMIT_MSG_B64="${COMMIT_MSG_B64}" \
   'bash -s' <<'REMOTE_SCRIPT' || true
 set -euo pipefail
@@ -210,6 +212,7 @@ fi
 find "${REMOTE_DIR}" -maxdepth 1 -name '*.tar.gz' -delete
 
 # Remove files deleted locally
+DELETED_LIST=$(printf '%s' "${DELETED_LIST_B64:-}" | base64 -d 2>/dev/null || true)
 if [[ -n "${DELETED_LIST}" ]]; then
   info "Removing locally-deleted files on remote ..."
   IFS=':' read -ra del_files <<< "${DELETED_LIST}"
