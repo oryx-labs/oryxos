@@ -6,6 +6,7 @@ import io.oryxos.core.agent.AgentScheduler;
 import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.agent.PromptBuilder;
 import io.oryxos.core.agent.ReActLoop;
+import io.oryxos.core.agent.ScheduledTaskStore;
 import io.oryxos.core.agent.ToolExecutor;
 import io.oryxos.core.agent.ToolInvocationAuditor;
 import io.oryxos.core.context.ContextLoader;
@@ -26,11 +27,14 @@ import io.oryxos.provider.ProvidersProperties;
 import io.oryxos.provider.SpringAiProviderServiceImpl;
 import io.oryxos.provider.ToolSchemaAdapter;
 import io.oryxos.storage.JpaLlmCallAuditor;
+import io.oryxos.storage.JpaScheduledTaskStore;
 import io.oryxos.storage.JpaSessionManager;
 import io.oryxos.storage.JpaToolInvocationAuditor;
 import io.oryxos.storage.LlmCallRepository;
 import io.oryxos.storage.MemoryEntryRepository;
+import io.oryxos.storage.ScheduledTaskRepository;
 import io.oryxos.storage.SessionRepository;
+import io.oryxos.storage.TaskExecutionRepository;
 import io.oryxos.storage.ToolInvocationRepository;
 import io.oryxos.tool.ToolRegistry;
 import io.oryxos.tool.builtin.FileTools;
@@ -56,6 +60,7 @@ import io.oryxos.tool.web.DuckDuckGoSearchProvider;
 import java.nio.file.Path;
 import java.util.Map;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -84,8 +89,15 @@ import org.springframework.web.client.RestClient;
 })
 public class OryxOsRuntime {
 
-  // 工作区根目录默认 ./.oryxos；可用系统属性 oryxos.root 覆盖（集成测试指向临时工作区，默认行为不变）。
-  private static final Path ORYXOS_ROOT = Path.of(System.getProperty("oryxos.root", ".oryxos"));
+  // 工作区根目录默认 ./.oryxos；可用属性 oryxos.root 覆盖（集成测试指向临时工作区，默认行为不变）。
+  // 从 Spring Environment 解析（而非 JVM 静态捕获 System property）：使每个上下文各持自己的根，
+  // 支持同一 JVM 内多套 hermetic 测试上下文并存（各自的 @DynamicPropertySource / SpringApplicationBuilder 根互不干扰）。
+  @Value("${oryxos.root:.oryxos}")
+  private String oryxosRootProp;
+
+  private Path oryxosRoot() {
+    return Path.of(oryxosRootProp);
+  }
 
   @Bean
   Map<String, ChatModel> providerMap(ProvidersProperties properties) {
@@ -110,12 +122,12 @@ public class OryxOsRuntime {
 
   @Bean
   ProfileRegistry profileRegistry(Map<String, ChatModel> providerMap) {
-    return new ProfileLoader(ORYXOS_ROOT.resolve("profiles"), providerMap.keySet()).loadAll();
+    return new ProfileLoader(oryxosRoot().resolve("profiles"), providerMap.keySet()).loadAll();
   }
 
   @Bean
   ContextLoader contextLoader() {
-    return new ContextLoader(ORYXOS_ROOT);
+    return new ContextLoader(oryxosRoot());
   }
 
   @Bean
@@ -150,7 +162,7 @@ public class OryxOsRuntime {
       case "sqlite" -> new SqliteMemoryStore(memoryEntryRepository);
       case "mem0" ->
           new Mem0MemoryStore(restClient.mutate().baseUrl(mem0BaseUrl).build(), mem0UserId);
-      default -> new MarkdownMemoryStore(ORYXOS_ROOT);
+      default -> new MarkdownMemoryStore(oryxosRoot());
     };
   }
 
@@ -181,7 +193,7 @@ public class OryxOsRuntime {
     // 记忆工具：save_memory / recall_memory（补齐 20 节预留的两工具面），只认门面对后端无感
     registry.registerAnnotated(new MemoryTools(memoryService));
     // MCP：失联的 server 只 WARN 跳过，不拖垮启动
-    new McpClientService(new McpConfigLoader(ORYXOS_ROOT.resolve("mcp_servers.yaml")))
+    new McpClientService(new McpConfigLoader(oryxosRoot().resolve("mcp_servers.yaml")))
         .connectAll(registry);
     return registry;
   }
@@ -241,13 +253,22 @@ public class OryxOsRuntime {
     return scheduler;
   }
 
+  /** 28 节：定时任务状态与执行历史落 SQLite（重启不丢），并支撑管理台的查看/立即执行/启用停用。 */
+  @Bean
+  ScheduledTaskStore scheduledTaskStore(
+      ScheduledTaskRepository taskRepository, TaskExecutionRepository executionRepository) {
+    return new JpaScheduledTaskStore(taskRepository, executionRepository);
+  }
+
   /** 第三触发源"钟推"（25 节）：initMethod=registerAll 启动即扫描所有 Profile.schedules 逐条注册。 */
   @Bean(initMethod = "registerAll")
   AgentScheduler agentScheduler(
       ThreadPoolTaskScheduler taskScheduler,
       ProfileRegistry profileRegistry,
       AgentService agentService,
-      SessionManager sessionManager) {
-    return new AgentScheduler(taskScheduler, profileRegistry, agentService, sessionManager);
+      SessionManager sessionManager,
+      ScheduledTaskStore scheduledTaskStore) {
+    return new AgentScheduler(
+        taskScheduler, profileRegistry, agentService, sessionManager, scheduledTaskStore);
   }
 }

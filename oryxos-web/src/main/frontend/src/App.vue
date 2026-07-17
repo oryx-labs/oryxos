@@ -17,6 +17,7 @@ const NAV = [
   { key: 'whitelist', label: 'Sandbox 白名单' },
   { key: 'memory', label: '长期记忆', path: '/api/v1/memory' },
   { key: 'info', label: '运行状态', path: '/api/v1/info' },
+  { key: 'schedules', label: '定时任务', path: '/api/v1/schedules' },
   { key: 'sessions', label: '会话', path: '/api/v1/sessions' },
 ]
 
@@ -52,6 +53,8 @@ function cols(key) {
   if (key === 'profiles') return ['name', 'description', 'provider', 'model', 'tools', 'skills']
   if (key === 'tools') return ['name', 'description']
   if (key === 'providers') return ['name', 'status']
+  if (key === 'schedules')
+    return ['taskId', 'profileName', 'cron', 'zone', 'enabled', 'runCount', 'lastStatus', 'lastRunAt']
   if (key === 'sessions')
     return ['sessionId', 'profileName', 'channel', 'status', 'messageCount', 'lastActiveAt']
   return []
@@ -74,7 +77,91 @@ async function load(key) {
 
 function select(key) {
   active.value = key
+  sessionDetail.value = null // 切页时收起会话详情
+  execDetail.value = null // 切页时收起执行记录
   if (NAV.find((n) => n.key === key)?.path && !state[key]) load(key)
+}
+
+// —— 会话详情：点一行会话，拉 GET /sessions/{id} 看完整对话内容 ——
+const sessionDetail = ref(null) // {loading, error, id, data:{sessionId, profileName, messages[]}}
+
+async function openSession(id) {
+  sessionDetail.value = { loading: true, error: null, id, data: null }
+  try {
+    const res = await fetch(`/api/v1/sessions/${encodeURIComponent(id)}`)
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    sessionDetail.value = { loading: false, error: null, id, data: body.data }
+  } catch (e) {
+    sessionDetail.value = { loading: false, error: e.message, id, data: null }
+  }
+}
+
+function closeSession() {
+  sessionDetail.value = null
+}
+
+// 对话角色的中文标签
+function roleLabel(role) {
+  return { user: '用户', assistant: '助手', tool: '工具' }[role] ?? role
+}
+
+// —— 定时任务管理动作（28 节：管理台可管，不再只读）——
+const busy = ref(null) // 正在操作的 taskId，防重复点击
+
+// 立即执行一次（POST /schedules/{id}/run），跑完刷新列表
+async function runTask(id) {
+  busy.value = id
+  try {
+    const res = await fetch(`/api/v1/schedules/${id}/run`, { method: 'POST' })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '执行失败')
+    await load('schedules')
+    // 若正打开着这个任务的执行记录，跑完顺手刷新
+    if (execDetail.value?.taskId === id) await openExecutions(id)
+  } catch (e) {
+    state.schedules = { ...state.schedules, error: e.message }
+  } finally {
+    busy.value = null
+  }
+}
+
+// 执行记录历史：点"执行记录"拉 GET /schedules/{id}/executions
+const execDetail = ref(null) // {loading, error, taskId, data:[{startedAt,success,durationMs,errorMessage,sessionId}]}
+
+async function openExecutions(taskId) {
+  execDetail.value = { loading: true, error: null, taskId, data: null }
+  try {
+    const res = await fetch(`/api/v1/schedules/${encodeURIComponent(taskId)}/executions`)
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    execDetail.value = { loading: false, error: null, taskId, data: body.data }
+  } catch (e) {
+    execDetail.value = { loading: false, error: e.message, taskId, data: null }
+  }
+}
+
+function closeExecutions() {
+  execDetail.value = null
+}
+
+// 启用/停用（PUT /schedules/{id}），切换后刷新列表
+async function toggleTask(row) {
+  busy.value = row.taskId
+  try {
+    const res = await fetch(`/api/v1/schedules/${row.taskId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !row.enabled }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '切换失败')
+    await load('schedules')
+  } catch (e) {
+    state.schedules = { ...state.schedules, error: e.message }
+  } finally {
+    busy.value = null
+  }
 }
 </script>
 
@@ -159,6 +246,89 @@ function select(key) {
                 <span v-if="!state[active].data.providers?.length" class="empty">（无）</span>
               </p>
             </div>
+            <!-- schedules：定时任务，带管理动作（立即执行 / 启用停用 / 执行记录）——28 节，管理台可管 -->
+            <template v-else-if="active === 'schedules'">
+              <!-- 执行记录详情视图 -->
+              <div v-if="execDetail">
+                <button class="btn back" @click="closeExecutions">← 返回定时任务</button>
+                <div class="sess-meta"><span class="mono">{{ execDetail.taskId }}</span><span class="empty">执行记录（最近 100 条）</span></div>
+                <p v-if="execDetail.loading" class="empty">加载中…</p>
+                <p v-else-if="execDetail.error" class="error">出错：{{ execDetail.error }}</p>
+                <template v-else-if="execDetail.data">
+                  <p v-if="!execDetail.data.length" class="empty">（还没有执行记录 · 点"立即执行"或等 cron 到点）</p>
+                  <table v-else>
+                    <thead><tr><th>开始时间</th><th>结果</th><th>耗时(ms)</th><th>会话</th><th>错误</th></tr></thead>
+                    <tbody>
+                      <tr v-for="(e, i) in execDetail.data" :key="i">
+                        <td class="mono">{{ e.startedAt }}</td>
+                        <td><span :class="e.success ? 'ok' : 'off'">{{ e.success ? '成功' : '失败' }}</span></td>
+                        <td>{{ e.durationMs }}</td>
+                        <td class="mono">{{ e.sessionId ?? '—' }}</td>
+                        <td class="error">{{ e.errorMessage ?? '' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </template>
+              </div>
+              <!-- 列表视图 -->
+              <table v-else>
+                <thead>
+                  <tr><th v-for="c in cols('schedules')" :key="c">{{ c }}</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!state.schedules.data.length"><td :colspan="cols('schedules').length + 1" class="empty">（暂无定时任务 · 在 Profile 的 schedules 里定义）</td></tr>
+                  <tr v-for="row in state.schedules.data" :key="row.taskId">
+                    <td v-for="c in cols('schedules')" :key="c" :class="{ mono: c === 'taskId' || c === 'cron' }">
+                      <span v-if="c === 'enabled'" :class="row.enabled ? 'ok' : 'off'">{{ row.enabled ? '启用' : '停用' }}</span>
+                      <template v-else>{{ row[c] ?? '—' }}</template>
+                    </td>
+                    <td class="ops">
+                      <button class="btn" :disabled="busy === row.taskId" @click="runTask(row.taskId)">立即执行</button>
+                      <button class="btn" :disabled="busy === row.taskId" @click="toggleTask(row)">{{ row.enabled ? '停用' : '启用' }}</button>
+                      <button class="btn" @click="openExecutions(row.taskId)">执行记录</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+            <!-- sessions：列表可点开看完整对话 -->
+            <template v-else-if="active === 'sessions'">
+              <!-- 详情视图：一条会话的完整对话 -->
+              <div v-if="sessionDetail">
+                <button class="btn back" @click="closeSession">← 返回会话列表</button>
+                <p v-if="sessionDetail.loading" class="empty">加载中…</p>
+                <p v-else-if="sessionDetail.error" class="error">出错：{{ sessionDetail.error }}</p>
+                <template v-else-if="sessionDetail.data">
+                  <div class="sess-meta">
+                    <span class="mono">{{ sessionDetail.data.sessionId }}</span>
+                    <span class="tag">{{ sessionDetail.data.profileName }}</span>
+                    <span class="empty">{{ sessionDetail.data.messages.length }} 条消息</span>
+                  </div>
+                  <p v-if="!sessionDetail.data.messages.length" class="empty">（该会话暂无对话内容）</p>
+                  <div v-else class="chat">
+                    <div v-for="(m, i) in sessionDetail.data.messages" :key="i" :class="['msg', m.role]">
+                      <div class="msg-role">
+                        {{ roleLabel(m.role) }}<span v-if="m.toolName" class="mono tool-name"> · {{ m.toolName }}</span>
+                      </div>
+                      <pre class="msg-body">{{ m.content || '（空）' }}</pre>
+                    </div>
+                  </div>
+                </template>
+              </div>
+              <!-- 列表视图：每行一个"查看"按钮 -->
+              <table v-else>
+                <thead>
+                  <tr><th v-for="c in cols('sessions')" :key="c">{{ c }}</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-if="!state.sessions.data.length"><td :colspan="cols('sessions').length + 1" class="empty">（暂无会话）</td></tr>
+                  <tr v-for="(row, i) in state.sessions.data" :key="i">
+                    <td v-for="c in cols('sessions')" :key="c" :class="{ mono: c === 'sessionId' }">{{ row[c] }}</td>
+                    <td class="ops"><button class="btn" @click="openSession(row.sessionId)">查看对话</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
             <!-- profiles / tools：表格 -->
             <table v-else-if="Array.isArray(state[active].data)">
               <thead>
@@ -205,6 +375,27 @@ th { color: var(--text-2); font-weight: 500; }
 .error { color: var(--err); }
 .tag { display: inline-block; background: var(--bg-mute); color: var(--brand); border-radius: var(--radius); padding: 2px 8px; margin-right: 6px; }
 .memtext { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; white-space: pre-wrap; }
+
+/* 定时任务：状态标记 + 操作按钮 */
+.ok { color: var(--ok); }
+.off { color: var(--text-3); }
+.ops { white-space: nowrap; }
+.btn { background: var(--bg-mute); color: var(--text-1); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; margin-right: 6px; font-size: 12px; cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--brand); color: var(--brand); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 会话详情：对话气泡 */
+.btn.back { margin-bottom: 16px; }
+.sess-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.chat { display: flex; flex-direction: column; gap: 12px; }
+.msg { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; background: var(--bg-soft); max-width: 80%; }
+.msg.user { align-self: flex-end; background: var(--brand-soft); border-color: transparent; }
+.msg.assistant { align-self: flex-start; }
+.msg.tool { align-self: flex-start; background: var(--bg-mute); }
+.msg-role { font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+.tool-name { color: var(--brand); }
+.msg-body { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: inherit; }
+.msg.tool .msg-body { font-family: var(--font-mono); font-size: 13px; color: var(--text-2); }
 
 /* 概览页 */
 .hero { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 24px; }

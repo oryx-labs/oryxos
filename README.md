@@ -210,6 +210,10 @@ All endpoints are prefixed with `/api/v1`:
 | `GET` | `/profiles` | List all profiles |
 | `GET` | `/memory` | Read long-term memory |
 | `GET` | `/tools` | List available tools |
+| `GET` | `/schedules` | List scheduled tasks + run state |
+| `GET` | `/schedules/{id}/executions` | Scheduled-task execution history |
+| `POST` | `/schedules/{id}/run` | Run a scheduled task now |
+| `PUT` | `/schedules/{id}` | Enable / disable a scheduled task |
 | `GET` | `/health` | Health check |
 | `GET` | `/info` | Runtime info + provider status |
 
