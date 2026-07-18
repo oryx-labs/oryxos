@@ -52,7 +52,7 @@
   <rect x="874" y="116" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
   <text x="958" y="134" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">Custom MCP servers</text>
   <rect x="874" y="148" width="168" height="26" rx="5" fill="#1a1a1a" stroke="#374151" stroke-width="1"/>
-  <text x="958" y="166" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">SKILL.md (zero-code)</text>
+  <text x="958" y="166" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#9ca3af" text-anchor="middle">AGENT.md dir (zero-code)</text>
   <text x="958" y="192" font-family="'SF Mono','Fira Code',monospace" font-size="9" fill="#4b5563" text-anchor="middle">MCP JSON-RPC protocol</text>
 
   <!-- ════════════════════════════════════════ -->
@@ -85,11 +85,11 @@
 
   <!-- ── Band 2: Agent Layer (NEW) ── -->
   <rect x="316" y="196" width="448" height="58" rx="7" fill="#1f0d18" stroke="#ec4899" stroke-width="1.5"/>
-  <text x="332" y="214" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#ec4899" font-weight="bold">Agent Layer  ·  一个业务 Agent = Skill + Profile</text>
+  <text x="332" y="214" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#ec4899" font-weight="bold">Agent Layer  ·  一个业务 Agent = 一个目录（AGENT.md）</text>
   <rect x="316" y="222" width="210" height="26" rx="5" fill="#33121f" stroke="#ec4899" stroke-width="1"/>
-  <text x="421" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#f9a8d4" text-anchor="middle">Skill · 做什么（SKILL.md）</text>
+  <text x="421" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#f9a8d4" text-anchor="middle">正文 · 做什么（AGENT.md）</text>
   <rect x="554" y="222" width="210" height="26" rx="5" fill="#33121f" stroke="#ec4899" stroke-width="1"/>
-  <text x="659" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#f9a8d4" text-anchor="middle">Profile · 怎么跑（YAML）</text>
+  <text x="659" y="240" font-family="'SF Mono','Fira Code',monospace" font-size="9.5" fill="#f9a8d4" text-anchor="middle">frontmatter · 谁/何时/怎么跑</text>
 
   <line x1="540" y1="254" x2="540" y2="276" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr-gray)"/>
 

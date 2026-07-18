@@ -102,7 +102,6 @@ class MockProviderFlowTest {
             List.of(),
             List.of(),
             List.of(),
-            List.of(),
             Profile.Settings.defaults());
     ProfileRegistry profileRegistry = new ProfileRegistry(Map.of(AGENT, profile));
     SessionManager sessionManager = mock(SessionManager.class);

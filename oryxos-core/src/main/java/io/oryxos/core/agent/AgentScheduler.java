@@ -7,8 +7,10 @@ import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -21,7 +23,7 @@ import org.springframework.scheduling.support.SimpleTriggerContext;
  * 定时任务这个第三触发源（"钟推"）。CLI/Web 是人推，本类到点自己拼一条消息交给 {@link AgentService#process}——
  * 走跟人推完全一样的入口，ReAct/Tool/Provider 一个字不用改（§8.5）。
  *
- * <p>只干一件事：到点了拼消息、交给编排入口。消息说什么是 Profile/SKILL.md 的事，交上去怎么处理是 ReActLoop 的事， 都不归本类管——职责划窄，不膨胀成工作流引擎。
+ * <p>只干一件事：到点了拼消息、交给编排入口。消息说什么是 Agent（AGENT.md）的事，交上去怎么处理是 ReActLoop 的事， 都不归本类管——职责划窄，不膨胀成工作流引擎。
  *
  * <p>四个坑的解法：坑一配置驱动（{@code TaskScheduler.schedule(...)} 动态注册，不用编译期写死的 {@code @Scheduled}）；
  * 坑二重叠跳过（按任务 id 的进程内 {@link ReentrantLock} + {@code tryLock}，核心阶段单实例，非分布式锁）； 坑三失败隔离（单次失败只记日志不外抛、审计走
@@ -54,6 +56,9 @@ public class AgentScheduler {
   /** 任务 id → 锁：防同一任务重叠执行。进程内锁，核心阶段单实例足够（非分布式锁）。 */
   private final ConcurrentMap<String, Lock> taskLocks = new ConcurrentHashMap<>();
 
+  /** 任务 id → 可注销句柄：为 30 节运行时注销/更新 Agent 铺路（本节只登记、留句柄）。 */
+  private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+
   public AgentScheduler(
       TaskScheduler taskScheduler,
       ProfileRegistry profileRegistry,
@@ -67,26 +72,41 @@ public class AgentScheduler {
     this.taskStore = taskStore;
   }
 
-  /** 启动时扫一遍所有 Profile 的 schedules，逐条注册进 TaskScheduler（配置驱动，坑一）。 */
-  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-      value = "CRLF_INJECTION_LOGS",
-      justification = "日志里的 id/cron/zone 来自运营方手写的 Profile YAML 配置（非请求输入），仅用于启动诊断")
+  /** 启动时扫一遍所有 Agent 的 schedules，逐个 Profile 注册（配置驱动，坑一）。 */
   public void registerAll() {
     for (Profile profile : profileRegistry.all()) {
-      for (ScheduleConfig sc : profile.schedules()) {
-        try {
-          CronTrigger trigger = new CronTrigger(sc.cron(), resolveZone(sc.zone()));
-          taskScheduler.schedule(() -> runOnce(profile, sc), trigger);
-          // 28 节：登记任务状态 + 下次触发到 SQLite（重启后可查；已存在则保留启用状态与运行次数）
-          taskStore.register(
-              sc.id(), profile.name(), sc.cron(), sc.zone(), sc.message(), nextExecution(sc));
-          LOG.info("已注册定时任务 {}（cron={} zone={}）", sc.id(), sc.cron(), sc.zone());
-        } catch (RuntimeException e) {
-          // 坑四附带：单条 cron/时区非法只跳过这条，不拖垮其它规则的注册（FR-007）
-          LOG.warn("定时任务 {} 配置非法，跳过：{}", sc.id(), e.getMessage());
+      registerProfile(profile);
+    }
+  }
+
+  /**
+   * 注册单个 Agent（Profile）的全部定时（29 节：从 {@link #registerAll} 循环体抽出，供 30 节运行时逐个 Agent
+   * 注册/注销）。每条定时留一个可注销句柄进 {@link #scheduledTasks}；单条 cron/时区非法只跳过这条、不拖垮其它（FR-007）。
+   */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志里的 id/cron/zone 来自运营方手写的 AGENT.md 配置（非请求输入），仅用于启动诊断")
+  public void registerProfile(Profile profile) {
+    for (ScheduleConfig sc : profile.schedules()) {
+      try {
+        CronTrigger trigger = new CronTrigger(sc.cron(), resolveZone(sc.zone()));
+        ScheduledFuture<?> future = taskScheduler.schedule(() -> runOnce(profile, sc), trigger);
+        if (future != null) {
+          scheduledTasks.put(sc.id(), future); // 留可注销句柄（30 节用）
         }
+        // 28 节：登记任务状态 + 下次触发到 SQLite（重启后可查；已存在则保留启用状态与运行次数）
+        taskStore.register(
+            sc.id(), profile.name(), sc.cron(), sc.zone(), sc.message(), nextExecution(sc));
+        LOG.info("已注册定时任务 {}（cron={} zone={}）", sc.id(), sc.cron(), sc.zone());
+      } catch (RuntimeException e) {
+        LOG.warn("定时任务 {} 配置非法，跳过：{}", sc.id(), e.getMessage());
       }
     }
+  }
+
+  /** 某任务是否已留下可注销句柄（30 节注销前提；harness 守点）。 */
+  public boolean hasScheduledTask(String taskId) {
+    return scheduledTasks.containsKey(taskId);
   }
 
   /** 定时触发入口：先看启用状态（停用则跳过、不记执行），启用才真正执行。 */

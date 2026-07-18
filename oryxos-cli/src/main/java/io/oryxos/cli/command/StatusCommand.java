@@ -13,8 +13,7 @@ public class StatusCommand implements Runnable {
     Path root = Path.of(".oryxos");
     System.out.println(
         "工作区 .oryxos/  : " + (Files.isDirectory(root) ? "已初始化" : "未初始化（先跑 oryxos init）"));
-    System.out.println("Profile 目录    : " + describeDir(root.resolve("profiles"), "*.yaml"));
-    System.out.println("Skill 目录      : " + describeDir(root.resolve("skills"), "*.md"));
+    System.out.println("Agent 目录      : " + describeDir(root.resolve("agents"), "*"));
     System.out.println(
         "SQLite 数据库   : "
             + (Files.exists(Path.of("oryxos.db")) ? "oryxos.db 存在" : "尚未创建（首次重命令运行时生成）"));
@@ -31,7 +30,7 @@ public class StatusCommand implements Runnable {
         iterator.next();
         count++;
       }
-      return count + " 个文件";
+      return count + " 个";
     } catch (java.io.IOException e) {
       return "读取失败: " + e.getMessage();
     }

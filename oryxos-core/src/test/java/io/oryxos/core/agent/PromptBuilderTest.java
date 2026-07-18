@@ -52,7 +52,6 @@ class PromptBuilderTest {
         List.of(),
         List.of(),
         List.of(),
-        List.of(),
         new Profile.Settings(10, maxHistoryTurns));
   }
 

@@ -80,7 +80,6 @@ class AgentSchedulerTest {
         List.of(),
         List.of(),
         List.of(),
-        List.of(),
         List.of(schedules),
         List.of(),
         Profile.Settings.defaults());

@@ -48,7 +48,6 @@ class WebSmokeIT {
         List.of(),
         List.of(),
         List.of(),
-        List.of(),
         Profile.Settings.defaults());
   }
 

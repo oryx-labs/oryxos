@@ -84,16 +84,27 @@ public class ProfileLoader {
     if (root == null) {
       throw new ProfileValidationException("Profile 文件为空: " + file.getFileName());
     }
-    Object resolved = resolveEnvPlaceholders(root);
-    @SuppressWarnings("unchecked")
-    Map<String, Object> map = (Map<String, Object>) resolved;
-    return toProfile(map, file);
+    return fromMap(root, String.valueOf(file.getFileName()));
   }
 
-  private Profile toProfile(Map<String, Object> map, Path file) {
+  /**
+   * Map → Profile 的解析 + 全字段校验入口，供 {@code AgentLoader.deriveProfile} 复用其 AGENT.md frontmatter——
+   * 保证"扫目录派生"与"启动/运行时"两条来源走同一套校验、同一异常同一消息（FR-006）。 {@code source} 是报错定位标签（文件名或 Agent 目录名）。
+   */
+  public Profile fromMap(Map<String, Object> map, String source) {
+    if (map == null) {
+      throw new ProfileValidationException("Profile 内容为空: " + source);
+    }
+    Object resolved = resolveEnvPlaceholders(map);
+    @SuppressWarnings("unchecked")
+    Map<String, Object> m = (Map<String, Object>) resolved;
+    return toProfile(m, source);
+  }
+
+  private Profile toProfile(Map<String, Object> map, String source) {
     String name = asString(map.get("name"));
     if (name == null || name.isBlank()) {
-      throw new ProfileValidationException("Profile 缺少 name 字段: " + file.getFileName());
+      throw new ProfileValidationException("Profile 缺少 name 字段: " + source);
     }
     Profile.ProviderRef provider = toProviderRef(asMap(map.get("provider")), name);
     return new Profile(
@@ -102,7 +113,6 @@ public class ProfileLoader {
         toIdentity(asMap(map.get("identity"))),
         provider,
         asStringList(map.get("tools")),
-        asStringList(map.get("skills")),
         asStringList(map.get("mcp_servers")),
         asStringList(map.get("channels")),
         toNotifyChannels(asList(map.get("notify_channels"))),

@@ -59,7 +59,6 @@ class ReActLoopTest {
         List.of(),
         List.of(),
         List.of(),
-        List.of(),
         new Profile.Settings(maxIterations, 20));
   }
 

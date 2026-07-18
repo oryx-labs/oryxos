@@ -67,7 +67,6 @@ class ProviderSmokeIT {
             null,
             null,
             null,
-            null,
             null);
 
     ProviderResponse response =

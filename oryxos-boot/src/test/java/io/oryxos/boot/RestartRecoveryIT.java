@@ -76,10 +76,11 @@ class RestartRecoveryIT {
   private static Path seedWorkspace() throws IOException {
     Path root = Files.createTempDirectory("oryxos-restart");
     Files.createDirectories(root.resolve("memory"));
-    Files.createDirectories(root.resolve("profiles"));
+    Files.createDirectories(root.resolve("agents").resolve("restart-agent"));
     Files.writeString(
-        root.resolve("profiles/restart-agent.yaml"),
+        root.resolve("agents/restart-agent/AGENT.md"),
         """
+        ---
         name: restart-agent
         description: 重启恢复自测 Agent
         identity:
@@ -99,6 +100,8 @@ class RestartRecoveryIT {
         settings:
           max_iterations: 10
           max_history_turns: 20
+        ---
+        你是一个测试助手，被触发时记录一次巡检。
         """);
     return root;
   }

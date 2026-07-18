@@ -14,7 +14,6 @@ public record Profile(
     Identity identity,
     ProviderRef provider,
     List<String> tools,
-    List<String> skills,
     List<String> mcpServers,
     List<String> channels,
     List<NotifyChannel> notifyChannels,
@@ -24,7 +23,6 @@ public record Profile(
 
   public Profile {
     tools = tools == null ? List.of() : List.copyOf(tools);
-    skills = skills == null ? List.of() : List.copyOf(skills);
     mcpServers = mcpServers == null ? List.of() : List.copyOf(mcpServers);
     channels = channels == null ? List.of() : List.copyOf(channels);
     notifyChannels = notifyChannels == null ? List.of() : List.copyOf(notifyChannels);
