@@ -46,6 +46,7 @@ class AgentSchedulerTest {
   private ProfileRegistry profileRegistry;
   private AgentService agentService;
   private SessionManager sessionManager;
+  private ScheduledTaskStore taskStore;
   private AgentScheduler scheduler;
 
   @BeforeEach
@@ -54,7 +55,11 @@ class AgentSchedulerTest {
     agentService = mock(AgentService.class);
     sessionManager = mock(SessionManager.class);
     profileRegistry = mock(ProfileRegistry.class);
-    scheduler = new AgentScheduler(taskScheduler, profileRegistry, agentService, sessionManager);
+    taskStore = mock(ScheduledTaskStore.class);
+    // 28 节：默认所有任务启用，否则 runOnce 会因停用而跳过（Mockito boolean 默认 false）
+    when(taskStore.isEnabled(any())).thenReturn(true);
+    scheduler =
+        new AgentScheduler(taskScheduler, profileRegistry, agentService, sessionManager, taskStore);
   }
 
   private static ScheduleConfig sc(String id) {
@@ -62,8 +67,12 @@ class AgentSchedulerTest {
   }
 
   private static Profile profileWith(List<ScheduleConfig> schedules) {
+    return profileNamed(PROFILE_NAME, schedules.toArray(new ScheduleConfig[0]));
+  }
+
+  private static Profile profileNamed(String name, ScheduleConfig... schedules) {
     return new Profile(
-        PROFILE_NAME,
+        name,
         null,
         null,
         new Profile.ProviderRef("deepseek", "deepseek-chat", null),
@@ -72,7 +81,7 @@ class AgentSchedulerTest {
         List.of(),
         List.of(),
         List.of(),
-        schedules,
+        List.of(schedules),
         List.of(),
         Profile.Settings.defaults());
   }
@@ -168,6 +177,30 @@ class AgentSchedulerTest {
     verify(agentService, times(2)).process(sessionCaptor.capture(), eq("汇总昨天的 PR 进度"));
     assertSame(shared, sessionCaptor.getAllValues().get(0));
     assertSame(shared, sessionCaptor.getAllValues().get(1));
+  }
+
+  @Test
+  @DisplayName("多Agent并存_各自的钟推用各自的Session互不串号")
+  void multipleAgents_eachSchedulerRunUsesItsOwnSession() {
+    Profile alpha = profileNamed("alpha-agent", sc("alpha-task"));
+    Profile beta = profileNamed("beta-agent", sc("beta-task"));
+    Session alphaSession = new Session("alpha-sid", "alpha-agent");
+    Session betaSession = new Session("beta-sid", "beta-agent");
+    when(sessionManager.getOrCreate("scheduler", "scheduler", "alpha-agent"))
+        .thenReturn(alphaSession);
+    when(sessionManager.getOrCreate("scheduler", "scheduler", "beta-agent"))
+        .thenReturn(betaSession);
+
+    scheduler.runOnce(alpha, sc("alpha-task"));
+    scheduler.runOnce(beta, sc("beta-task"));
+
+    // 两个 Agent 的钟推各自按 profileName 拿到不同 Session——三元组只有 profile 段不同，互不串号
+    ArgumentCaptor<Session> sessionCaptor = ArgumentCaptor.forClass(Session.class);
+    verify(agentService, times(2)).process(sessionCaptor.capture(), eq("汇总昨天的 PR 进度"));
+    assertSame(alphaSession, sessionCaptor.getAllValues().get(0));
+    assertSame(betaSession, sessionCaptor.getAllValues().get(1));
+    assertNotEquals(
+        alphaSession.sessionId(), betaSession.sessionId(), "不同 Agent 的钟推 Session 必须互相独立");
   }
 
   @Test

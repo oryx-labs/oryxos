@@ -1,32 +1,43 @@
-<svg viewBox="0 0 820 480" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
-  <rect width="820" height="480" fill="#ffffff"/>
+<svg viewBox="0 0 820 430" xmlns="http://www.w3.org/2000/svg" font-family="Arial, sans-serif">
+  <rect width="820" height="430" fill="#ffffff"/>
   <defs>
     <marker id="tal1" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8"/></marker>
   </defs>
-  <rect x="210" y="20" width="400" height="50" rx="10" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
-  <text x="410" y="52" fill="#4338ca" font-size="14" font-weight="bold" text-anchor="middle">POST /api/v1/agents</text>
-  <line x1="410" y1="70" x2="410" y2="96" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
-  <rect x="210" y="98" width="400" height="50" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
-  <text x="410" y="122" fill="#b45309" font-size="14" font-weight="bold" text-anchor="middle">AgentLifecycleService</text>
-  <text x="410" y="140" fill="#92400e" font-size="10" text-anchor="middle">编排下面四个步骤</text>
-  <line x1="410" y1="148" x2="410" y2="174" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
-  <rect x="210" y="176" width="400" height="42" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
-  <text x="410" y="196" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">① 校验</text>
-  <text x="410" y="212" fill="#1e40af" font-size="10" text-anchor="middle">Provider / Tool / Channel / Skill 合法性</text>
-  <line x1="410" y1="218" x2="410" y2="226" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
-  <rect x="210" y="228" width="400" height="42" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
-  <text x="410" y="248" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">② 写 Skill 文件</text>
-  <text x="410" y="264" fill="#1e40af" font-size="10" text-anchor="middle">.oryxos/skills/&lt;name&gt;.md</text>
-  <line x1="410" y1="270" x2="410" y2="278" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
-  <rect x="210" y="280" width="400" height="42" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
-  <text x="410" y="300" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">③ 派生并注册 Profile</text>
-  <text x="410" y="316" fill="#1e40af" font-size="10" text-anchor="middle">落盘 + ProfileRegistry 运行时注册</text>
-  <line x1="410" y1="322" x2="410" y2="330" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
-  <rect x="210" y="332" width="400" height="42" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
-  <text x="410" y="352" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">④ 注册定时（可选）</text>
-  <text x="410" y="368" fill="#1e40af" font-size="10" text-anchor="middle">有 schedules 则 AgentScheduler 运行时注册</text>
-  <line x1="410" y1="374" x2="410" y2="400" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
-  <rect x="210" y="402" width="400" height="54" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
-  <text x="410" y="424" fill="#15803d" font-size="14" font-weight="bold" text-anchor="middle">200 OK</text>
-  <text x="410" y="442" fill="#166534" font-size="11" text-anchor="middle">Agent 立刻可用，不用重启进程</text>
+
+  <text x="410" y="24" fill="#0f172a" font-size="14" font-weight="bold" text-anchor="middle">两条录入路径，一段注册代码 —— 上传即上线 = 丢文件即上线</text>
+
+  <!-- 左：API 上传 -->
+  <rect x="40" y="42" width="330" height="46" rx="9" fill="#e0e7ff" stroke="#6366f1" stroke-width="2.2"/>
+  <text x="205" y="63" fill="#4338ca" font-size="12.5" font-weight="bold" text-anchor="middle">① API 上传 — POST /api/v1/agents</text>
+  <text x="205" y="80" fill="#4f46e5" font-size="9.5" text-anchor="middle">业务系统 / 管理台"一句话生成 → 预览 → 创建"</text>
+  <line x1="205" y1="88" x2="205" y2="106" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
+  <rect x="40" y="108" width="330" height="52" rx="9" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="205" y="129" fill="#4338ca" font-size="11.5" font-weight="bold" text-anchor="middle">create()：校验 + 写 Profile YAML 进目录</text>
+  <text x="205" y="147" fill="#4f46e5" font-size="9.5" text-anchor="middle">写完文件后 → 同步调 register(file)</text>
+
+  <!-- 右：手工丢文件 -->
+  <rect x="450" y="42" width="330" height="46" rx="9" fill="#f1f5f9" stroke="#64748b" stroke-width="2.2"/>
+  <text x="615" y="63" fill="#334155" font-size="12.5" font-weight="bold" text-anchor="middle">① 手工丢文件 — scp / git / 编辑器</text>
+  <text x="615" y="80" fill="#475569" font-size="9.5" text-anchor="middle">直接往 .oryxos/profiles/ 写、改、删</text>
+  <line x1="615" y1="88" x2="615" y2="106" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
+  <rect x="450" y="108" width="330" height="52" rx="9" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+  <text x="615" y="129" fill="#334155" font-size="11.5" font-weight="bold" text-anchor="middle">WorkspaceWatcher 监听到文件变更</text>
+  <text x="615" y="147" fill="#475569" font-size="9.5" text-anchor="middle">启动全量扫 + 实时监听 → 调 register(file)</text>
+
+  <!-- 汇合到 register(file) -->
+  <line x1="205" y1="160" x2="330" y2="196" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
+  <line x1="615" y1="160" x2="490" y2="196" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
+
+  <rect x="120" y="200" width="580" height="86" rx="11" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.8"/>
+  <text x="410" y="224" fill="#b45309" font-size="14" font-weight="bold" text-anchor="middle">register(file) —— 同一段代码（API 与监听器共用）</text>
+  <text x="410" y="248" fill="#92400e" font-size="10.5" text-anchor="middle">校验（Provider / Tool 存在）→ ProfileRegistry.register</text>
+  <text x="410" y="268" fill="#92400e" font-size="10.5" text-anchor="middle">有 schedules 则 AgentScheduler.registerProfile（留 scheduledTasks 句柄）</text>
+
+  <line x1="410" y1="286" x2="410" y2="312" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
+
+  <rect x="210" y="314" width="400" height="52" rx="10" fill="#dcfce7" stroke="#22c55e" stroke-width="2.2"/>
+  <text x="410" y="336" fill="#15803d" font-size="13.5" font-weight="bold" text-anchor="middle">免重启即上线</text>
+  <text x="410" y="355" fill="#166534" font-size="10.5" text-anchor="middle">API 返回 200 / 秒级 GET 可见 · 到 cron 点自己跑</text>
+
+  <text x="410" y="400" fill="#64748b" font-size="10.5" text-anchor="middle">两条录入殊途同归、都汇到 register(file) —— 这就是"API 建的和文件建的行为一模一样"</text>
 </svg>

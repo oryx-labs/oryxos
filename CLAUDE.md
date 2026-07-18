@@ -90,9 +90,9 @@ Map<String, ChatModel> providerMap = Map.of(
 );
 ```
 
-### 原则四：`SKILL.md` 归 `ContextLoader`，不归 Tool
+### 原则四：`SKILL.md` 是能力、不是 Tool；加载归 `ContextLoader`/`SkillLoader`
 
-`SKILL.md` 是注入 system prompt 的指令模板，不是可执行的 Tool。它由 `ContextLoader` 加载，跟 Bootstrap 文件（`AGENTS.md`、`SOUL.md`、`USER.md`）同类，不放在 `oryxos-tool` 模块里。
+`SKILL.md` 是一项**可复用能力**（对齐 Anthropic Agent Skills），不是可执行的 Tool。加载走**渐进式披露**：L1 元数据（`name`+`description`）由 `ContextLoader`/`PromptBuilder` 注入 system prompt（跟 Bootstrap 文件 `AGENTS.md`/`SOUL.md`/`USER.md` 同一层）；L2 正文经底座通用工具 `use_skill(name)` 按需加载；L3 资源/脚本经 `read_file`/`shell` 按需读跑。`use_skill` 返回的是**指令内容**、不是"执行一个 Skill"——Skill 永远不进 `ToolRegistry`、不放在 `oryxos-tool` 模块里。**Agent（Profile）与 Skill（能力）是两件事**：Agent 定义"谁/何时/怎么跑"，Skill 是被任意 Agent 按需加载的专长（详见 `docs/TechnicalSolution.md` §11）。
 
 ### 原则五：审计表 Day One 写入
 
@@ -230,7 +230,7 @@ settings:
 用户消息
   → 追加到 Session 对话历史
   → PromptBuilder 组装 Prompt：
-      [1] system prompt（Profile identity + Bootstrap + SKILL.md）← ContextLoader
+      [1] system prompt（Profile identity + Bootstrap + <available_skills> 能力索引 L1；正文经 use_skill 按需加载）← ContextLoader
       [2] 长期记忆（MEMORY.md 全文，超 4000 字自动截断）         ← MemoryService
       [3] 对话历史（最近 max_history_turns 轮）                  ← SessionManager
       [4] 可用 Tool 列表（Function Calling 格式）                ← ToolRegistry
@@ -388,8 +388,8 @@ provider:
 
 - **底座优先于 Agent**：最重要的交付不是某个强大的 Agent，而是让任意 Agent 可靠运行的环境
 - **自实现核心，复用管道**：ReAct 循环手写；LLM 协议适配委托给 Spring AI Alibaba
-- **配置即 Agent**：一个业务 Agent 由一份 SKILL.md（做什么）加一份 YAML Profile（怎么跑）共同定义，都不需要写代码
-- **对接开放标准**：工具用 MCP，Agent 间协作用 A2A，技能用 `SKILL.md` 文件
+- **配置即 Agent**：一个业务 Agent 由一份 YAML Profile 定义（谁/何时/怎么跑）；可复用的专长打包成 Skill 能力（`SKILL.md` 目录），Agent 按需 `use_skill` 加载——都不需要写代码
+- **对接开放标准**：工具用 MCP，Agent 间协作用 A2A，能力用 Anthropic Agent Skills 形态的 `SKILL.md` 目录
 - **无状态实例，状态外置**：这是未来走向分布式架构而不需要大改设计的前提
 - **安全是地基，不是补丁**：工具来源管控、最小权限、强制沙箱白名单、凭证走环境变量、完整审计记录从第一天就写入 SQLite
 - **分阶段克制**：先构建最小完整的运行时内核；治理和分布式基础设施在真实使用数据验证后再做
