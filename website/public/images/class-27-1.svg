@@ -13,7 +13,7 @@
   <line x1="395" y1="70" x2="448" y2="70" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
   <rect x="450" y="40" width="150" height="60" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
   <text x="525" y="60" fill="#1d4ed8" font-size="11" font-weight="bold" text-anchor="middle">③ PromptBuilder</text>
-  <text x="525" y="76" fill="#1e40af" font-size="8.5" text-anchor="middle">ContextLoader 注入 Skill</text>
+  <text x="525" y="76" fill="#1e40af" font-size="8.5" text-anchor="middle">ContextLoader 注入 AGENT.md 正文</text>
   <text x="525" y="90" fill="#1e40af" font-size="8.5" text-anchor="middle">MemoryService 注入记忆</text>
   <line x1="600" y1="70" x2="653" y2="70" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c271)"/>
   <rect x="655" y="40" width="130" height="60" rx="8" fill="#ede9fe" stroke="#a855f7" stroke-width="2"/>

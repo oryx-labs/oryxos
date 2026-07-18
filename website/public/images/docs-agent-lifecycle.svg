@@ -12,25 +12,25 @@
   <text x="205" y="80" fill="#4f46e5" font-size="9.5" text-anchor="middle">业务系统 / 管理台"一句话生成 → 预览 → 创建"</text>
   <line x1="205" y1="88" x2="205" y2="106" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
   <rect x="40" y="108" width="330" height="52" rx="9" fill="#eef2ff" stroke="#6366f1" stroke-width="2"/>
-  <text x="205" y="129" fill="#4338ca" font-size="11.5" font-weight="bold" text-anchor="middle">create()：校验 + 写 Profile YAML 进目录</text>
-  <text x="205" y="147" fill="#4f46e5" font-size="9.5" text-anchor="middle">写完文件后 → 同步调 register(file)</text>
+  <text x="205" y="129" fill="#4338ca" font-size="11.5" font-weight="bold" text-anchor="middle">create()：校验 + 写 Agent 目录（AGENT.md）</text>
+  <text x="205" y="147" fill="#4f46e5" font-size="9.5" text-anchor="middle">写完目录后 → 同步调 register(agentDir)</text>
 
   <!-- 右：手工丢文件 -->
   <rect x="450" y="42" width="330" height="46" rx="9" fill="#f1f5f9" stroke="#64748b" stroke-width="2.2"/>
   <text x="615" y="63" fill="#334155" font-size="12.5" font-weight="bold" text-anchor="middle">① 手工丢文件 — scp / git / 编辑器</text>
-  <text x="615" y="80" fill="#475569" font-size="9.5" text-anchor="middle">直接往 .oryxos/profiles/ 写、改、删</text>
+  <text x="615" y="80" fill="#475569" font-size="9.5" text-anchor="middle">直接往 .oryxos/agents/ 写、改、删</text>
   <line x1="615" y1="88" x2="615" y2="106" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
   <rect x="450" y="108" width="330" height="52" rx="9" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
   <text x="615" y="129" fill="#334155" font-size="11.5" font-weight="bold" text-anchor="middle">WorkspaceWatcher 监听到文件变更</text>
-  <text x="615" y="147" fill="#475569" font-size="9.5" text-anchor="middle">启动全量扫 + 实时监听 → 调 register(file)</text>
+  <text x="615" y="147" fill="#475569" font-size="9.5" text-anchor="middle">启动全量扫 + 实时监听 → 调 register(agentDir)</text>
 
-  <!-- 汇合到 register(file) -->
+  <!-- 汇合到 register(agentDir) -->
   <line x1="205" y1="160" x2="330" y2="196" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
   <line x1="615" y1="160" x2="490" y2="196" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
 
   <rect x="120" y="200" width="580" height="86" rx="11" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.8"/>
-  <text x="410" y="224" fill="#b45309" font-size="14" font-weight="bold" text-anchor="middle">register(file) —— 同一段代码（API 与监听器共用）</text>
-  <text x="410" y="248" fill="#92400e" font-size="10.5" text-anchor="middle">校验（Provider / Tool 存在）→ ProfileRegistry.register</text>
+  <text x="410" y="224" fill="#b45309" font-size="14" font-weight="bold" text-anchor="middle">register(agentDir) —— 同一段代码（API 与监听器共用）</text>
+  <text x="410" y="248" fill="#92400e" font-size="10.5" text-anchor="middle">AgentLoader.deriveProfile（frontmatter → Profile）→ ProfileRegistry.register</text>
   <text x="410" y="268" fill="#92400e" font-size="10.5" text-anchor="middle">有 schedules 则 AgentScheduler.registerProfile（留 scheduledTasks 句柄）</text>
 
   <line x1="410" y1="286" x2="410" y2="312" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#tal1)"/>
@@ -39,5 +39,5 @@
   <text x="410" y="336" fill="#15803d" font-size="13.5" font-weight="bold" text-anchor="middle">免重启即上线</text>
   <text x="410" y="355" fill="#166534" font-size="10.5" text-anchor="middle">API 返回 200 / 秒级 GET 可见 · 到 cron 点自己跑</text>
 
-  <text x="410" y="400" fill="#64748b" font-size="10.5" text-anchor="middle">两条录入殊途同归、都汇到 register(file) —— 这就是"API 建的和文件建的行为一模一样"</text>
+  <text x="410" y="400" fill="#64748b" font-size="10.5" text-anchor="middle">两条录入殊途同归、都汇到 register(agentDir) —— 这就是"API 建的和文件建的行为一模一样"</text>
 </svg>

@@ -31,11 +31,11 @@
 
   <!-- ═══ Layer 2: Agent Layer (NEW) ═══ -->
   <rect x="40" y="150" width="680" height="70" rx="8" fill="#1f0d18" stroke="#ec4899" stroke-width="1.5" filter="url(#shadow)"/>
-  <text x="56" y="172" font-family="'SF Mono','Fira Code',monospace" font-size="11" fill="#ec4899" font-weight="bold">Agent Layer  ·  一个业务 Agent = Skill + Profile</text>
+  <text x="56" y="172" font-family="'SF Mono','Fira Code',monospace" font-size="11" fill="#ec4899" font-weight="bold">Agent Layer  ·  一个业务 Agent = 一个目录（AGENT.md）</text>
   <rect x="56" y="180" width="318" height="32" rx="6" fill="#33121f" stroke="#ec4899" stroke-width="1"/>
-  <text x="215" y="200" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#f9a8d4" text-anchor="middle">Skill · 做什么（SKILL.md）</text>
+  <text x="215" y="200" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#f9a8d4" text-anchor="middle">正文 · 做什么（AGENT.md）</text>
   <rect x="386" y="180" width="318" height="32" rx="6" fill="#33121f" stroke="#ec4899" stroke-width="1"/>
-  <text x="545" y="200" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#f9a8d4" text-anchor="middle">Profile · 怎么跑（YAML）</text>
+  <text x="545" y="200" font-family="'SF Mono','Fira Code',monospace" font-size="10" fill="#f9a8d4" text-anchor="middle">frontmatter · 谁/何时/怎么跑</text>
 
   <line x1="380" y1="220" x2="380" y2="242" stroke="#4b5563" stroke-width="1.5" marker-end="url(#arr)"/>
 

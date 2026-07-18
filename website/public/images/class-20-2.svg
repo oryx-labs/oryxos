@@ -2,7 +2,7 @@
   <rect width="820" height="300" fill="#ffffff"/>
   <rect x="60" y="196" width="440" height="70" rx="10" fill="#fef3c7" stroke="#f59e0b" stroke-width="2.6"/>
   <text x="80" y="224" fill="#b45309" font-size="16" font-weight="bold">方式一 · 零代码（主推）</text>
-  <text x="80" y="250" fill="#3f3f46" font-size="13">写一份 SKILL.md 描述意图 + 复用现成的 MCP server</text>
+  <text x="80" y="250" fill="#3f3f46" font-size="13">写一个 AGENT.md 目录 描述意图 + 复用现成的 MCP server</text>
   <rect x="120" y="110" width="440" height="70" rx="10" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
   <text x="140" y="138" fill="#1d4ed8" font-size="16" font-weight="bold">方式二 · 轻代码</text>
   <text x="140" y="164" fill="#3f3f46" font-size="13">用任何语言自己写一个 MCP server，接企业自有系统</text>

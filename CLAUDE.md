@@ -90,9 +90,11 @@ Map<String, ChatModel> providerMap = Map.of(
 );
 ```
 
-### 原则四：`SKILL.md` 是能力、不是 Tool；加载归 `ContextLoader`/`SkillLoader`
+### 原则四：一个目录 = 一个 Agent；`AGENT.md` 归 `ContextLoader`，不是 Tool
 
-`SKILL.md` 是一项**可复用能力**（对齐 Anthropic Agent Skills），不是可执行的 Tool。加载走**渐进式披露**：L1 元数据（`name`+`description`）由 `ContextLoader`/`PromptBuilder` 注入 system prompt（跟 Bootstrap 文件 `AGENTS.md`/`SOUL.md`/`USER.md` 同一层）；L2 正文经底座通用工具 `use_skill(name)` 按需加载；L3 资源/脚本经 `read_file`/`shell` 按需读跑。`use_skill` 返回的是**指令内容**、不是"执行一个 Skill"——Skill 永远不进 `ToolRegistry`、不放在 `oryxos-tool` 模块里。**Agent（Profile）与 Skill（能力）是两件事**：Agent 定义"谁/何时/怎么跑"，Skill 是被任意 Agent 按需加载的专长（详见 `docs/TechnicalSolution.md` §11）。
+**一个目录 = 一个 Agent**（借 Anthropic Agent Skills 的**目录形态**，但定义的是 Agent）：`.oryxos/agents/<name>/` 里 `AGENT.md` = frontmatter（这个 Agent 自己的 profile：name/description/provider/model/tools/notify_channels/schedules）+ 正文（任务指令）；外加可选 `skills/*.md`（子指令）、`scripts/`（脚本）、`REFERENCE.md`（参考）。`AgentLoader.deriveProfile(agentDir)` 把 frontmatter 派生成底座认识的 `Profile`——`.oryxos/profiles/` 取消，profile 就是 frontmatter。
+
+加载走**一个 Agent 内部的渐进式披露**：`AGENT.md` **正文**由 `ContextLoader`/`PromptBuilder` 注入 system prompt（跟 Bootstrap 文件 `AGENTS.md`/`SOUL.md`/`USER.md` 同一层，因为它就是这个 Agent）；目录里的**子指令 / 参考**用底座既有 `read_file` 按需读、**脚本**用 `shell` 按需跑——没有跨 Agent 的能力库、没有 `use_skill`、没有全局能力索引。**一个 Agent 目录永远不是一个可执行 Tool**，不进 `ToolRegistry`、不放在 `oryxos-tool` 模块里（详见 `docs/TechnicalSolution.md` §11）。
 
 ### 原则五：审计表 Day One 写入
 
@@ -111,7 +113,7 @@ Map<String, ChatModel> providerMap = Map.of(
 
 ### 原则八：Tool 模块三合一
 
-内置 Tool、MCP Client 合并在一个 `oryxos-tool` 模块，**不拆成多个模块**。SKILL.md 加载归 `oryxos-core` 的 `ContextLoader`。
+内置 Tool、MCP Client 合并在一个 `oryxos-tool` 模块，**不拆成多个模块**。`AGENT.md`（及 Agent 目录里的子指令）加载归 `oryxos-core` 的 `ContextLoader`。
 
 ---
 
@@ -121,10 +123,9 @@ OryxOS 启动后在当前目录创建 `.oryxos/` 工作区：
 
 ```
 .oryxos/
-├── profiles/           # Profile YAML（每个 Agent 一个文件）
+├── agents/             # 每个子目录 = 一个 Agent（AGENT.md + 可选 skills/ scripts/ REFERENCE.md）
 ├── memory/
 │   └── MEMORY.md       # 长期记忆（Agent 通过 save_memory 写入，不得手动修改）
-├── skills/             # SKILL.md 技能文件
 ├── sessions/           # 会话数据（已迁入 SQLite，此目录备用）
 ├── logs/               # 结构化日志
 ├── mcp_servers.yaml    # MCP server 配置
@@ -142,9 +143,12 @@ OryxOS 启动后在当前目录创建 `.oryxos/` 工作区：
 
 ## 核心数据模型
 
-### Profile YAML
+### AGENT.md（`.oryxos/agents/<name>/AGENT.md`）
 
-```yaml
+一个 Agent 目录里 `AGENT.md` = frontmatter（这个 Agent 自己的 profile）+ 正文（任务指令）。`AgentLoader.deriveProfile(agentDir)` 把 frontmatter 派生成底座认识的 `Profile`。子指令 / 脚本放同目录的 `skills/`、`scripts/`，由正文指引用 `read_file`/`shell` 按需取用（不在 frontmatter 里声明）。
+
+```markdown
+---
 name: ops-agent
 description: 运维助手
 identity:
@@ -161,8 +165,6 @@ tools:
   - http_get
   - save_memory
   - recall_memory
-skills:
-  - daily-pr-digest       # 对应 .oryxos/skills/daily-pr-digest.md
 mcp_servers:
   - github-mcp
 channels:
@@ -174,6 +176,9 @@ bootstrap:
 settings:
   max_iterations: 10
   max_history_turns: 20
+---
+
+你是一个专业的运维助手。被触发时……（Agent 的任务指令正文，注入 system prompt）
 ```
 
 ### SQLite 核心表
@@ -230,7 +235,7 @@ settings:
 用户消息
   → 追加到 Session 对话历史
   → PromptBuilder 组装 Prompt：
-      [1] system prompt（Profile identity + Bootstrap + <available_skills> 能力索引 L1；正文经 use_skill 按需加载）← ContextLoader
+      [1] system prompt（AGENT.md 正文 + Bootstrap；子指令/脚本经 read_file/shell 按需取）← ContextLoader
       [2] 长期记忆（MEMORY.md 全文，超 4000 字自动截断）         ← MemoryService
       [3] 对话历史（最近 max_history_turns 轮）                  ← SessionManager
       [4] 可用 Tool 列表（Function Calling 格式）                ← ToolRegistry
@@ -375,7 +380,7 @@ provider:
 |------|------|------|
 | Spring AI 自动执行 tool | Tool 被调两次，结果重复 | 禁用 `ChatClient` 的自动 tool 执行，由 `ToolExecutor` 接管 |
 | Provider 靠类型扫描区分 | 多 Provider 时路由错乱 | 改用显式 `Map<String, ChatModel>` 映射 |
-| `SKILL.md` 放进 Tool 模块 | Skill 被当 Tool 注册，执行时报错 | 移到 `ContextLoader`，注入 system prompt 而非 ToolRegistry |
+| `AGENT.md` / 子指令放进 Tool 模块 | Agent 目录被当 Tool 注册，执行时报错 | 归 `ContextLoader`：正文注入 system prompt，子指令/脚本经 read_file/shell 按需取 |
 | 审计表只写日志不落库 | 扩展阶段审计功能需要反解析日志 | `tool_invocations` + `llm_calls` 核心阶段就写入 SQLite |
 | 用 `hibernate.ddl-auto=update` 迁移表结构 | SQLite ALTER TABLE 报错 | 手动维护建表脚本或引入 Flyway |
 | 在 ReAct Loop 里用异步 | 复杂度激增，Virtual Thread 优势消失 | 保持同步阻塞，Virtual Thread 自动处理 IO 等待 |
@@ -388,8 +393,8 @@ provider:
 
 - **底座优先于 Agent**：最重要的交付不是某个强大的 Agent，而是让任意 Agent 可靠运行的环境
 - **自实现核心，复用管道**：ReAct 循环手写；LLM 协议适配委托给 Spring AI Alibaba
-- **配置即 Agent**：一个业务 Agent 由一份 YAML Profile 定义（谁/何时/怎么跑）；可复用的专长打包成 Skill 能力（`SKILL.md` 目录），Agent 按需 `use_skill` 加载——都不需要写代码
-- **对接开放标准**：工具用 MCP，Agent 间协作用 A2A，能力用 Anthropic Agent Skills 形态的 `SKILL.md` 目录
+- **一个目录 = 一个 Agent**：一个业务 Agent 由一个目录定义——`AGENT.md`（frontmatter 配置：谁/何时/怎么跑 + 正文指令），可选 `skills/` 子指令、`scripts/` 脚本；子资源经底座 `read_file`/`shell` 按需取用，不需要写 Java 代码
+- **对接开放标准**：工具用 MCP，Agent 间协作用 A2A，Agent 目录借 Anthropic Agent Skills 的形态（目录 + 渐进式披露）
 - **无状态实例，状态外置**：这是未来走向分布式架构而不需要大改设计的前提
 - **安全是地基，不是补丁**：工具来源管控、最小权限、强制沙箱白名单、凭证走环境变量、完整审计记录从第一天就写入 SQLite
 - **分阶段克制**：先构建最小完整的运行时内核；治理和分布式基础设施在真实使用数据验证后再做

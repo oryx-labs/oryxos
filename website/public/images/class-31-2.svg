@@ -8,8 +8,8 @@
   <text x="410" y="62" fill="#92400e" font-size="9.5" text-anchor="middle">daily-tech-digest 这个 Agent 到点开工</text>
   <line x1="410" y1="75" x2="410" y2="93" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c312)"/>
   <rect x="250" y="95" width="320" height="55" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
-  <text x="410" y="117" fill="#15803d" font-size="12" font-weight="bold" text-anchor="middle">② 注入能力索引(L1) → use_skill 加载正文(L2)</text>
-  <text x="410" y="137" fill="#166534" font-size="9.5" text-anchor="middle">按 description 命中才加载正文 · MEMORY.md"关注 AI/芯片"也进上下文</text>
+  <text x="410" y="117" fill="#15803d" font-size="12" font-weight="bold" text-anchor="middle">② 注入 AGENT.md 正文 → read_file 读子指令</text>
+  <text x="410" y="137" fill="#166534" font-size="9.5" text-anchor="middle">正文指到才读 skills/digest-format.md · MEMORY.md"关注 AI/芯片"也进上下文</text>
   <line x1="410" y1="150" x2="410" y2="168" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c312)"/>
   <rect x="250" y="170" width="320" height="55" rx="8" fill="#ede9fe" stroke="#a855f7" stroke-width="2"/>
   <text x="410" y="192" fill="#7c3aed" font-size="12" font-weight="bold" text-anchor="middle">③ 调新闻 MCP 工具拉当日科技新闻</text>
@@ -17,7 +17,7 @@
   <line x1="410" y1="225" x2="410" y2="243" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c312)"/>
   <rect x="250" y="245" width="320" height="55" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
   <text x="410" y="267" fill="#1d4ed8" font-size="12" font-weight="bold" text-anchor="middle">④ LLM 自己组稿，AI/芯片条目排前面</text>
-  <text x="410" y="287" fill="#1e40af" font-size="9.5" text-anchor="middle">偏好来自记忆，不是写死在 Skill 里的规则</text>
+  <text x="410" y="287" fill="#1e40af" font-size="9.5" text-anchor="middle">偏好来自记忆，不是写死在 Agent 目录里的规则</text>
   <line x1="410" y1="300" x2="410" y2="318" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#c312)"/>
   <rect x="250" y="320" width="320" height="55" rx="8" fill="#fce7f3" stroke="#db2777" stroke-width="2.4"/>
   <text x="410" y="342" fill="#be185d" font-size="12" font-weight="bold" text-anchor="middle">⑤ notify 把日报推送出去</text>
