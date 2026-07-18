@@ -11,6 +11,9 @@ import io.oryxos.core.session.SessionManager;
  * <p>ProfileContext 生命周期在此收口：入口 set、出口 finally clear——即使循环中途抛异常也必须清， 否则复用线程的下一个请求会拿到别人的
  * Profile（单请求测试永远测不出的串号 bug）。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "profileRegistry 是 Spring 注入的单例注册表，三种触发源共享同一引用正是意图（29 节起可运行时增删，必须同一份）。")
 public class AgentService {
 
   private final ProfileRegistry profileRegistry;

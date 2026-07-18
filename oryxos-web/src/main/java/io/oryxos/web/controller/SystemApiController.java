@@ -15,9 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
  * 探活——连通性以"已配置"为准，真实探活留扩展阶段）。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-    value = "SPRING_ENDPOINT",
+    value = {"SPRING_ENDPOINT", "EI_EXPOSE_REP2"},
     justification =
-        "core-stage web API is unauthenticated by design (internal network + gateway); auth is extension-phase")
+        "core-stage web API is unauthenticated by design (internal network + gateway); auth is extension-phase. profileRegistry 是 Spring 注入的共享单例，构造注入共享同一引用正是意图。")
 @RestController
 @RequestMapping("/api/v1")
 public class SystemApiController {

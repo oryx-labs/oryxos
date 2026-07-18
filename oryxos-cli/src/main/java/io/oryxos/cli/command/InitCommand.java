@@ -11,8 +11,7 @@ import picocli.CommandLine.Command;
 @Command(name = "init", description = "初始化 .oryxos/ 工作区", mixinStandardHelpOptions = true)
 public class InitCommand implements Runnable {
 
-  private static final List<String> DIRS =
-      List.of("profiles", "skills", "memory", "sessions", "logs");
+  private static final List<String> DIRS = List.of("agents", "memory", "sessions", "logs");
   private static final List<String> BOOTSTRAP_FILES = List.of("AGENTS.md", "SOUL.md", "USER.md");
 
   @Override

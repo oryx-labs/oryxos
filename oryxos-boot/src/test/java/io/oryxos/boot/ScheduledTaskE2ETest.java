@@ -54,10 +54,11 @@ class ScheduledTaskE2ETest {
     try {
       Path root = Files.createTempDirectory("oryxos-sched-e2e");
       Files.createDirectories(root.resolve("memory"));
-      Files.createDirectories(root.resolve("profiles"));
+      Files.createDirectories(root.resolve("agents").resolve("sched-agent"));
       Files.writeString(
-          root.resolve("profiles/sched-agent.yaml"),
+          root.resolve("agents/sched-agent/AGENT.md"),
           """
+          ---
           name: sched-agent
           description: 定时任务自测 Agent
           identity:
@@ -77,6 +78,8 @@ class ScheduledTaskE2ETest {
           settings:
             max_iterations: 10
             max_history_turns: 20
+          ---
+          你是一个定时巡检助手，被触发时记录一次巡检。
           """);
       System.setProperty("oryxos.root", root.toString());
       return root;

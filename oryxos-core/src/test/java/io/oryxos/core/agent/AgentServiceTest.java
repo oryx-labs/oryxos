@@ -45,7 +45,6 @@ class AgentServiceTest {
             List.of(),
             List.of(),
             List.of(),
-            List.of(),
             Profile.Settings.defaults());
     reActLoop = mock(ReActLoop.class);
     sessionManager = mock(SessionManager.class);

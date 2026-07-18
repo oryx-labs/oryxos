@@ -2,6 +2,7 @@ package io.oryxos.cli;
 
 import io.oryxos.channel.cli.CliChannel;
 import io.oryxos.core.OryxTool;
+import io.oryxos.core.agent.AgentLoader;
 import io.oryxos.core.agent.AgentScheduler;
 import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.agent.PromptBuilder;
@@ -11,7 +12,6 @@ import io.oryxos.core.agent.ToolExecutor;
 import io.oryxos.core.agent.ToolInvocationAuditor;
 import io.oryxos.core.context.ContextLoader;
 import io.oryxos.core.memory.MemoryService;
-import io.oryxos.core.profile.ProfileLoader;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.LlmCallAuditor;
 import io.oryxos.core.provider.ProviderService;
@@ -121,8 +121,10 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  ProfileRegistry profileRegistry(Map<String, ChatModel> providerMap) {
-    return new ProfileLoader(oryxosRoot().resolve("profiles"), providerMap.keySet()).loadAll();
+  ProfileRegistry profileRegistry(Map<String, ChatModel> providerMap, Map<String, OryxTool> tools) {
+    // 29 节：一个目录 = 一个 Agent——扫 .oryxos/agents/ 逐个 AGENT.md 派生 Profile 并注册（替换扫 profiles YAML）
+    return new AgentLoader(oryxosRoot().resolve("agents"), providerMap.keySet(), tools.keySet())
+        .loadAll();
   }
 
   @Bean

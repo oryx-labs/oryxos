@@ -65,7 +65,6 @@ class NotifyToolsTest {
         List.of(),
         List.of(),
         List.of(),
-        List.of(),
         channels,
         List.of(),
         List.of(),

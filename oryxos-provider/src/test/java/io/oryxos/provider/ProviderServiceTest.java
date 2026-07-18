@@ -68,7 +68,6 @@ class ProviderServiceTest {
         null,
         null,
         null,
-        null,
         null);
   }
 

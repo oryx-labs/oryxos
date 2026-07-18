@@ -52,10 +52,11 @@ class MockAgentE2ETest {
     try {
       Path root = Files.createTempDirectory("oryxos-e2e");
       Files.createDirectories(root.resolve("memory"));
-      Files.createDirectories(root.resolve("profiles"));
+      Files.createDirectories(root.resolve("agents").resolve("mock-agent"));
       Files.writeString(
-          root.resolve("profiles/mock-agent.yaml"),
+          root.resolve("agents/mock-agent/AGENT.md"),
           """
+          ---
           name: mock-agent
           description: mock 自测 Agent
           identity:
@@ -70,6 +71,8 @@ class MockAgentE2ETest {
           settings:
             max_iterations: 10
             max_history_turns: 20
+          ---
+          你是一个测试助手，被触发时正常回应。
           """);
       System.setProperty("oryxos.root", root.toString());
       return root;
