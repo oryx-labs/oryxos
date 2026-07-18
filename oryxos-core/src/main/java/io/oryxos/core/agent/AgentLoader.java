@@ -76,8 +76,15 @@ public class AgentLoader {
     if (!Files.isRegularFile(agentMd)) {
       throw new ProfileValidationException("Agent 目录缺少 AGENT.md: " + agentDir.getFileName());
     }
-    AgentMarkdown.Parsed parsed = AgentMarkdown.split(Files.readString(agentMd));
-    String source = String.valueOf(agentDir.getFileName());
+    return parse(Files.readString(agentMd), String.valueOf(agentDir.getFileName()));
+  }
+
+  /**
+   * 从一段 {@code AGENT.md} 文本派生 + 校验 {@link Profile}（不落盘）——供 30 节"一句话生成"校验草稿是否能解析成合法定义。 缺
+   * name/provider 抛 {@link ProfileValidationException}（与目录派生同一套校验）。
+   */
+  Profile parse(String agentMarkdown, String source) {
+    AgentMarkdown.Parsed parsed = AgentMarkdown.split(agentMarkdown);
     Profile profile = validator.fromMap(parsed.frontmatter(), source);
     warnUnknownTools(profile, source);
     return profile;

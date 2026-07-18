@@ -43,7 +43,8 @@ class ToolExecutorTest {
     when(httpGet.execute(any())).thenReturn(ToolResult.ok("晴，28°C"));
 
     ToolResult result =
-        executor.execute("s-1", new ToolCallRequest("http_get", "{\"url\":\"https://wttr.in\"}"));
+        executor.execute(
+            "s-1", "agent-x", new ToolCallRequest("http_get", "{\"url\":\"https://wttr.in\"}"));
 
     assertTrue(result.success());
     assertEquals("晴，28°C", result.content());
@@ -64,7 +65,8 @@ class ToolExecutorTest {
     when(httpGet.execute(any())).thenThrow(new RuntimeException("connect timeout"));
 
     ToolResult result =
-        assertDoesNotThrow(() -> executor.execute("s-1", new ToolCallRequest("http_get", "{}")));
+        assertDoesNotThrow(
+            () -> executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "{}")));
 
     // 异常不上抛（循环不中断），但也绝不静默：失败结果带原因 + 审计留痕
     assertFalse(result.success());
@@ -85,7 +87,7 @@ class ToolExecutorTest {
   void toolReturnedFailureIsAuditedAsFailure() {
     when(httpGet.execute(any())).thenReturn(ToolResult.error("域名不在白名单", false));
 
-    ToolResult result = executor.execute("s-1", new ToolCallRequest("http_get", "{}"));
+    ToolResult result = executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "{}"));
 
     assertFalse(result.success());
     verify(auditor)
@@ -102,7 +104,8 @@ class ToolExecutorTest {
   @Test
   @DisplayName("未注册的工具名：失败结果 + success=false 审计（不抛异常）")
   void unknownToolNameFailsAndAudits() {
-    ToolResult result = executor.execute("s-1", new ToolCallRequest("no_such_tool", "{}"));
+    ToolResult result =
+        executor.execute("s-1", "agent-x", new ToolCallRequest("no_such_tool", "{}"));
 
     assertFalse(result.success());
     assertTrue(result.errorMessage().contains("no_such_tool"), "报错点名未知工具");
@@ -120,7 +123,8 @@ class ToolExecutorTest {
   @Test
   @DisplayName("入参不是合法 JSON：失败结果 + 审计留痕")
   void malformedArgumentsJsonFailsAndAudits() {
-    ToolResult result = executor.execute("s-1", new ToolCallRequest("http_get", "not-json{{{"));
+    ToolResult result =
+        executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "not-json{{{"));
 
     assertFalse(result.success());
     verify(auditor)

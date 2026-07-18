@@ -25,7 +25,7 @@ public class ToolExecutor {
     this.auditor = auditor;
   }
 
-  public ToolResult execute(String sessionId, ToolCallRequest call) {
+  public ToolResult execute(String sessionId, String agentName, ToolCallRequest call) {
     long startedAt = System.currentTimeMillis();
     OryxTool tool = tools.get(call.name());
     if (tool == null) {
@@ -38,6 +38,8 @@ public class ToolExecutor {
       return fail(sessionId, call, "工具入参不是合法 JSON: " + e.getMessage(), startedAt);
     }
     // 沙箱检查位：24 节 SandboxChecker 就位后在此接线（执行前白名单校验，宪法 VI）
+    // 置入当前 Agent 名（30 节 Agent 专属记忆）：save_memory 等工具据此落到本 Agent 自己的 MEMORY.md；执行后必清除。
+    ToolExecutionContext.setAgentName(agentName);
     try {
       ToolResult result = tool.execute(input);
       auditor.record(
@@ -51,6 +53,8 @@ public class ToolExecutor {
       return result;
     } catch (RuntimeException e) {
       return fail(sessionId, call, e.getMessage(), startedAt);
+    } finally {
+      ToolExecutionContext.clear();
     }
   }
 

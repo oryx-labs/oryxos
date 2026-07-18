@@ -109,6 +109,23 @@ public class AgentScheduler {
     return scheduledTasks.containsKey(taskId);
   }
 
+  /**
+   * 按 Agent 注销其全部定时（30 节：删除 / 改定时用）。遍历 {@code profile.schedules()}，从 {@link #scheduledTasks} 取句柄
+   * {@code cancel(false)}（不打断正在跑的一次，配合 taskLocks 的重叠保护）再移除句柄；不动 taskLocks、不动 taskStore。
+   */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志里的 sc.id() 来自运营方手写的 AGENT.md 配置（非请求输入），仅用于诊断")
+  public void unregisterProfile(Profile profile) {
+    for (ScheduleConfig sc : profile.schedules()) {
+      ScheduledFuture<?> future = scheduledTasks.remove(sc.id());
+      if (future != null) {
+        future.cancel(false);
+        LOG.info("已注销定时任务 {}", sc.id());
+      }
+    }
+  }
+
   /** 定时触发入口：先看启用状态（停用则跳过、不记执行），启用才真正执行。 */
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "CRLF_INJECTION_LOGS",

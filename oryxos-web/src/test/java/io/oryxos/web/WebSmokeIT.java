@@ -6,10 +6,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.oryxos.core.OryxTool;
+import io.oryxos.core.agent.AgentLifecycleService;
+import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.memory.MemoryService;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
-import io.oryxos.web.controller.MemoryApiController;
+import io.oryxos.core.session.SessionManager;
+import io.oryxos.web.controller.AgentApiController;
 import io.oryxos.web.controller.ProfileApiController;
 import io.oryxos.web.controller.SystemApiController;
 import io.oryxos.web.controller.ToolApiController;
@@ -55,7 +58,7 @@ class WebSmokeIT {
   void setUp() {
     ProfileRegistry registry = new ProfileRegistry(Map.of("ops", profile("ops")));
     MemoryService memory = mock(MemoryService.class);
-    when(memory.readAll()).thenReturn("## 核心记忆\n用户偏好 AI");
+    when(memory.readAll("ops")).thenReturn("## 核心记忆\n用户偏好 AI");
     OryxTool tool = mock(OryxTool.class);
     when(tool.getName()).thenReturn("http_get");
     when(tool.getDescription()).thenReturn("GET 请求");
@@ -64,7 +67,12 @@ class WebSmokeIT {
         MockMvcBuilders.standaloneSetup(
                 new SystemApiController(registry),
                 new ProfileApiController(registry),
-                new MemoryApiController(memory),
+                new AgentApiController(
+                    mock(AgentLifecycleService.class),
+                    mock(AgentService.class),
+                    mock(SessionManager.class),
+                    registry,
+                    memory),
                 new ToolApiController(Map.of("http_get", tool)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
@@ -90,7 +98,7 @@ class WebSmokeIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data[0].name").value("http_get"));
 
-    mvc.perform(MockMvcRequestBuilders.get("/api/v1/memory"))
+    mvc.perform(MockMvcRequestBuilders.get("/api/v1/agents/ops/memory"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data").value("## 核心记忆\n用户偏好 AI"));
   }

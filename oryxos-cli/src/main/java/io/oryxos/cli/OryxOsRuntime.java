@@ -2,14 +2,17 @@ package io.oryxos.cli;
 
 import io.oryxos.channel.cli.CliChannel;
 import io.oryxos.core.OryxTool;
+import io.oryxos.core.agent.AgentLifecycleService;
 import io.oryxos.core.agent.AgentLoader;
 import io.oryxos.core.agent.AgentScheduler;
 import io.oryxos.core.agent.AgentService;
+import io.oryxos.core.agent.AgentStore;
 import io.oryxos.core.agent.PromptBuilder;
 import io.oryxos.core.agent.ReActLoop;
 import io.oryxos.core.agent.ScheduledTaskStore;
 import io.oryxos.core.agent.ToolExecutor;
 import io.oryxos.core.agent.ToolInvocationAuditor;
+import io.oryxos.core.agent.WorkspaceWatcher;
 import io.oryxos.core.context.ContextLoader;
 import io.oryxos.core.memory.MemoryService;
 import io.oryxos.core.profile.ProfileRegistry;
@@ -66,6 +69,7 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.client.RestClient;
 
@@ -121,10 +125,67 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  ProfileRegistry profileRegistry(Map<String, ChatModel> providerMap, Map<String, OryxTool> tools) {
-    // 29 节：一个目录 = 一个 Agent——扫 .oryxos/agents/ 逐个 AGENT.md 派生 Profile 并注册（替换扫 profiles YAML）
-    return new AgentLoader(oryxosRoot().resolve("agents"), providerMap.keySet(), tools.keySet())
-        .loadAll();
+  AgentLoader agentLoader(Map<String, ChatModel> providerMap, Map<String, OryxTool> tools) {
+    // 29 节：一个目录 = 一个 Agent——扫 .oryxos/agents/ 逐个 AGENT.md 派生 Profile
+    return new AgentLoader(oryxosRoot().resolve("agents"), providerMap.keySet(), tools.keySet());
+  }
+
+  @Bean
+  ProfileRegistry profileRegistry(AgentLoader agentLoader) {
+    // 启动全量扫；30 节 WorkspaceWatcher 负责启动后的实时变更（同一段 register）
+    return agentLoader.loadAll();
+  }
+
+  @Bean
+  AgentStore agentStore() {
+    return new AgentStore(oryxosRoot());
+  }
+
+  /** 30 节：Agent 生命周期编排。创建脚手架的 AGENT.md 模板里 provider 缺省取 oryxos.providers 第一个（保证可注册）。 */
+  @Bean
+  AgentLifecycleService agentLifecycleService(
+      AgentLoader agentLoader,
+      ProfileRegistry profileRegistry,
+      AgentScheduler agentScheduler,
+      AgentStore agentStore,
+      ProviderService providerService,
+      ProvidersProperties providers,
+      @Value("${oryxos.author.provider:}") String authorProvider,
+      @Value("${oryxos.author.model:}") String authorModel) {
+    String defaultProvider =
+        providers.providers().isEmpty() ? null : providers.providers().get(0).name();
+    // 生成用 provider 缺省取 providers 第一个（宪法 III 显式映射的 key）
+    String genProvider =
+        authorProvider == null || authorProvider.isBlank() ? defaultProvider : authorProvider;
+    return new AgentLifecycleService(
+        agentLoader,
+        profileRegistry,
+        agentScheduler,
+        agentStore,
+        providerService,
+        defaultProvider,
+        genProvider,
+        authorModel);
+  }
+
+  /** 30 节 WorkspaceWatcher 专用守护线程执行器（跟 25 节调度线程池同类，不手工 new Thread）。 */
+  @Bean
+  ThreadPoolTaskExecutor workspaceWatcherExecutor() {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(1);
+    executor.setMaxPoolSize(1);
+    executor.setThreadNamePrefix("oryxos-workspace-watcher-");
+    executor.setDaemon(true); // chat 跑完进程要能退出；serve/gateway 常驻靠主线程保活
+    executor.initialize();
+    return executor;
+  }
+
+  /** 30 节：实时监听 .oryxos/agents/——守护线程上跑监听循环，启动后的变更走同一段 register。 */
+  @Bean(initMethod = "start")
+  WorkspaceWatcher workspaceWatcher(
+      AgentLifecycleService agentLifecycleService,
+      ThreadPoolTaskExecutor workspaceWatcherExecutor) {
+    return new WorkspaceWatcher(agentLifecycleService, oryxosRoot(), workspaceWatcherExecutor);
   }
 
   @Bean

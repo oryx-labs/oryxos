@@ -60,6 +60,11 @@ oryxos:
     - name: deepseek
       api-key: ${DEEPSEEK_API_KEY:}
       base-url: https://api.deepseek.com
+  # 「用大模型生成 Agent 草稿」(generateFiles) 调 LLM 时用的作者模型；provider 缺省取 providers 第一个。
+  # model 留空则生成端点返回可读的 503（不向 OpenAI 兼容端点发 model=null）。
+  author:
+    provider: deepseek
+    model: deepseek-chat
 
 # Observability: Actuator + Micrometer/Prometheus
 management:

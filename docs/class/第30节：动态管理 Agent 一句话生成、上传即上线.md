@@ -255,3 +255,69 @@ void 删除必须先停定时_再动索引和目录() {
 - **不回退**：`mvn clean verify` 全绿。
 
 到这里，"业务系统通过 API / 一句话 / 直接丢目录定义一个 Agent 并让它定时自动运行"的完整闭环就合上了。底座（第一部分）和定义 Agent（第二部分）都齐了——下一节交付验收：用这套机制做出天气、科技日报、GitHub 日报三个真实 Agent，打包发布第一个版本。
+
+---
+
+## 五、实现回写：最终落地与迭代增补
+
+> 上文是本节的**原始设计**（一句话生成整个新 Agent、工作区只读）。随管理台迭代，实际实现做了几处调整并增补了三块能力，以下**以实现为准**；上文保留，作为设计演进的记录。
+
+### 5.1 与原始设计的差异（以实现为准）
+
+| 原始设计（前文） | 最终实现 | 为什么改 |
+|---|---|---|
+| `POST /agents/generate`：一句话生成**整个新 Agent** → 预览 → `POST /agents` 创建 | 取消该端点。**创建**改为 `POST /agents {name, description}`——后台按模板**脚手架**出完整目录（`AGENT.md` + `scripts/` + `skills/` + `REFERENCE.md`，模板内容）；"**用大模型生成**"下沉为**对某个已存在 Agent** 的按需重生成（见 5.2.4） | 创建要稳定可复现（模板不依赖模型），生成要人在环里改；两者语义分开更清楚 |
+| `providerService.complete(prompt, sentence)` | `providerService.chat(genSessionId, 生成用 Profile, ProviderRequest.of(prompt)).text()`——`ProviderService` 没有 `complete`，只有 `chat` | 对齐既有 Provider 接口；仍落 `llm_calls` 审计（原则五） |
+| 生成用 provider/model 取"系统默认" | 系统没有"默认 model"（model 只在各 `AGENT.md` 里）。新增配置键 `oryxos.author.provider` / `oryxos.author.model`（provider 缺省取 `oryxos.providers` 第一个；model 留空则生成端点返回可读的 **503**，不向 OpenAI 兼容端点发 `model=null`） | 补上唯一的实现层缺口 |
+| 工作区文件浏览器**只读** | 可**编辑保存**：`POST /api/v1/workspace/file {path, content}`（见 5.2.3） | 管理台要能直接改 Agent 文件 |
+
+### 5.2 增补的四块能力（本节原始范围之外）
+
+**5.2.1 每个 Agent 专属记忆（原全局 `MEMORY.md` → per-agent）。** 原设计记忆是全局一份 `.oryxos/memory/MEMORY.md`。改成**跟着 Agent 走**：`.oryxos/agents/<name>/MEMORY.md`（这个 Agent 自己的成长记录，跟它的 `AGENT.md`/`skills/` 同目录，合原则四）。
+
+- **关键障碍**：工具在 `OryxTool.execute(JsonNode)` 时**不知道自己在替哪个 Agent 跑**（接口无执行上下文，`sessionId` 只到 `ToolExecutor` 为止）。
+- **解法**：新增 `ToolExecutionContext`（`ThreadLocal<String> agentName`）。同步阻塞模型下（原则七，无 Reactor/异步）一次 ReAct 循环整体跑在一条虚拟线程上，`ToolExecutor` 执行工具**前置入** `profile.name()`、**执行后清除**——`save_memory`/`recall_memory` 据此落到本 Agent 的 `MEMORY.md`。读路径（`buildContext`/`readAll`）不经 `ToolExecutor`，由 `MemoryServiceImpl` 在委托 `store.load` 前后临时置入 Agent 名（`buildContext` 取 `session.profileName()`、`readAll` 取入参）再复原。
+- **好处**：`LongTermMemoryStore` SPI 与三档后端（Markdown/SQLite/Mem0）的契约测试**一行不改、完全向后兼容**——无 Agent 上下文时 Markdown 档回退全局路径；只有默认 Markdown 档变成 per-agent。
+- 端点：`GET /api/v1/agents/{name}/memory`；**移除**全局 `GET /api/v1/memory`。
+
+**5.2.2 一个 Agent 一个固定会话（上下文可累积）。** 管理台每个 Agent 恰好一条会话——固定 `channel="admin"` + `user="console"`，`profile=<Agent 名>`，`getOrCreate` 幂等 → 恒为同一条 `admin:console:<name>`（`session_id` 拼接规则未动，只固定了 channel/user）。
+
+- `GET /api/v1/agents/{name}/session` → 返回这条会话的 `SessionView`（sessionId + profileName + 最近 ≤100 条消息）；
+- `POST /api/v1/agents/{name}/session/messages {content}` → 往这条固定会话发消息、触发 ReAct（同 `invoke` 入口，但落在固定会话里累积上下文）。
+
+**5.2.3 文件可编辑（工作区不再只读）。** `POST /api/v1/workspace/file {path, content}`，复用同一套防目录穿越（`normalize()` 后 `startsWith(oryxosRoot)`，越界 400）。编辑到某个 `agents/<name>/AGENT.md` 时**走 `AgentLifecycleService.update`**（写 + 校验 + 重注册，`schedules` 变更先注销旧句柄）——因为 macOS `WatchService` **不监听子目录内文件的改动**，必须显式重注册；其余文件直接写盘。
+
+**5.2.4 "生成/编辑 Agent"（对已存在 Agent 按描述重生成文件）。** 两个端点：
+
+- `POST /api/v1/agents/{name}/generate-files {description}`：一次 LLM 调用（走 `ProviderService.chat`，落 `llm_calls`）产出 `AGENT.md` → `AgentLoader.parse` 校验能否解析成合法定义（非法 → 400）→ 返回 `{相对路径 → 内容}` 给前端**预览可改**，**不落盘、不注册**；输出的 `provider` 若该 Agent 已存在则沿用其 provider（保持可跑）；模型偶尔多吐的 ``` 代码围栏会被剥掉。
+- `POST /api/v1/agents/{name}/files {files}`：保存（可能被用户改过的）一组文件——先校验 `AGENT.md` 可解析（非法 → 400，不写坏目录）→ `agentStore.writeAll` → 覆写后重注册（`schedules` 变更先注销旧的），写入即生效。
+
+### 5.3 最终端点全表（本节实际交付）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `POST` | `/api/v1/agents` | 创建：`{name, description}` → 脚手架完整目录 + 派生注册（失败回滚） |
+| `GET` | `/api/v1/agents` / `/{name}` | 列表 / 单个详情 |
+| `PUT` | `/api/v1/agents/{name}` | 覆写 `AGENT.md`；`schedules` 变则先注销旧再注册新 |
+| `DELETE` | `/api/v1/agents/{name}` | 注销定时 → 移出索引 → 目录归档 `.oryxos/archive/` |
+| `POST` | `/api/v1/agents/{name}/invoke` | 26 节无状态调用（不变） |
+| `GET` | `/api/v1/agents/{name}/memory` | 这个 Agent 的专属记忆（**5.2.1**） |
+| `GET` | `/api/v1/agents/{name}/session` | 这个 Agent 的固定管理台会话（**5.2.2**） |
+| `POST` | `/api/v1/agents/{name}/session/messages` | 往固定会话发消息、触发 ReAct（**5.2.2**） |
+| `POST` | `/api/v1/agents/{name}/generate-files` | 描述 → 大模型生成文件草稿，不落盘（**5.2.4**） |
+| `POST` | `/api/v1/agents/{name}/files` | 保存一组文件、写入即生效（**5.2.4**） |
+| `GET` | `/api/v1/workspace/tree` | 目录树（agents/ + archive/） |
+| `GET` | `/api/v1/workspace/file?path=` | 读文件（防穿越） |
+| `POST` | `/api/v1/workspace/file` | 写文件（**5.2.3**，防穿越；AGENT.md 走 update 重注册） |
+
+生成用系统提示词见 `docs/prompt/prompt.md`（`AGENT_AUTHOR_PROMPT`）。
+
+### 5.4 管理台最终形态
+
+不再有"工作区"独立菜单，对外只有一个 **Agent 列表**（含"新建 Agent"= 只填 name + description）。点"详情"进入，是 **5 个 tab**：
+
+- **基本信息**：name/description/provider/model/tools/定时；
+- **生成**：填一句描述 → "用大模型生成" → 每个文件可编辑预览 → "保存并生效"（5.2.4）；
+- **文件**：左侧文件树、右侧**可编辑**并保存（5.2.3）；
+- **会话**：这个 Agent 的**固定会话**，直接显示对话气泡 + 输入框发消息（5.2.2）；
+- **记忆**：这个 Agent 的专属 `MEMORY.md`，只读（由 `save_memory` 写入，5.2.1）。

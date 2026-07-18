@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.oryxos.core.OryxTool;
+import io.oryxos.core.agent.AgentLifecycleService;
 import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.agent.PromptBuilder;
 import io.oryxos.core.agent.ReActLoop;
@@ -41,7 +42,7 @@ import io.oryxos.provider.SpringAiProviderServiceImpl;
 import io.oryxos.provider.ToolSchemaAdapter;
 import io.oryxos.tool.ToolRegistry;
 import io.oryxos.web.GlobalExceptionHandler;
-import io.oryxos.web.controller.MemoryApiController;
+import io.oryxos.web.controller.AgentApiController;
 import io.oryxos.web.controller.SessionApiController;
 import io.oryxos.web.controller.ToolApiController;
 import java.nio.file.Path;
@@ -121,8 +122,8 @@ class MockProviderFlowTest {
     assertEquals("save_memory", toolMsgs.get(0).toolName());
     // 对话执行：user + 2×assistant + 1×tool = 4 条完整历史
     assertEquals(4, session.messages().size(), "会话历史应完整累积");
-    // 记忆记录：save_memory 真写了 MEMORY.md
-    assertTrue(store.load().contains("北京"), "记忆文件应记下事实");
+    // 记忆记录：save_memory 真写了这个 Agent 专属的 MEMORY.md（30 节：记忆跟着 Agent 走）
+    assertTrue(memory.readAll(AGENT).contains("北京"), "该 Agent 的记忆文件应记下事实");
     // 审计：llm_calls 恰 2、tool_invocations 恰 1（宪法 V）
     verify(llmAuditor, times(2)).record(any(), any(), any(), any(), anyBoolean(), any(), anyLong());
     verify(toolAuditor, times(1))
@@ -143,13 +144,18 @@ class MockProviderFlowTest {
                     session.messages().size())));
     MockMvc mvc =
         MockMvcBuilders.standaloneSetup(
-                new MemoryApiController(memory),
+                new AgentApiController(
+                    mock(AgentLifecycleService.class),
+                    agent,
+                    sessionManager,
+                    profileRegistry,
+                    memory),
                 new ToolApiController(tools),
                 new SessionApiController(agent, sessionManager))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
 
-    mvc.perform(get("/api/v1/memory"))
+    mvc.perform(get("/api/v1/agents/" + AGENT + "/memory"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data").value(containsString("北京")));
     mvc.perform(get("/api/v1/tools"))

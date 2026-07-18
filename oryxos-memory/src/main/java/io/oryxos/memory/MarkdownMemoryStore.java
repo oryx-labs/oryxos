@@ -1,5 +1,6 @@
 package io.oryxos.memory;
 
+import io.oryxos.core.agent.ToolExecutionContext;
 import io.oryxos.core.memory.MemoryScope;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -7,10 +8,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
- * 档一（默认）：长期记忆存 `.oryxos/memory/MEMORY.md` 一个 Markdown 文件，按 `## 核心记忆` / `## 归档记忆` 两个区块组织。零依赖、人可读、git
- * 可跟踪。
+ * 档一（默认）：长期记忆存 Markdown 文件，按 `## 核心记忆` / `## 归档记忆` 两个区块组织。零依赖、人可读、git 可跟踪。
+ *
+ * <p>Agent 专属（30 节）：目标文件由 {@link ToolExecutionContext#agentName()} 决定——有 Agent 上下文时落
+ * `.oryxos/agents/&lt;name&gt;/MEMORY.md`（这个 Agent 自己的成长记录，跟它的 AGENT.md/skills/ 同目录，合宪法四）；无上下文（非
+ * Agent 触发的直接调用、单测）时回退全局 `.oryxos/memory/MEMORY.md`，保持向后兼容。Agent 名做安全校验，非法段一律回退全局，防目录穿越。
  *
  * <p>契约落地：load 每次 Files.readString 不缓存（契约一）；truncateIfNeeded 只接归档区那段字符串裁尾、
  * 物理上碰不到核心区（契约二）；recallByKeyword 只搜归档区（契约四）。
@@ -20,11 +25,21 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   private static final String CORE_HEADER = "## 核心记忆";
   private static final String ARCHIVE_HEADER = "## 归档记忆";
   private static final int MAX_ARCHIVE_CHARS = 4000;
+  private static final Pattern SAFE_AGENT = Pattern.compile("[A-Za-z0-9_-]+");
 
-  private final Path memoryFile;
+  private final Path oryxosRoot;
 
   public MarkdownMemoryStore(Path oryxosRoot) {
-    this.memoryFile = oryxosRoot.resolve("memory").resolve("MEMORY.md");
+    this.oryxosRoot = oryxosRoot;
+  }
+
+  /** 当前该读写哪个 MEMORY.md：有合法 Agent 上下文 → 该 Agent 目录；否则回退全局。 */
+  private Path memoryFile() {
+    String agent = ToolExecutionContext.agentName();
+    if (agent != null && SAFE_AGENT.matcher(agent).matches()) {
+      return oryxosRoot.resolve("agents").resolve(agent).resolve("MEMORY.md");
+    }
+    return oryxosRoot.resolve("memory").resolve("MEMORY.md");
   }
 
   @Override
@@ -85,23 +100,25 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   }
 
   private String read() {
-    if (!Files.isRegularFile(memoryFile)) {
+    Path file = memoryFile();
+    if (!Files.isRegularFile(file)) {
       return "";
     }
     try {
-      return Files.readString(memoryFile);
+      return Files.readString(file);
     } catch (IOException e) {
       throw new UncheckedIOException("读取 MEMORY.md 失败", e);
     }
   }
 
   private void write(String content) {
+    Path file = memoryFile();
     try {
-      Path parent = memoryFile.getParent();
+      Path parent = file.getParent();
       if (parent != null) {
         Files.createDirectories(parent);
       }
-      Files.writeString(memoryFile, content);
+      Files.writeString(file, content);
     } catch (IOException e) {
       throw new UncheckedIOException("写入 MEMORY.md 失败", e);
     }

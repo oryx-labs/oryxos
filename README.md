@@ -151,7 +151,7 @@ java -jar $JAR serve --port 8080           # REST API + Web Manager (same as sta
 The Web Manager is a read-only Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **overview, agents, providers, tools, sandbox whitelist, long-term memory, runtime status, and sessions**. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process.
 
 <p align="center">
-  <img src="website/public/images/manager.png" alt="OryxOS Web Manager console" width="100%"/>
+  <img src="website/public/images/manager.jpg" alt="OryxOS Web Manager console" width="100%"/>
 </p>
 
 #### Manager dev mode (hot reload)

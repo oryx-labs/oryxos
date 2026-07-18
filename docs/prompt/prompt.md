@@ -249,3 +249,24 @@
 221. 页面上加一个 session 详情，可以查看对话内容——现在看不到对话内容
 222. 1. 定时任务加上执行记录历史 2. 加一个每分钟执行一次的对话任务（每分钟跑一次、通过 prompt 执行的任务）
 223. 新增的提示词写入 docs/prompt/prompt.md
+
+## 第八轮（终态材料对齐"一个目录=一个 Agent" + 第29/30节开发 + 管理台迭代：per-agent 记忆 / 固定会话 / 文件可编辑 / 生成-编辑）
+
+224. 16~28 增量节保留——那是历史、是我们的思考过程
+225. 跨节/终态材料都要改、只保留最终语境：把 TechSol §11/§12、CLAUDE.md、宪法 §IV、AiProgrammingGuide、第32节、16 张架构 SVG 全部对齐到"一个目录 = 一个 Agent"终态
+226. 第29节开发时要完成一个 Agent 的完整定义（每日对账示例：AGENT.md + REFERENCE.md + skills/ + scripts/），可自己设计更合适的例子
+227. 不是让你建，而是把这个实例放进第29节讲、作为 spec-kit 输入——开发时 spec-kit 自己做出来
+228. /oryxos-lesson-dev 29（specify/clarify/plan/tasks；移除字段（推荐）；开始 implement）
+229. 切换到远程的 class-30 分支
+230. /oryxos-lesson-dev 30（specify/clarify/plan/tasks；新增默认配置键（推荐）；开始 implement）
+231. 运行服务，我看一下 manager 页面
+232. .oryxos/agents/ 你读的是哪个目录的数据
+233. 把所有服务停了，重新启动
+234. agent 管理和 agent 重复了：① 只留一个 agent 列表 ② 去掉"工作区"菜单 ③ agent 详情打开是文件浏览器（左侧文件树、点击看内容）
+235. ① 删除"一句话生成"的能力 ② 增加创建 agent：只填名字 + 描述，后台自动脚手架完整目录、内容为模板
+236. 详情里加 tab：基本信息、文件树、session 对话列表（一个 agent 的对话都在它的 session 里）
+237. .oryxos/agents/ 中增加了 daily-reconcile，没有自动扫描出现在 agent 列表（根因是 AGENT.md 的 flow 式 YAML `${}` 占位符解析失败，非扫描器）
+238. 改为一个 agent 固定一个 session（才有上下文记忆）；会话 tab 不展示列表，直接展示会话详情
+239. ① 增加编辑文件的能力 ② 增加"编辑 agent"tab：一句描述 → 大模型（经 provider）按 agent 格式规范返回每个文件内容 ③ tab 增加这个 agent 专属记忆——要改动 memory 能力（现在的 memory 是全局的、不跟着 agent 走）
+240. 可以用 sub agent 并行执行、加快速度
+241. ① 把这次的修改回写到第30节课件 ② 把新增的提示词写入 docs/prompt/prompt.md

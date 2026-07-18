@@ -70,7 +70,8 @@ provider:                          # 这个 Agent 自己的运行配置（就是
   temperature: 0.2
 tools: [shell, read_file, notify, save_memory]   # 它要用的系统基础能力（最小权限，20 节）
 notify_channels:
-  - {type: webhook, url: ${OPS_WEBHOOK_URL}}
+  - type: webhook
+    url: ${OPS_WEBHOOK_URL}
 schedules:                         # 它什么时候自己跑（定时属于 Agent）
   - {id: reconcile-morning, cron: "0 0 9 * * *", zone: Asia/Shanghai,
      message: 到点了，核对昨天的订单对账。}

@@ -109,7 +109,7 @@ class MockAgentE2ETest {
         stream(list).anyMatch(n -> sessionId.equals(n.get("sessionId").asText())), "会话应出现在列表");
 
     // ⑤ 记忆查得到（save_memory 真写了 MEMORY.md）
-    assertTrue(getData("/api/v1/memory").asText().contains("北京"), "记忆应查得到");
+    assertTrue(getData("/api/v1/agents/mock-agent/memory").asText().contains("北京"), "记忆应查得到");
 
     // ⑥ 工具清单查得到 save_memory
     assertTrue(
