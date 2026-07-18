@@ -2,29 +2,50 @@
 import { ref, reactive, computed } from 'vue'
 import logoUrl from './assets/logo.svg'
 
-// 顶部概览 + 五个只读页。管理台只读，无任何写操作入口（26 节）。
-const NAV = [
+// 顶层：概览 / Agent 列表 / 定时任务。「OS 运行时」下收纳 Provider/Tool/Sandbox/长期记忆/会话——
+// 这些都是底座本身的运行时状态，跟业务 Agent 管理分层展示（31 节：侧边栏重分组）。
+const TOP_NAV = [
   { key: 'overview', label: '概览' },
-  { key: 'profiles', label: 'Agent', path: '/api/v1/profiles' },
+  { key: 'agents', label: 'Agent 列表' },
+  { key: 'schedules', label: '定时任务', path: '/api/v1/schedules' },
+]
+
+const RUNTIME_NAV = [
+  { key: 'sessions', label: '会话列表', path: '/api/v1/sessions' },
   {
     key: 'providers',
-    label: 'Provider',
+    label: 'Provider 列表',
     path: '/api/v1/info',
     // /info 返回 {application, providers:[名字…]}，投影成列表行
     transform: (d) => (d?.providers ?? []).map((name) => ({ name, status: '已配置' })),
   },
-  { key: 'tools', label: 'Tool', path: '/api/v1/tools' },
-  { key: 'whitelist', label: 'Sandbox 白名单' },
-  { key: 'memory', label: '长期记忆', path: '/api/v1/memory' },
-  { key: 'info', label: '运行状态', path: '/api/v1/info' },
-  { key: 'schedules', label: '定时任务', path: '/api/v1/schedules' },
-  { key: 'sessions', label: '会话', path: '/api/v1/sessions' },
+  { key: 'tools', label: 'Tool 列表', path: '/api/v1/tools' },
+  { key: 'whitelist', label: 'SandBox 列表' },
 ]
+
+const NAV = [...TOP_NAV, ...RUNTIME_NAV]
+const runtimeKeys = new Set(RUNTIME_NAV.map((n) => n.key))
+const runtimeOpen = ref(false) // OS 运行时分组展开状态
 
 const active = ref('overview')
 const state = reactive({}) // key -> {loading, error, data}
 // 当前激活页（只渲染这一页，避免 v-show + v-for 的块补丁陷阱导致切不动）
 const current = computed(() => NAV.find((n) => n.key === active.value) ?? NAV[0])
+
+// 运行状态（原「运行状态」独立页，31 节并入概览展示）：应用名 + 已配置 Provider
+const runtimeInfo = ref({ loading: true, error: null, data: null })
+async function loadRuntimeInfo() {
+  runtimeInfo.value = { loading: true, error: null, data: null }
+  try {
+    const res = await fetch('/api/v1/info')
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    runtimeInfo.value = { loading: false, error: null, data: body.data }
+  } catch (e) {
+    runtimeInfo.value = { loading: false, error: e.message, data: null }
+  }
+}
+loadRuntimeInfo()
 
 // 概览页数据：当前为静态预览，后续逐步接入实时端点（TODO 标注了各自的动态来源）
 const overview = {
@@ -48,9 +69,8 @@ const overview = {
   stack: ['Java 21', 'Spring Boot 3.x', 'Spring AI Alibaba', 'SQLite', 'Picocli'],
 }
 
-// 表格列定义（profiles / tools）。放在 setup 里，模板直接可用。
+// 表格列定义（tools / providers / schedules / sessions）。放在 setup 里，模板直接可用。
 function cols(key) {
-  if (key === 'profiles') return ['name', 'description', 'provider', 'model', 'tools', 'skills']
   if (key === 'tools') return ['name', 'description']
   if (key === 'providers') return ['name', 'status']
   if (key === 'schedules')
@@ -79,7 +99,9 @@ function select(key) {
   active.value = key
   sessionDetail.value = null // 切页时收起会话详情
   execDetail.value = null // 切页时收起执行记录
+  if (runtimeKeys.has(key)) runtimeOpen.value = true // 选中的是运行时子页 → 展开分组
   if (NAV.find((n) => n.key === key)?.path && !state[key]) load(key)
+  if (key === 'agents') { agentDetail.value = null; fileView.value = null; loadAgents() }
 }
 
 // —— 会话详情：点一行会话，拉 GET /sessions/{id} 看完整对话内容 ——
@@ -163,6 +185,260 @@ async function toggleTask(row) {
     busy.value = null
   }
 }
+
+// —— 30 节：Agent 管理（动态增删改 + 一句话生成）——
+const agents = ref({ loading: false, error: null, data: [] })
+async function loadAgents() {
+  agents.value = { loading: true, error: null, data: [] }
+  try {
+    const res = await fetch('/api/v1/agents')
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    agents.value = { loading: false, error: null, data: body.data || [] }
+  } catch (e) {
+    agents.value = { loading: false, error: e.message, data: [] }
+  }
+}
+
+// 新建 Agent：只填 name + description，后台按模板脚手架出完整目录
+const gen = reactive({ open: false, name: '', description: '', busy: false, error: null })
+
+async function createAgent() {
+  gen.busy = true; gen.error = null
+  try {
+    const res = await fetch('/api/v1/agents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: gen.name, description: gen.description }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '创建失败')
+    cancelCreate(); await loadAgents()
+  } catch (e) { gen.error = e.message } finally { gen.busy = false }
+}
+
+async function deleteAgent(name) {
+  if (!confirm(`删除 Agent「${name}」？（整个目录归档到 archive/，不物理删）`)) return
+  try {
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '删除失败')
+    if (agentDetail.value?.name === name) closeAgent()
+    await loadAgents()
+  } catch (e) { agents.value = { ...agents.value, error: e.message } }
+}
+
+function cancelCreate() { gen.open = false; gen.name = ''; gen.description = ''; gen.error = null }
+
+// —— Agent 详情：Tab 切换（基本信息 / 生成 / 文件 / 会话 / 记忆）——
+const agentDetail = ref(null) // { name, agent, tab, loading, error, node }
+const fileView = ref(null) // { path, loading, error, content, saving, saved }
+// 生成：描述 → 大模型生成各文件内容，可编辑后保存生效
+const genEdit = reactive({ description: '', files: null, busy: false, error: null, saved: false })
+// 会话：每个 Agent 一个固定 session，直接作为对话展示（不再是会话列表）
+const chat = reactive({ sessionId: null, messages: [], loading: false, error: null, input: '', sending: false })
+// 记忆：这个 Agent 自己的长期记忆（只读）
+const agentMemory = reactive({ text: '', loading: false, error: null })
+
+async function openAgent(agent) {
+  agentDetail.value = { name: agent.name, agent, tab: 'info', loading: true, error: null, node: null }
+  fileView.value = null
+  resetChat()
+  resetGenEdit()
+  resetAgentMemory()
+  try {
+    const res = await fetch('/api/v1/workspace/tree')
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    const agentsNode = (body.data.children || []).find((c) => c.name === 'agents')
+    const node = (agentsNode?.children || []).find((c) => c.name === agent.name) || null
+    agentDetail.value = { ...agentDetail.value, loading: false, node }
+  } catch (e) {
+    agentDetail.value = { ...agentDetail.value, loading: false, error: e.message }
+  }
+}
+
+// 重新拉取当前 Agent 的元数据 + 文件树（保存文件后刷新基本信息）
+async function reloadAgent() {
+  if (!agentDetail.value) return
+  const name = agentDetail.value.name
+  try {
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}`)
+    const body = await res.json()
+    if (body.code === 0 && body.data) {
+      agentDetail.value = { ...agentDetail.value, agent: body.data }
+    }
+  } catch (e) {
+    /* 元数据刷新失败不阻断，忽略 */
+  }
+  try {
+    const res = await fetch('/api/v1/workspace/tree')
+    const body = await res.json()
+    if (body.code === 0) {
+      const agentsNode = (body.data.children || []).find((c) => c.name === 'agents')
+      const node = (agentsNode?.children || []).find((c) => c.name === name) || null
+      agentDetail.value = { ...agentDetail.value, node }
+    }
+  } catch (e) {
+    /* 文件树刷新失败不阻断，忽略 */
+  }
+}
+
+function detailTab(tab) {
+  if (!agentDetail.value) return
+  agentDetail.value = { ...agentDetail.value, tab }
+  if (tab === 'generate') {
+    genEdit.description = agentDetail.value.agent.description || ''
+    genEdit.files = null
+    genEdit.error = null
+    genEdit.saved = false
+  } else if (tab === 'chat') {
+    loadChat()
+  } else if (tab === 'memory') {
+    loadMemory()
+  }
+}
+
+// —— Tab 2：生成 —— 描述 → 大模型生成各文件内容
+function resetGenEdit() {
+  genEdit.description = ''
+  genEdit.files = null
+  genEdit.busy = false
+  genEdit.error = null
+  genEdit.saved = false
+}
+
+async function generateFiles() {
+  genEdit.busy = true; genEdit.error = null; genEdit.saved = false
+  try {
+    const name = agentDetail.value.name
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/generate-files`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: genEdit.description }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '生成失败')
+    genEdit.files = body.data.files || {}
+  } catch (e) { genEdit.error = e.message } finally { genEdit.busy = false }
+}
+
+async function saveFiles() {
+  genEdit.busy = true; genEdit.error = null
+  try {
+    const name = agentDetail.value.name
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/files`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: genEdit.files }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '保存失败')
+    genEdit.saved = true
+    await reloadAgent()
+  } catch (e) { genEdit.error = e.message } finally { genEdit.busy = false }
+}
+
+// —— Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示
+function resetChat() {
+  chat.sessionId = null
+  chat.messages = []
+  chat.loading = false
+  chat.error = null
+  chat.input = ''
+  chat.sending = false
+}
+
+async function loadChat() {
+  chat.loading = true; chat.error = null
+  try {
+    const name = agentDetail.value.name
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/session`)
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    chat.sessionId = body.data.sessionId
+    chat.messages = body.data.messages || []
+  } catch (e) { chat.error = e.message } finally { chat.loading = false }
+}
+
+async function sendChat() {
+  if (!chat.input.trim()) return
+  chat.sending = true; chat.error = null
+  try {
+    const name = agentDetail.value.name
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/session/messages`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: chat.input }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '发送失败')
+    chat.input = ''
+    await loadChat()
+  } catch (e) { chat.error = e.message } finally { chat.sending = false }
+}
+
+// —— Tab 5：记忆 —— 这个 Agent 自己的长期记忆（只读）
+function resetAgentMemory() {
+  agentMemory.text = ''
+  agentMemory.loading = false
+  agentMemory.error = null
+}
+
+async function loadMemory() {
+  agentMemory.loading = true; agentMemory.error = null
+  try {
+    const name = agentDetail.value.name
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/memory`)
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    agentMemory.text = body.data || ''
+  } catch (e) { agentMemory.error = e.message } finally { agentMemory.loading = false }
+}
+
+function closeAgent() {
+  agentDetail.value = null
+  fileView.value = null
+  resetChat()
+  resetGenEdit()
+  resetAgentMemory()
+}
+
+async function openFile(node) {
+  if (node.type !== 'file') return
+  fileView.value = { path: node.path, loading: true, error: null, content: '', saving: false, saved: false }
+  try {
+    const res = await fetch(`/api/v1/workspace/file?path=${encodeURIComponent(node.path)}`)
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    fileView.value = { path: node.path, loading: false, error: null, content: body.data, saving: false, saved: false }
+  } catch (e) {
+    fileView.value = { path: node.path, loading: false, error: e.message, content: '', saving: false, saved: false }
+  }
+}
+
+// Tab 3：保存当前文件（编辑后写回工作区）
+async function saveFile() {
+  if (!fileView.value) return
+  fileView.value = { ...fileView.value, saving: true, error: null, saved: false }
+  try {
+    const res = await fetch('/api/v1/workspace/file', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: fileView.value.path, content: fileView.value.content }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '保存失败')
+    fileView.value = { ...fileView.value, saving: false, saved: true }
+    if (fileView.value.path.endsWith('/AGENT.md')) await reloadAgent()
+  } catch (e) {
+    fileView.value = { ...fileView.value, saving: false, error: e.message }
+  }
+}
+
+// 把一个 Agent 目录扁平成带缩进层级的行
+function flatten(node, depth, acc) {
+  if (!node) return acc
+  if (depth > 0) acc.push({ ...node, depth })
+  ;(node.children || []).forEach((c) => flatten(c, depth + 1, acc))
+  return acc
+}
+const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail.value.node, 0, []) : []))
 </script>
 
 <template>
@@ -172,14 +448,33 @@ async function toggleTask(row) {
         <img :src="logoUrl" alt="OryxOS" class="logo" />
       </div>
       <button
-        v-for="n in NAV"
+        v-for="n in TOP_NAV"
         :key="n.key"
         :class="['nav-item', { on: active === n.key }]"
         @click="select(n.key)"
       >
         {{ n.label }}
       </button>
-      <div class="readonly">只读视图</div>
+
+      <button
+        :class="['nav-item', 'nav-group', { open: runtimeOpen }]"
+        @click="runtimeOpen = !runtimeOpen"
+      >
+        OS 运行时
+        <span class="chevron">{{ runtimeOpen ? '▾' : '▸' }}</span>
+      </button>
+      <template v-if="runtimeOpen">
+        <button
+          v-for="n in RUNTIME_NAV"
+          :key="n.key"
+          :class="['nav-item', 'nav-sub', { on: active === n.key }]"
+          @click="select(n.key)"
+        >
+          {{ n.label }}
+        </button>
+      </template>
+
+      <div class="readonly">管理台</div>
     </aside>
 
     <main class="content">
@@ -220,6 +515,17 @@ async function toggleTask(row) {
             <span v-for="t in overview.stack" :key="t" class="tag">{{ t }}</span>
           </div>
 
+          <h3 class="sec">运行状态</h3>
+          <p v-if="runtimeInfo.loading" class="empty">加载中…</p>
+          <p v-else-if="runtimeInfo.error" class="error">出错：{{ runtimeInfo.error }}</p>
+          <div v-else-if="runtimeInfo.data">
+            <p>应用：<b>{{ runtimeInfo.data.application }}</b></p>
+            <p>Provider：
+              <span v-for="p in runtimeInfo.data.providers" :key="p" class="tag">{{ p }}</span>
+              <span v-if="!runtimeInfo.data.providers?.length" class="empty">（无）</span>
+            </p>
+          </div>
+
           <p class="note mono">当前为静态预览数据，将逐步接入实时端点（Agent/Tool/会话/Provider）。</p>
         </template>
 
@@ -231,23 +537,165 @@ async function toggleTask(row) {
             <thead><tr><th>类别</th><th>规则</th></tr></thead>
             <tbody><tr><td colspan="2" class="empty">（暂无数据 · 待接入沙箱白名单端点）</td></tr></tbody>
           </table>
+
+          <!-- 30 节：Agent —— 一个列表（含一句话新建/删除）；点"详情"进这个 Agent 的文件浏览器 -->
+          <div v-else-if="active === 'agents'">
+            <!-- 详情视图：Tab（基本信息 / 文件 / 会话） -->
+            <div v-if="agentDetail">
+              <button class="btn back" @click="closeAgent">← 返回 Agent 列表</button>
+              <div class="sess-meta"><span>Agent</span><span class="mono">{{ agentDetail.name }}</span></div>
+              <div class="tabs">
+                <button :class="['tab', { on: agentDetail.tab === 'info' }]" @click="detailTab('info')">基本信息</button>
+                <button :class="['tab', { on: agentDetail.tab === 'generate' }]" @click="detailTab('generate')">生成</button>
+                <button :class="['tab', { on: agentDetail.tab === 'files' }]" @click="detailTab('files')">文件</button>
+                <button :class="['tab', { on: agentDetail.tab === 'chat' }]" @click="detailTab('chat')">会话</button>
+                <button :class="['tab', { on: agentDetail.tab === 'memory' }]" @click="detailTab('memory')">记忆</button>
+              </div>
+
+              <!-- Tab 1：基本信息 -->
+              <div v-if="agentDetail.tab === 'info'" class="info-grid">
+                <div class="info-row"><span class="k">name</span><span class="mono">{{ agentDetail.agent.name }}</span></div>
+                <div class="info-row"><span class="k">description</span><span>{{ agentDetail.agent.description || '—' }}</span></div>
+                <div class="info-row"><span class="k">provider</span><span>{{ agentDetail.agent.provider || '—' }}</span></div>
+                <div class="info-row"><span class="k">model</span><span>{{ agentDetail.agent.model || '—' }}</span></div>
+                <div class="info-row"><span class="k">tools</span><span>{{ (agentDetail.agent.tools || []).join(', ') || '—' }}</span></div>
+                <div class="info-row"><span class="k">定时</span><span class="mono">{{ (agentDetail.agent.schedules || []).map((s) => s.cron + ' (' + s.zone + ')').join('；') || '—' }}</span></div>
+              </div>
+
+              <!-- Tab 2：生成 —— 描述 → 大模型生成各文件内容，可编辑后保存生效 -->
+              <div v-else-if="agentDetail.tab === 'generate'">
+                <div class="gen-box">
+                  <div class="empty" style="margin-bottom:6px">描述这个 Agent 要做什么</div>
+                  <textarea v-model="genEdit.description" class="gen-draft" rows="4" placeholder="例如：每天早上抓取团队仓库的 PR，汇总成一份摘要推送到群里"></textarea>
+                  <div class="ops">
+                    <button class="btn" :disabled="genEdit.busy" @click="generateFiles">用大模型生成</button>
+                    <button v-if="genEdit.files" class="btn" :disabled="genEdit.busy" @click="saveFiles">保存并生效</button>
+                  </div>
+                  <p v-if="genEdit.busy" class="empty">{{ genEdit.files ? '保存中…' : '生成中…' }}</p>
+                  <p v-if="genEdit.error" class="error">{{ genEdit.error }}</p>
+                  <p v-if="genEdit.saved" class="ok">已保存并生效</p>
+                </div>
+                <template v-if="genEdit.files">
+                  <div v-for="(content, path) in genEdit.files" :key="path" class="gen-file">
+                    <div class="sess-meta"><span class="mono">{{ path }}</span></div>
+                    <textarea class="mono filetext" v-model="genEdit.files[path]"></textarea>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Tab 3：文件浏览器（可编辑） -->
+              <div v-else-if="agentDetail.tab === 'files'">
+                <p v-if="agentDetail.loading" class="empty">加载中…</p>
+                <p v-else-if="agentDetail.error" class="error">出错：{{ agentDetail.error }}</p>
+                <div v-else class="ws">
+                  <div class="ws-tree">
+                    <p v-if="!detailRows.length" class="empty">（该 Agent 目录为空）</p>
+                    <div v-for="(node, i) in detailRows" :key="i"
+                         :class="['ws-node', { file: node.type === 'file', on: fileView && fileView.path === node.path }]"
+                         :style="{ paddingLeft: (node.depth * 14) + 'px' }"
+                         @click="openFile(node)">
+                      <span class="mono">{{ node.type === 'dir' ? '📁' : '📄' }} {{ node.name }}</span>
+                    </div>
+                  </div>
+                  <div class="ws-file">
+                    <p v-if="!fileView" class="empty">点左侧一个文件查看/编辑内容</p>
+                    <template v-else>
+                      <div class="sess-meta"><span class="mono">{{ fileView.path }}</span></div>
+                      <p v-if="fileView.loading" class="empty">加载中…</p>
+                      <template v-else>
+                        <textarea class="mono filetext" v-model="fileView.content"></textarea>
+                        <div class="ops" style="margin-top:10px">
+                          <button class="btn" :disabled="fileView.saving" @click="saveFile">保存</button>
+                          <span v-if="fileView.saving" class="empty">保存中…</span>
+                          <span v-else-if="fileView.saved" class="ok">已保存</span>
+                        </div>
+                        <p v-if="fileView.error" class="error">{{ fileView.error }}</p>
+                      </template>
+                    </template>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
+              <div v-else-if="agentDetail.tab === 'chat'">
+                <div class="sess-meta"><span class="mono">{{ chat.sessionId || '（会话尚未创建）' }}</span></div>
+                <p v-if="chat.loading" class="empty">加载中…</p>
+                <p v-else-if="chat.error" class="error">出错：{{ chat.error }}</p>
+                <template v-else>
+                  <p v-if="!chat.messages.length" class="empty">（还没有对话，在下面发一条消息开始）</p>
+                  <div v-else class="chat">
+                    <div v-for="(m, i) in chat.messages" :key="i" :class="['msg', m.role]">
+                      <div class="msg-role">{{ roleLabel(m.role) }}<span v-if="m.toolName" class="mono tool-name"> · {{ m.toolName }}</span></div>
+                      <pre class="msg-body">{{ m.content || '（空）' }}</pre>
+                    </div>
+                  </div>
+                </template>
+                <div class="chat-input">
+                  <textarea v-model="chat.input" class="gen-draft" rows="3" placeholder="给这个 Agent 发条消息…"></textarea>
+                  <div class="ops">
+                    <button class="btn" :disabled="chat.sending || !chat.input.trim()" @click="sendChat">发送</button>
+                    <span v-if="chat.sending" class="empty">Agent 思考中…（ReAct 可能需要几秒）</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tab 5：记忆 —— 这个 Agent 自己的长期记忆（只读） -->
+              <div v-else-if="agentDetail.tab === 'memory'">
+                <p v-if="agentMemory.loading" class="empty">加载中…</p>
+                <p v-else-if="agentMemory.error" class="error">出错：{{ agentMemory.error }}</p>
+                <template v-else>
+                  <pre class="mono memtext">{{ agentMemory.text || '（这个 Agent 还没有记忆）' }}</pre>
+                  <p class="empty" style="margin-top:8px">由 save_memory 工具写入，此处只读。</p>
+                </template>
+              </div>
+            </div>
+
+            <!-- 列表视图：所有 Agent + 新建（只填 name + description，后台脚手架完整目录） -->
+            <template v-else>
+              <div class="gen-box">
+                <button v-if="!gen.open" class="btn" @click="gen.open = true">+ 新建 Agent</button>
+                <template v-else>
+                  <div class="gen-row">
+                    <input v-model="gen.name" class="gen-input" placeholder="Agent 名（字母/数字/下划线/连字符）" />
+                    <input v-model="gen.description" class="gen-input" placeholder="描述这个 Agent 做什么" />
+                  </div>
+                  <div class="ops">
+                    <button class="btn" :disabled="gen.busy || !gen.name" @click="createAgent">创建</button>
+                    <button class="btn" @click="cancelCreate">取消</button>
+                  </div>
+                  <p class="empty">创建后后台自动生成完整目录：AGENT.md + scripts/ + skills/ + REFERENCE.md（模板内容，可在文件浏览器查看）。</p>
+                </template>
+                <p v-if="gen.error" class="error">{{ gen.error }}</p>
+              </div>
+              <p v-if="agents.loading" class="empty">加载中…</p>
+              <p v-else-if="agents.error" class="error">出错：{{ agents.error }}</p>
+              <table v-else>
+                <thead><tr><th>name</th><th>provider</th><th>model</th><th>tools</th><th>定时</th><th>操作</th></tr></thead>
+                <tbody>
+                  <tr v-if="!agents.data.length"><td colspan="6" class="empty">（暂无 Agent · 点上面「新建 Agent」，或往 .oryxos/agents/ 丢一个目录）</td></tr>
+                  <tr v-for="a in agents.data" :key="a.name">
+                    <td class="mono">{{ a.name }}</td>
+                    <td>{{ a.provider }}</td>
+                    <td>{{ a.model }}</td>
+                    <td>{{ (a.tools || []).join(', ') }}</td>
+                    <td class="mono">{{ (a.schedules || []).map((s) => s.cron).join('; ') || '—' }}</td>
+                    <td class="ops">
+                      <button class="btn" @click="openAgent(a)">详情</button>
+                      <button class="btn" @click="deleteAgent(a.name)">删除</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
           <p v-else-if="!current.path" class="empty">{{ current.note }}</p>
           <template v-else>
             <p v-if="state[active]?.loading" class="empty">加载中…</p>
           <p v-else-if="state[active]?.error" class="error">出错：{{ state[active].error }}</p>
           <template v-else-if="state[active]?.data != null">
-            <!-- memory：纯文本 -->
-            <pre v-if="active === 'memory'" class="mono memtext">{{ state[active].data || '（暂无长期记忆）' }}</pre>
-            <!-- info：应用 + provider -->
-            <div v-else-if="active === 'info'">
-              <p>应用：<b>{{ state[active].data.application }}</b></p>
-              <p>Provider：
-                <span v-for="p in state[active].data.providers" :key="p" class="tag">{{ p }}</span>
-                <span v-if="!state[active].data.providers?.length" class="empty">（无）</span>
-              </p>
-            </div>
             <!-- schedules：定时任务，带管理动作（立即执行 / 启用停用 / 执行记录）——28 节，管理台可管 -->
-            <template v-else-if="active === 'schedules'">
+            <template v-if="active === 'schedules'">
               <!-- 执行记录详情视图 -->
               <div v-if="execDetail">
                 <button class="btn back" @click="closeExecutions">← 返回定时任务</button>
@@ -365,6 +813,9 @@ async function toggleTask(row) {
 }
 .nav-item:hover { background: var(--bg-mute); color: var(--text-1); }
 .nav-item.on { background: var(--brand-soft); color: var(--brand); }
+.nav-group { display: flex; align-items: center; justify-content: space-between; }
+.chevron { color: var(--text-3); font-size: 11px; }
+.nav-sub { padding-left: 22px; font-size: 13px; }
 .readonly { margin-top: auto; color: var(--text-3); font-size: 12px; padding: 8px; }
 .content { flex: 1; padding: 24px 32px; overflow-x: auto; }
 h2 { font-weight: 600; margin: 0 0 16px; }
@@ -419,5 +870,30 @@ th { color: var(--text-2); font-weight: 500; }
 .cap-desc { margin-top: 3px; font-size: 12px; color: var(--text-2); line-height: 1.5; }
 .stack { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
 .note { color: var(--text-3); font-size: 12px; border-top: 1px dashed var(--border); padding-top: 16px; }
-@media (max-width: 640px) { .layout { flex-direction: column; } .nav { width: auto; flex-direction: row; flex-wrap: wrap; } .readonly { display: none; } }
+/* 30 节：Agent 管理 / 工作区 */
+.gen-box { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 20px; }
+.gen-row { display: flex; gap: 10px; align-items: center; }
+.gen-input { flex: 1; background: var(--bg-mute); color: var(--text-1); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; width: 100%; }
+.gen-draft { width: 100%; background: var(--bg-mute); color: var(--text-1); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px; margin-bottom: 10px; resize: vertical; }
+.ws { display: flex; gap: 16px; align-items: flex-start; }
+.ws-tree { width: 300px; flex-shrink: 0; background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; max-height: 70vh; overflow: auto; }
+.ws-node { padding: 3px 6px; border-radius: 4px; cursor: default; font-size: 12px; }
+.ws-node.file { cursor: pointer; }
+.ws-node.file:hover { background: var(--bg-mute); }
+.ws-node.on { background: var(--brand-soft); color: var(--brand); }
+.ws-file { flex: 1; min-width: 0; }
+/* 详情 Tab */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 4px 0 16px; }
+.tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--text-2); padding: 8px 14px; font-size: 13px; cursor: pointer; }
+.tab:hover { color: var(--text-1); }
+.tab.on { color: var(--brand); border-bottom-color: var(--brand); }
+.info-grid { display: flex; flex-direction: column; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; max-width: 720px; }
+.info-row { display: flex; gap: 12px; background: var(--bg-soft); padding: 10px 14px; }
+.info-row .k { width: 110px; flex-shrink: 0; color: var(--text-2); font-size: 12px; }
+/* 可编辑文件 / 生成文件文本域 */
+.filetext { width:100%; min-height:360px; background:var(--bg-mute); color:var(--text-1); border:1px solid var(--border); border-radius:6px; padding:12px; font-family:var(--font-mono); font-size:12px; line-height:1.5; resize:vertical; white-space:pre; }
+.gen-file { margin-bottom: 16px; }
+.chat-input { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+@media (max-width: 640px) { .layout { flex-direction: column; } .nav { width: auto; flex-direction: row; flex-wrap: wrap; } .readonly { display: none; } .ws { flex-direction: column; } .ws-tree { width: auto; } }
 </style>

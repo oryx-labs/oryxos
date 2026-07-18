@@ -46,7 +46,7 @@ class MemoryServiceImplTest {
     service.remember("核心偏好", MemoryScope.CORE);
     service.remember("归档条目", MemoryScope.ARCHIVAL);
 
-    String all = service.readAll();
+    String all = service.readAll("default");
 
     assertTrue(all.contains("核心偏好"));
     assertTrue(all.contains("归档条目"));

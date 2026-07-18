@@ -31,7 +31,8 @@ provider: deepseek
 model: deepseek-chat
 tools: [http_get, notify]
 notify_channels:
-  - {type: webhook, url: ${TEAM_WEBHOOK_URL}}
+  - type: webhook
+    url: ${TEAM_WEBHOOK_URL}
 schedules:
   - {cron: "0 0 8 * * *", zone: Asia/Shanghai, message: 到点了，按你的说明执行。}
 ---
@@ -93,7 +94,8 @@ provider: deepseek
 model: deepseek-chat
 tools: [http_get, read_file, notify]     # read_file 用来读 skills/ 里的子指令
 notify_channels:
-  - {type: webhook, url: ${TEAM_WEBHOOK_URL}}
+  - type: webhook
+    url: ${TEAM_WEBHOOK_URL}
 schedules:
   - {cron: "0 0 9 * * *", zone: Asia/Shanghai, message: 到点了，编今天的科技日报。}
 ---
@@ -138,7 +140,8 @@ provider: deepseek
 model: deepseek-chat
 tools: [shell, notify]     # shell 用来跑 scripts/github_trending.py
 notify_channels:
-  - {type: webhook, url: ${TEAM_WEBHOOK_URL}}
+  - type: webhook
+    url: ${TEAM_WEBHOOK_URL}
 schedules:
   - {cron: "0 30 9 * * *", zone: Asia/Shanghai, message: 到点了，编今天的 GitHub 日报。}
 ---

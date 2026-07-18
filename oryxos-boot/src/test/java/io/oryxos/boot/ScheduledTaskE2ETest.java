@@ -118,7 +118,9 @@ class ScheduledTaskE2ETest {
     assertFalse(history.get(0).get("sessionId").asText().isBlank(), "执行应关联到一个 session");
 
     // ⑤ 确实走了真实 ReAct：save_memory 把巡检消息写进了 MEMORY.md
-    assertTrue(getData("/api/v1/memory").asText().contains("巡检"), "定时任务应真的驱动了 save_memory");
+    assertTrue(
+        getData("/api/v1/agents/sched-agent/memory").asText().contains("巡检"),
+        "定时任务应真的驱动了 save_memory");
 
     // ⑥ 停用后列表里 enabled=false
     JsonNode afterDisable =

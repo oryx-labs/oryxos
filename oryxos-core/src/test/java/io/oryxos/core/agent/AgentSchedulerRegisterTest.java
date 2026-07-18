@@ -72,6 +72,18 @@ class AgentSchedulerRegisterTest {
   }
 
   @Test
+  @DisplayName("unregisterProfile 注销定时、移除句柄（30 节删除/改定时用）")
+  void unregisterProfile_cancelsAndRemovesHandle() {
+    Profile p = profileWithSchedule("ops", new ScheduleConfig("morning", CRON, ZONE, "到点了"));
+    scheduler.registerProfile(p);
+    assertTrue(scheduler.hasScheduledTask("morning"));
+
+    scheduler.unregisterProfile(p);
+
+    assertFalse(scheduler.hasScheduledTask("morning"), "注销后句柄被移除、定时被 cancel");
+  }
+
+  @Test
   @DisplayName("cron/时区来自 Profile.schedules，不来自别处")
   void cronAndZoneComeFromProfileSchedules() {
     scheduler.registerProfile(

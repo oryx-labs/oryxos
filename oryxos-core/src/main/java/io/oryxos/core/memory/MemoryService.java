@@ -21,6 +21,9 @@ public interface MemoryService {
   /** recall_memory 转发：按关键词只在归档区检索。 */
   List<String> recall(String keyword);
 
-  /** 返回长期记忆全文（核心 + 归档）。26 节 GET /api/v1/memory 接线，委托后端 store 的 load（无缓存）。 */
-  String readAll();
+  /**
+   * 返回某个 Agent 的长期记忆全文（核心 + 归档）。30 节 GET /api/v1/agents/&lt;name&gt;/memory 接线，委托后端 store 的
+   * load（无缓存）。agentName 圈定作用域——记忆现在跟着 Agent 走，不再全局。
+   */
+  String readAll(String agentName);
 }

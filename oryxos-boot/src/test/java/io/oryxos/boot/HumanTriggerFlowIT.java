@@ -83,8 +83,8 @@ class HumanTriggerFlowIT {
     String sid = post("/api/v1/sessions", "{\"profile\":\"default\"}").get("sessionId").asText();
     post("/api/v1/sessions/" + sid + "/messages", "{\"content\":\"记住：我在北京，怕冷\"}");
 
-    String memory = get("/api/v1/memory").asText();
-    assertTrue(memory.contains("北京"), "GET /memory 应查得到刚写入的事实");
+    String memory = get("/api/v1/agents/default/memory").asText();
+    assertTrue(memory.contains("北京"), "GET /agents/default/memory 应查得到刚写入的事实");
   }
 
   @Test

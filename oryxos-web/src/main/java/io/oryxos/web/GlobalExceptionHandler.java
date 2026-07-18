@@ -1,5 +1,6 @@
 package io.oryxos.web;
 
+import io.oryxos.core.profile.ProfileValidationException;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.error.AgentTimeoutException;
 import io.oryxos.web.error.ProviderUnavailableException;
@@ -22,9 +23,9 @@ public class GlobalExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-  /** 400 — malformed or invalid request arguments. */
-  @ExceptionHandler({IllegalArgumentException.class})
-  public ResponseEntity<ApiResponse<Void>> handleBadRequest(IllegalArgumentException ex) {
+  /** 400 — malformed or invalid request arguments（含 AGENT.md 定义非法：ProfileValidationException）。 */
+  @ExceptionHandler({IllegalArgumentException.class, ProfileValidationException.class})
+  public ResponseEntity<ApiResponse<Void>> handleBadRequest(RuntimeException ex) {
     LOG.warn("Bad request: {}", sanitize(ex.getMessage()));
     return ResponseEntity.status(HttpStatus.BAD_REQUEST)
         .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
