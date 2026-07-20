@@ -270,3 +270,22 @@
 239. ① 增加编辑文件的能力 ② 增加"编辑 agent"tab：一句描述 → 大模型（经 provider）按 agent 格式规范返回每个文件内容 ③ tab 增加这个 agent 专属记忆——要改动 memory 能力（现在的 memory 是全局的、不跟着 agent 走）
 240. 可以用 sub agent 并行执行、加快速度
 241. ① 把这次的修改回写到第30节课件 ② 把新增的提示词写入 docs/prompt/prompt.md
+
+## 第九轮（切 class-31 + 课件搬出仓库 + Provider/飞书连通性验证 + codex 中转代理接入 + 全流程真链路联调：对话→记忆→飞书通知）
+
+242. 切换到远程的 class-31 分支
+244. 测 deepseek 模型能否连通：随机字符串当 token，核心看网络通不通、能否返回 token 错误
+245. 确认：给一个对的 deepseek token 就能用了吧
+246. 测和飞书发消息的通道是否通，看需要我提供什么信息
+247. 给这个飞书 webhook 地址发一条消息试试（提供真实自定义机器人 webhook）
+248. 照 deepseek 的方式，测 GPT(OpenAI) 接口是否连通
+249. config/application.yml 里加上 codex 配置，api-key 留空我来填
+250. 读配置里 codex 的 api-key 连 GPT 看能不能通（命中"敏感数据发往非批准目标"红线被 guardrail 拦下，改为给脚本让用户自己跑）
+251. 那我怎么测试？你写一段代码我跑
+252. 把 codex 的 base-url 配成中转代理 https://ai.soulecho.cc（Responses API），这是 codex
+253. 测试脚本参数换个模型，让 bash scripts/test-codex-key.sh 能跑通过（默认 gpt-5.5）
+254. 用第27节课的思路跑一遍全流程（真起服务、走 codex/gpt-5.5，对话→ReAct→工具→记忆→会话→审计）
+255. 核心记忆的时间戳加上时分秒
+256. 加一个功能：让 Agent 给 Lark 发条消息、打通全流程；加一步——通知后再调 save_memory 留痕
+257. 没收到通知，再跑一次、看 notify 返回（定位到 type:webhook 用错适配器、payload 格式不对；改 type:feishu 修复，未动代码）
+258. 把这些没记录到 docs/prompt/prompt.md 的提示词补进去
