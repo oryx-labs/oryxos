@@ -15,6 +15,7 @@ import io.oryxos.core.agent.ToolInvocationAuditor;
 import io.oryxos.core.agent.WorkspaceWatcher;
 import io.oryxos.core.context.ContextLoader;
 import io.oryxos.core.memory.MemoryService;
+import io.oryxos.core.notify.NotifyChannelRegistry;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.LlmCallAuditor;
 import io.oryxos.core.provider.ProviderService;
@@ -30,11 +31,13 @@ import io.oryxos.provider.ProvidersProperties;
 import io.oryxos.provider.SpringAiProviderServiceImpl;
 import io.oryxos.provider.ToolSchemaAdapter;
 import io.oryxos.storage.JpaLlmCallAuditor;
+import io.oryxos.storage.JpaNotifyChannelRegistry;
 import io.oryxos.storage.JpaScheduledTaskStore;
 import io.oryxos.storage.JpaSessionManager;
 import io.oryxos.storage.JpaToolInvocationAuditor;
 import io.oryxos.storage.LlmCallRepository;
 import io.oryxos.storage.MemoryEntryRepository;
+import io.oryxos.storage.NotifyChannelRepository;
 import io.oryxos.storage.ScheduledTaskRepository;
 import io.oryxos.storage.SessionRepository;
 import io.oryxos.storage.TaskExecutionRepository;
@@ -235,7 +238,11 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  ToolRegistry toolRegistry(Sandbox sandbox, RestClient restClient, MemoryService memoryService) {
+  ToolRegistry toolRegistry(
+      Sandbox sandbox,
+      RestClient restClient,
+      MemoryService memoryService,
+      NotifyChannelRegistry notifyChannelRegistry) {
     ToolRegistry registry = new ToolRegistry();
     // 内置工具走 @Tool 注解管道（schema 自动生成，宪法 II 第二件事）
     registry.registerAnnotated(new FileTools(sandbox)); // read/write/list/edit/grep/glob
@@ -252,7 +259,7 @@ public class OryxOsRuntime {
             "wecom", new WeComNotifyAdapter(restClient),
             "feishu", new FeishuNotifyAdapter(restClient),
             "dingtalk", new DingTalkNotifyAdapter(restClient));
-    registry.register(new NotifyTools(notifyAdapters, sandbox));
+    registry.register(new NotifyTools(notifyAdapters, sandbox, notifyChannelRegistry));
     // 记忆工具：save_memory / recall_memory（补齐 20 节预留的两工具面），只认门面对后端无感
     registry.registerAnnotated(new MemoryTools(memoryService));
     // MCP：失联的 server 只 WARN 跳过，不拖垮启动
@@ -292,9 +299,17 @@ public class OryxOsRuntime {
   }
 
   @Bean
+  NotifyChannelRegistry notifyChannelRegistry(NotifyChannelRepository repository) {
+    return new JpaNotifyChannelRegistry(repository);
+  }
+
+  @Bean
   AgentService agentService(
-      ProfileRegistry profileRegistry, ReActLoop reActLoop, SessionManager sessionManager) {
-    return new AgentService(profileRegistry, reActLoop, sessionManager);
+      ProfileRegistry profileRegistry,
+      ReActLoop reActLoop,
+      SessionManager sessionManager,
+      MemoryService memoryService) {
+    return new AgentService(profileRegistry, reActLoop, sessionManager, memoryService);
   }
 
   @Bean

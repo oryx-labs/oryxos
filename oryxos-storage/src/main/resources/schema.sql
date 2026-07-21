@@ -81,3 +81,14 @@ CREATE TABLE IF NOT EXISTS memory_entries (
     created_at TIMESTAMP NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_memory_scope ON memory_entries (scope);
+
+-- notify_channels：全局通知渠道注册表（31 节）——name → type + url + 描述；管理台可 CRUD、Agent 按名字引用
+-- （notify 工具的 channel 参数）。新表，CREATE TABLE IF NOT EXISTS，非 ALTER，无迁移风险。
+CREATE TABLE IF NOT EXISTS notify_channels (
+    name VARCHAR(128) PRIMARY KEY,
+    type VARCHAR(32) NOT NULL,
+    url TEXT NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);

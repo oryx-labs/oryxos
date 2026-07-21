@@ -7,9 +7,14 @@ import io.oryxos.core.provider.ProviderResponse;
 import io.oryxos.core.provider.ProviderService;
 import io.oryxos.core.provider.ToolCallRequest;
 import io.oryxos.core.provider.Usage;
+import io.oryxos.core.session.Message;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -84,7 +89,44 @@ public class SpringAiProviderServiceImpl implements ProviderService {
     if (!callbacks.isEmpty()) {
       options.toolCallbacks(callbacks);
     }
-    return new Prompt(request.content(), options.build());
+    // 结构化消息透传（31 节修复）：system + 逐条对话消息，保留 assistant tool_calls / tool tool_call_id 配对，
+    // 让模型看出工具已调过、继续下一步而不是反复重调。
+    List<org.springframework.ai.chat.messages.Message> messages = new ArrayList<>();
+    if (request.systemPrompt() != null && !request.systemPrompt().isBlank()) {
+      messages.add(new SystemMessage(request.systemPrompt()));
+    }
+    for (Message message : request.messages()) {
+      messages.add(toSpringMessage(message));
+    }
+    return new Prompt(messages, options.build());
+  }
+
+  private static org.springframework.ai.chat.messages.Message toSpringMessage(Message message) {
+    if (Message.ROLE_USER.equals(message.role())) {
+      return new UserMessage(message.content());
+    }
+    if (Message.ROLE_TOOL.equals(message.role())) {
+      String id = message.toolCallId();
+      // 无 id 的工具结果（旧格式历史，或被截断得没了配对的 assistant tool_call）：不发成协议级 tool 消息——
+      // 否则 OpenAI 会 400「tool 必须紧跟带 tool_calls 的 assistant」。降级成信息性 user 文本喂给模型。
+      if (id == null || id.isBlank()) {
+        return new UserMessage("[工具 " + message.toolName() + " 返回] " + message.content());
+      }
+      return new ToolResponseMessage(
+          List.of(new ToolResponseMessage.ToolResponse(id, message.toolName(), message.content())));
+    }
+    // assistant：带 tool_calls（含 id）才能让下一轮的 tool 结果配上对
+    if (message.toolCalls().isEmpty()) {
+      return new AssistantMessage(message.content());
+    }
+    List<AssistantMessage.ToolCall> toolCalls =
+        message.toolCalls().stream()
+            .map(
+                tc ->
+                    new AssistantMessage.ToolCall(
+                        tc.id() == null ? "" : tc.id(), "function", tc.name(), tc.argumentsJson()))
+            .toList();
+    return new AssistantMessage(message.content(), Map.of(), toolCalls);
   }
 
   private static ProviderResponse toProviderResponse(ChatResponse response) {
@@ -96,7 +138,7 @@ public class SpringAiProviderServiceImpl implements ProviderService {
       text = output.getText();
       toolCalls =
           output.getToolCalls().stream()
-              .map(call -> new ToolCallRequest(call.name(), call.arguments()))
+              .map(call -> new ToolCallRequest(call.id(), call.name(), call.arguments()))
               .toList();
     }
     return new ProviderResponse(text, toolCalls, extractUsage(response));

@@ -50,7 +50,10 @@ class AgentServiceTest {
     sessionManager = mock(SessionManager.class);
     agentService =
         new AgentService(
-            new ProfileRegistry(Map.of("ops-agent", profile)), reActLoop, sessionManager);
+            new ProfileRegistry(Map.of("ops-agent", profile)),
+            reActLoop,
+            sessionManager,
+            mock(io.oryxos.core.memory.MemoryService.class));
     session = new Session("s-1", "ops-agent");
   }
 

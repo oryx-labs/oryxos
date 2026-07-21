@@ -38,8 +38,12 @@ class OryxToolContractTest {
     registry.registerAnnotated(
         new io.oryxos.tool.builtin.InteractionTools(
             new io.oryxos.tool.interaction.UnsupportedUserInteraction()));
+    io.oryxos.core.notify.NotifyChannelRegistry channelRegistry =
+        mock(io.oryxos.core.notify.NotifyChannelRegistry.class);
+    org.mockito.Mockito.when(channelRegistry.list()).thenReturn(java.util.List.of());
     registry.register(
-        new NotifyTools(Map.of("webhook", mock(NotifyChannelAdapter.class)), sandbox));
+        new NotifyTools(
+            Map.of("webhook", mock(NotifyChannelAdapter.class)), sandbox, channelRegistry));
     return registry.all().stream();
   }
 

@@ -106,7 +106,7 @@ class MockProviderFlowTest {
             Profile.Settings.defaults());
     ProfileRegistry profileRegistry = new ProfileRegistry(Map.of(AGENT, profile));
     SessionManager sessionManager = mock(SessionManager.class);
-    AgentService agent = new AgentService(profileRegistry, loop, sessionManager);
+    AgentService agent = new AgentService(profileRegistry, loop, sessionManager, memory);
 
     // —— 跑一次"记住…"对话 ——
     Session session = new Session(SESSION_ID, AGENT);

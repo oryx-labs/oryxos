@@ -2,6 +2,7 @@ package io.oryxos.core.session;
 
 import io.oryxos.core.ToolResult;
 import io.oryxos.core.provider.ProviderResponse;
+import io.oryxos.core.provider.ToolCallRequest;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,15 +50,21 @@ public class Session {
     messages.add(new Message(Message.ROLE_USER, content, null));
   }
 
-  /** 累积模型响应；text 为 null 时按空串（既无文本也无工具请求的收尾边界）。 */
+  /** 累积模型响应；text 为 null 时按空串。带上模型这一轮发起的 tool_calls（含 id），下一轮回填结果时据此配对。 */
   public void appendAssistant(ProviderResponse response) {
     String text = response.text() == null ? "" : response.text();
-    messages.add(new Message(Message.ROLE_ASSISTANT, text, null));
+    List<Message.ToolCall> calls =
+        response.toolCalls().stream()
+            .map(c -> new Message.ToolCall(c.id(), c.name(), c.argumentsJson()))
+            .toList();
+    messages.add(new Message(Message.ROLE_ASSISTANT, text, null, null, calls));
   }
 
-  /** 累积工具结果：成功存 content、失败存错误描述——成败都进历史，模型下一轮能看到。 */
-  public void appendToolResult(String toolName, ToolResult result) {
+  /** 累积工具结果：成功存 content、失败存错误描述——成败都进历史；带上 tool_call_id 与发起的 assistant tool_call 配对。 */
+  public void appendToolResult(ToolCallRequest call, ToolResult result) {
     String content = result.success() ? result.content() : "工具执行失败: " + result.errorMessage();
-    messages.add(new Message(Message.ROLE_TOOL, content == null ? "" : content, toolName));
+    messages.add(
+        new Message(
+            Message.ROLE_TOOL, content == null ? "" : content, call.name(), call.id(), List.of()));
   }
 }

@@ -289,3 +289,24 @@
 256. 加一个功能：让 Agent 给 Lark 发条消息、打通全流程；加一步——通知后再调 save_memory 留痕
 257. 没收到通知，再跑一次、看 notify 返回（定位到 type:webhook 用错适配器、payload 格式不对；改 type:feishu 修复，未动代码）
 258. 把这些没记录到 docs/prompt/prompt.md 的提示词补进去
+
+## 第十轮（notify 渠道全局注册表 CRUD + Agent notify 改自然语言按名引用 + 三个 Demo Agent 按新定义 + Provider 探路 + 修复 ReAct 多工具循环 + 管理台迭代 + 每次触发自动记归档记忆）
+
+259. 理解第31节文档；AGENT.md 不应内联 tools/notify_channels——tools 走全局工具列表、notify 出口改成一个全局"notify 渠道"注册表（有 CRUD）；先做 notify 的 CRUD 接口 + 管理页，再改 AGENT.md 定义
+260. （clarify）notify 渠道存 SQLite 新表；AGENT.md 干脆不要 notify_channels 字段，用自然语言说"发到哪个 notify channel"
+261. 完成第一个 agent（天气）开发，放进 .oryxos/agents/，按新定义
+262. 继续开发剩下两个 agent（科技日报 / GitHub 日报），按第31节文档
+263. 运行这个 agent，看消息能否通知到 Lark
+264. codex 可以了，跑一下两个（科技日报 / GitHub 日报）agent
+265. qoder 的服务能支持吗？
+266. provider（怎么把它接成一个 provider）
+267. 检索 qoder 的文档
+268. 改用 deepseek 的配置，读 config/application.yml
+269. （批准）正式修 ReAct 多工具循环——对话历史改结构化消息透传（保留 tool_call/tool_result 配对）
+270. 启动服务、启动 manager
+271. Agent 列表加 description 列；provider/model 不用都显示、留 provider 即可（加上 agent 描述）
+272. 每个 agent 加"立即触发"按钮
+273. 立即触发后会话和记忆都空、但 Lark 收到了（定位：invoke 用错 session，改走 console 固定会话，与会话 tab 同一条）
+274. 每个列表加刷新按钮
+275. 每次触发都应记录到记忆；记忆用两个 table 展示（核心 / 归档）；会话要有自己的滚动框、不跟大页面滚
+276. 把新增的这些 prompt 记录到 docs/prompt/prompt.md
