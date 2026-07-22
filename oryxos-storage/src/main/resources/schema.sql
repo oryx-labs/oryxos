@@ -81,3 +81,17 @@ CREATE TABLE IF NOT EXISTS memory_entries (
     created_at TIMESTAMP NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_memory_scope ON memory_entries (scope);
+
+-- admin_auth_events：管理后台认证安全事件（登录成功/失败/限制/退出）
+-- 不记录密码、密码散列、CSRF token、Cookie 或请求体。
+CREATE TABLE IF NOT EXISTS admin_auth_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    principal VARCHAR(255) NOT NULL,
+    event_type VARCHAR(32) NOT NULL,
+    remote_address VARCHAR(128),
+    user_agent VARCHAR(512),
+    session_id VARCHAR(255),
+    created_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_auth_events_created_at ON admin_auth_events (created_at);
+CREATE INDEX IF NOT EXISTS idx_admin_auth_events_event_type ON admin_auth_events (event_type);

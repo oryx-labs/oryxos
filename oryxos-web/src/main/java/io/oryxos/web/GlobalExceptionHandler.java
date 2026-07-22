@@ -1,6 +1,7 @@
 package io.oryxos.web;
 
 import io.oryxos.core.profile.ProfileValidationException;
+import io.oryxos.web.auth.AdminAuthException;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.error.AgentTimeoutException;
 import io.oryxos.web.error.ProviderUnavailableException;
@@ -22,6 +23,14 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class GlobalExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+  /** Auth-specific status mapping: 401/403/429/503 all keep the normal JSON envelope. */
+  @ExceptionHandler(AdminAuthException.class)
+  public ResponseEntity<ApiResponse<Void>> handleAdminAuth(AdminAuthException ex) {
+    LOG.warn("Admin auth request rejected: {}", sanitize(ex.getMessage()));
+    return ResponseEntity.status(ex.status())
+        .body(ApiResponse.error(ex.status().value(), ex.getMessage()));
+  }
 
   /** 400 — malformed or invalid request arguments（含 AGENT.md 定义非法：ProfileValidationException）。 */
   @ExceptionHandler({IllegalArgumentException.class, ProfileValidationException.class})

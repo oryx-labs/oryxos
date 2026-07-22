@@ -17,9 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -48,6 +45,8 @@ class ScheduledTaskE2ETest {
   private final ObjectMapper mapper = new ObjectMapper();
 
   @Autowired private TestRestTemplate rest;
+
+  private AuthenticatedRestClient adminClient;
 
   /** 临时工作区：一个 provider: mock 且带一条 schedule 的 Agent；并把 oryxos.root 指过来。 */
   private static Path seedWorkspace() {
@@ -91,6 +90,9 @@ class ScheduledTaskE2ETest {
   @DynamicPropertySource
   static void datasource(DynamicPropertyRegistry registry) {
     registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + ROOT.resolve("sched-e2e.db"));
+    registry.add("oryxos.admin.username", () -> "admin");
+    registry.add("oryxos.admin.password-hash", () -> "{noop}secret");
+    registry.add("oryxos.admin.secure-cookie", () -> "false");
   }
 
   @Test
@@ -136,24 +138,22 @@ class ScheduledTaskE2ETest {
   }
 
   private JsonNode postData(String path) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    return dataOf(rest.postForEntity(path, new HttpEntity<>("", headers), String.class));
+    return adminClient().postEmpty(path);
   }
 
   private JsonNode putData(String path, String json) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    return dataOf(
-        rest.exchange(
-            path,
-            org.springframework.http.HttpMethod.PUT,
-            new HttpEntity<>(json, headers),
-            String.class));
+    return adminClient().putJson(path, json);
   }
 
   private JsonNode getData(String path) throws Exception {
-    return dataOf(rest.getForEntity(path, String.class));
+    return adminClient().getData(path);
+  }
+
+  private AuthenticatedRestClient adminClient() {
+    if (adminClient == null) {
+      adminClient = new AuthenticatedRestClient(rest, mapper);
+    }
+    return adminClient;
   }
 
   private JsonNode dataOf(ResponseEntity<String> resp) throws Exception {

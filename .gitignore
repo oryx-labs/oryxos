@@ -44,8 +44,17 @@ oryxos-web/src/main/resources/static/admin/
 
 # 运行时：外部配置（含 deepseek 等真实凭证，凭证不入库）、start.sh 的 pid、日志
 config/application.yml
+.env*
 bin/oryxos.pid
 logs/
+
+# 本机 IDE / 编辑器状态
+.idea/
+.vscode/
+.agent/
+.tool/
+.agents/
+.tools/
 
 # 运行时工作区：Profile / MEMORY.md / SQLite / 会话 / 日志都在这里，随环境生成，不入库
 .oryxos/

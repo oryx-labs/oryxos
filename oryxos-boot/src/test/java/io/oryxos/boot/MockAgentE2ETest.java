@@ -19,9 +19,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -46,6 +43,8 @@ class MockAgentE2ETest {
   @Autowired private TestRestTemplate rest;
   @Autowired private LlmCallRepository llmCalls;
   @Autowired private ToolInvocationRepository toolInvocations;
+
+  private AuthenticatedRestClient adminClient;
 
   /** 临时工作区：一个 provider: mock 的 Agent + 空 memory 目录；并把 oryxos.root 指过来。 */
   private static Path seedWorkspace() {
@@ -84,6 +83,9 @@ class MockAgentE2ETest {
   @DynamicPropertySource
   static void datasource(DynamicPropertyRegistry registry) {
     registry.add("spring.datasource.url", () -> "jdbc:sqlite:" + ROOT.resolve("e2e.db"));
+    registry.add("oryxos.admin.username", () -> "admin");
+    registry.add("oryxos.admin.password-hash", () -> "{noop}secret");
+    registry.add("oryxos.admin.secure-cookie", () -> "false");
   }
 
   @Test
@@ -124,13 +126,18 @@ class MockAgentE2ETest {
   }
 
   private JsonNode postData(String path, String json) throws Exception {
-    HttpHeaders headers = new HttpHeaders();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    return dataOf(rest.postForEntity(path, new HttpEntity<>(json, headers), String.class));
+    return adminClient().postJson(path, json);
   }
 
   private JsonNode getData(String path) throws Exception {
-    return dataOf(rest.getForEntity(path, String.class));
+    return adminClient().getData(path);
+  }
+
+  private AuthenticatedRestClient adminClient() {
+    if (adminClient == null) {
+      adminClient = new AuthenticatedRestClient(rest, mapper);
+    }
+    return adminClient;
   }
 
   private JsonNode dataOf(ResponseEntity<String> resp) throws Exception {

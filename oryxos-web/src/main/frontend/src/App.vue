@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import logoUrl from './assets/logo.svg'
+import { apiGet, apiSend, authStatus, login, logout, setUnauthorizedHandler } from './api'
 
 // 顶层：概览 / Agent 列表 / 定时任务。「OS 运行时」下收纳 Provider/Tool/Sandbox/长期记忆/会话——
 // 这些都是底座本身的运行时状态，跟业务 Agent 管理分层展示（31 节：侧边栏重分组）。
@@ -32,20 +33,95 @@ const state = reactive({}) // key -> {loading, error, data}
 // 当前激活页（只渲染这一页，避免 v-show + v-for 的块补丁陷阱导致切不动）
 const current = computed(() => NAV.find((n) => n.key === active.value) ?? NAV[0])
 
+const auth = reactive({
+  loading: true,
+  configured: false,
+  authenticated: false,
+  username: null,
+  error: null,
+  expired: false,
+})
+const loginForm = reactive({ username: '', password: '' })
+const loginBusy = ref(false)
+
+setUnauthorizedHandler(() => {
+  clearProtectedState()
+  auth.authenticated = false
+  auth.username = null
+  auth.expired = true
+})
+
 // 运行状态（原「运行状态」独立页，31 节并入概览展示）：应用名 + 已配置 Provider
 const runtimeInfo = ref({ loading: true, error: null, data: null })
 async function loadRuntimeInfo() {
   runtimeInfo.value = { loading: true, error: null, data: null }
   try {
-    const res = await fetch('/api/v1/info')
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    runtimeInfo.value = { loading: false, error: null, data: body.data }
+    const data = await apiGet('/api/v1/info')
+    runtimeInfo.value = { loading: false, error: null, data }
   } catch (e) {
     runtimeInfo.value = { loading: false, error: e.message, data: null }
   }
 }
-loadRuntimeInfo()
+
+async function bootstrapAuth() {
+  auth.loading = true
+  auth.error = null
+  try {
+    const status = await authStatus()
+    auth.configured = !!status.configured
+    auth.authenticated = !!status.authenticated
+    auth.username = status.username || null
+    auth.expired = false
+    if (auth.authenticated) await loadRuntimeInfo()
+  } catch (e) {
+    auth.error = e.message
+  } finally {
+    auth.loading = false
+  }
+}
+
+async function handleLogin() {
+  if (!loginForm.username.trim() || !loginForm.password) return
+  loginBusy.value = true
+  auth.error = null
+  try {
+    const data = await login({ username: loginForm.username, password: loginForm.password })
+    auth.authenticated = true
+    auth.username = data.username
+    auth.expired = false
+    loginForm.password = ''
+    await loadRuntimeInfo()
+  } catch (e) {
+    auth.error = e.message
+  } finally {
+    loginBusy.value = false
+  }
+}
+
+async function handleLogout() {
+  try {
+    await logout()
+  } catch (e) {
+    /* 后端会话可能已经过期；前端仍清理本地状态。 */
+  }
+  clearProtectedState()
+  auth.authenticated = false
+  auth.username = null
+  auth.expired = false
+  active.value = 'overview'
+}
+
+function clearProtectedState() {
+  Object.keys(state).forEach((key) => delete state[key])
+  runtimeInfo.value = { loading: false, error: null, data: null }
+  agents.value = { loading: false, error: null, data: [] }
+  sessionDetail.value = null
+  execDetail.value = null
+  agentDetail.value = null
+  fileView.value = null
+}
+
+bootstrapAuth()
 
 // 概览页数据：当前为静态预览，后续逐步接入实时端点（TODO 标注了各自的动态来源）
 const overview = {
@@ -85,10 +161,8 @@ async function load(key) {
   if (!nav || !nav.path) return
   state[key] = { loading: true, error: null, data: null }
   try {
-    const res = await fetch(nav.path)
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '请求失败')
-    const data = nav.transform ? nav.transform(body.data) : body.data
+    const body = await apiGet(nav.path)
+    const data = nav.transform ? nav.transform(body) : body
     state[key] = { loading: false, error: null, data }
   } catch (e) {
     state[key] = { loading: false, error: e.message, data: null }
@@ -96,6 +170,7 @@ async function load(key) {
 }
 
 function select(key) {
+  if (!auth.authenticated) return
   active.value = key
   sessionDetail.value = null // 切页时收起会话详情
   execDetail.value = null // 切页时收起执行记录
@@ -110,10 +185,8 @@ const sessionDetail = ref(null) // {loading, error, id, data:{sessionId, profile
 async function openSession(id) {
   sessionDetail.value = { loading: true, error: null, id, data: null }
   try {
-    const res = await fetch(`/api/v1/sessions/${encodeURIComponent(id)}`)
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    sessionDetail.value = { loading: false, error: null, id, data: body.data }
+    const data = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}`)
+    sessionDetail.value = { loading: false, error: null, id, data }
   } catch (e) {
     sessionDetail.value = { loading: false, error: e.message, id, data: null }
   }
@@ -135,9 +208,7 @@ const busy = ref(null) // 正在操作的 taskId，防重复点击
 async function runTask(id) {
   busy.value = id
   try {
-    const res = await fetch(`/api/v1/schedules/${id}/run`, { method: 'POST' })
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '执行失败')
+    await apiSend(`/api/v1/schedules/${id}/run`)
     await load('schedules')
     // 若正打开着这个任务的执行记录，跑完顺手刷新
     if (execDetail.value?.taskId === id) await openExecutions(id)
@@ -154,10 +225,8 @@ const execDetail = ref(null) // {loading, error, taskId, data:[{startedAt,succes
 async function openExecutions(taskId) {
   execDetail.value = { loading: true, error: null, taskId, data: null }
   try {
-    const res = await fetch(`/api/v1/schedules/${encodeURIComponent(taskId)}/executions`)
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    execDetail.value = { loading: false, error: null, taskId, data: body.data }
+    const data = await apiGet(`/api/v1/schedules/${encodeURIComponent(taskId)}/executions`)
+    execDetail.value = { loading: false, error: null, taskId, data }
   } catch (e) {
     execDetail.value = { loading: false, error: e.message, taskId, data: null }
   }
@@ -171,13 +240,10 @@ function closeExecutions() {
 async function toggleTask(row) {
   busy.value = row.taskId
   try {
-    const res = await fetch(`/api/v1/schedules/${row.taskId}`, {
+    await apiSend(`/api/v1/schedules/${row.taskId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: !row.enabled }),
+      body: { enabled: !row.enabled },
     })
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '切换失败')
     await load('schedules')
   } catch (e) {
     state.schedules = { ...state.schedules, error: e.message }
@@ -191,10 +257,8 @@ const agents = ref({ loading: false, error: null, data: [] })
 async function loadAgents() {
   agents.value = { loading: true, error: null, data: [] }
   try {
-    const res = await fetch('/api/v1/agents')
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    agents.value = { loading: false, error: null, data: body.data || [] }
+    const data = await apiGet('/api/v1/agents')
+    agents.value = { loading: false, error: null, data: data || [] }
   } catch (e) {
     agents.value = { loading: false, error: e.message, data: [] }
   }
@@ -206,12 +270,7 @@ const gen = reactive({ open: false, name: '', description: '', busy: false, erro
 async function createAgent() {
   gen.busy = true; gen.error = null
   try {
-    const res = await fetch('/api/v1/agents', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: gen.name, description: gen.description }),
-    })
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '创建失败')
+    await apiSend('/api/v1/agents', { body: { name: gen.name, description: gen.description } })
     cancelCreate(); await loadAgents()
   } catch (e) { gen.error = e.message } finally { gen.busy = false }
 }
@@ -219,9 +278,7 @@ async function createAgent() {
 async function deleteAgent(name) {
   if (!confirm(`删除 Agent「${name}」？（整个目录归档到 archive/，不物理删）`)) return
   try {
-    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}`, { method: 'DELETE' })
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '删除失败')
+    await apiSend(`/api/v1/agents/${encodeURIComponent(name)}`, { method: 'DELETE' })
     if (agentDetail.value?.name === name) closeAgent()
     await loadAgents()
   } catch (e) { agents.value = { ...agents.value, error: e.message } }
@@ -246,10 +303,8 @@ async function openAgent(agent) {
   resetGenEdit()
   resetAgentMemory()
   try {
-    const res = await fetch('/api/v1/workspace/tree')
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    const agentsNode = (body.data.children || []).find((c) => c.name === 'agents')
+    const data = await apiGet('/api/v1/workspace/tree')
+    const agentsNode = (data.children || []).find((c) => c.name === 'agents')
     const node = (agentsNode?.children || []).find((c) => c.name === agent.name) || null
     agentDetail.value = { ...agentDetail.value, loading: false, node }
   } catch (e) {
@@ -262,22 +317,16 @@ async function reloadAgent() {
   if (!agentDetail.value) return
   const name = agentDetail.value.name
   try {
-    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}`)
-    const body = await res.json()
-    if (body.code === 0 && body.data) {
-      agentDetail.value = { ...agentDetail.value, agent: body.data }
-    }
+    const data = await apiGet(`/api/v1/agents/${encodeURIComponent(name)}`)
+    if (data) agentDetail.value = { ...agentDetail.value, agent: data }
   } catch (e) {
     /* 元数据刷新失败不阻断，忽略 */
   }
   try {
-    const res = await fetch('/api/v1/workspace/tree')
-    const body = await res.json()
-    if (body.code === 0) {
-      const agentsNode = (body.data.children || []).find((c) => c.name === 'agents')
-      const node = (agentsNode?.children || []).find((c) => c.name === name) || null
-      agentDetail.value = { ...agentDetail.value, node }
-    }
+    const data = await apiGet('/api/v1/workspace/tree')
+    const agentsNode = (data.children || []).find((c) => c.name === 'agents')
+    const node = (agentsNode?.children || []).find((c) => c.name === name) || null
+    agentDetail.value = { ...agentDetail.value, node }
   } catch (e) {
     /* 文件树刷新失败不阻断，忽略 */
   }
@@ -311,13 +360,10 @@ async function generateFiles() {
   genEdit.busy = true; genEdit.error = null; genEdit.saved = false
   try {
     const name = agentDetail.value.name
-    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/generate-files`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: genEdit.description }),
+    const data = await apiSend(`/api/v1/agents/${encodeURIComponent(name)}/generate-files`, {
+      body: { description: genEdit.description },
     })
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '生成失败')
-    genEdit.files = body.data.files || {}
+    genEdit.files = data.files || {}
   } catch (e) { genEdit.error = e.message } finally { genEdit.busy = false }
 }
 
@@ -325,12 +371,9 @@ async function saveFiles() {
   genEdit.busy = true; genEdit.error = null
   try {
     const name = agentDetail.value.name
-    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/files`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files: genEdit.files }),
+    await apiSend(`/api/v1/agents/${encodeURIComponent(name)}/files`, {
+      body: { files: genEdit.files },
     })
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '保存失败')
     genEdit.saved = true
     await reloadAgent()
   } catch (e) { genEdit.error = e.message } finally { genEdit.busy = false }
@@ -350,11 +393,9 @@ async function loadChat() {
   chat.loading = true; chat.error = null
   try {
     const name = agentDetail.value.name
-    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/session`)
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    chat.sessionId = body.data.sessionId
-    chat.messages = body.data.messages || []
+    const data = await apiGet(`/api/v1/agents/${encodeURIComponent(name)}/session`)
+    chat.sessionId = data.sessionId
+    chat.messages = data.messages || []
   } catch (e) { chat.error = e.message } finally { chat.loading = false }
 }
 
@@ -363,12 +404,9 @@ async function sendChat() {
   chat.sending = true; chat.error = null
   try {
     const name = agentDetail.value.name
-    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/session/messages`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: chat.input }),
+    await apiSend(`/api/v1/agents/${encodeURIComponent(name)}/session/messages`, {
+      body: { content: chat.input },
     })
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '发送失败')
     chat.input = ''
     await loadChat()
   } catch (e) { chat.error = e.message } finally { chat.sending = false }
@@ -385,10 +423,8 @@ async function loadMemory() {
   agentMemory.loading = true; agentMemory.error = null
   try {
     const name = agentDetail.value.name
-    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/memory`)
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    agentMemory.text = body.data || ''
+    const data = await apiGet(`/api/v1/agents/${encodeURIComponent(name)}/memory`)
+    agentMemory.text = data || ''
   } catch (e) { agentMemory.error = e.message } finally { agentMemory.loading = false }
 }
 
@@ -404,10 +440,8 @@ async function openFile(node) {
   if (node.type !== 'file') return
   fileView.value = { path: node.path, loading: true, error: null, content: '', saving: false, saved: false }
   try {
-    const res = await fetch(`/api/v1/workspace/file?path=${encodeURIComponent(node.path)}`)
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    fileView.value = { path: node.path, loading: false, error: null, content: body.data, saving: false, saved: false }
+    const data = await apiGet(`/api/v1/workspace/file?path=${encodeURIComponent(node.path)}`)
+    fileView.value = { path: node.path, loading: false, error: null, content: data, saving: false, saved: false }
   } catch (e) {
     fileView.value = { path: node.path, loading: false, error: e.message, content: '', saving: false, saved: false }
   }
@@ -418,12 +452,9 @@ async function saveFile() {
   if (!fileView.value) return
   fileView.value = { ...fileView.value, saving: true, error: null, saved: false }
   try {
-    const res = await fetch('/api/v1/workspace/file', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: fileView.value.path, content: fileView.value.content }),
+    await apiSend('/api/v1/workspace/file', {
+      body: { path: fileView.value.path, content: fileView.value.content },
     })
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '保存失败')
     fileView.value = { ...fileView.value, saving: false, saved: true }
     if (fileView.value.path.endsWith('/AGENT.md')) await reloadAgent()
   } catch (e) {
@@ -442,7 +473,56 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
 </script>
 
 <template>
-  <div class="layout">
+  <div v-if="auth.loading" class="auth-screen">
+    <section class="login-card">
+      <img :src="logoUrl" alt="OryxOS" class="login-logo" />
+      <p class="empty">正在检查管理台登录状态…</p>
+    </section>
+  </div>
+
+  <div v-else-if="!auth.authenticated" class="auth-screen">
+    <section class="login-card">
+      <div class="login-mark">
+        <img :src="logoUrl" alt="OryxOS" class="login-logo" />
+        <span class="tag">Admin Console</span>
+      </div>
+      <h1>进入 OryxOS 管理后台</h1>
+      <p class="login-sub">
+        这里管理 Agent、会话、调度和运行时能力。先登录，再加载任何受保护数据。
+      </p>
+      <p v-if="auth.expired" class="error">会话已过期，请重新登录。</p>
+      <p v-if="auth.error" class="error">{{ auth.error }}</p>
+
+      <div v-if="!auth.configured" class="unconfigured">
+        <div class="cap-name">管理员凭证尚未配置</div>
+        <p class="empty">
+          请在部署环境中设置 ORYXOS_ADMIN_USERNAME 和 ORYXOS_ADMIN_PASSWORD_HASH。
+          密码散列需使用 Spring Security 的编码前缀，例如 {bcrypt} 或 {noop}。
+        </p>
+      </div>
+
+      <form v-else class="login-form" @submit.prevent="handleLogin">
+        <label>
+          用户名
+          <input v-model="loginForm.username" class="gen-input" autocomplete="username" />
+        </label>
+        <label>
+          密码
+          <input
+            v-model="loginForm.password"
+            class="gen-input"
+            type="password"
+            autocomplete="current-password"
+          />
+        </label>
+        <button class="btn login-btn" :disabled="loginBusy" type="submit">
+          {{ loginBusy ? '登录中…' : '登录' }}
+        </button>
+      </form>
+    </section>
+  </div>
+
+  <div v-else class="layout">
     <aside class="nav">
       <div class="brand">
         <img :src="logoUrl" alt="OryxOS" class="logo" />
@@ -478,6 +558,10 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
     </aside>
 
     <main class="content">
+      <div class="topbar">
+        <span class="empty">当前管理员：<span class="mono">{{ auth.username }}</span></span>
+        <button class="btn" @click="handleLogout">退出登录</button>
+      </div>
       <!-- 只渲染当前激活页；active 变 → current/整块重算并重渲染 -->
       <div :key="active">
         <!-- 概览：静态预览数据（后续逐步动态化） -->
@@ -800,6 +884,44 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
 </template>
 
 <style scoped>
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 18px;
+  background:
+    radial-gradient(circle at 20% 10%, var(--brand-soft), transparent 34%),
+    var(--bg);
+}
+.login-card {
+  width: min(440px, 100%);
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+.login-mark { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.login-logo { width: 138px; height: auto; display: block; }
+.login-card h1 { margin: 28px 0 10px; font-size: 25px; line-height: 1.2; letter-spacing: -0.02em; }
+.login-sub { color: var(--text-2); line-height: 1.7; margin: 0 0 22px; }
+.login-form { display: flex; flex-direction: column; gap: 12px; }
+.login-form label { color: var(--text-2); font-size: 12px; }
+.login-form .gen-input { margin-top: 6px; margin-bottom: 0; }
+.login-btn { width: 100%; margin-top: 4px; padding: 10px 12px; font-size: 14px; }
+.unconfigured {
+  background: var(--bg-mute);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 18px;
+}
 .layout { display: flex; min-height: 100vh; }
 .nav {
   width: 200px; background: var(--bg-soft); border-right: 1px solid var(--border);
@@ -895,5 +1017,14 @@ th { color: var(--text-2); font-weight: 500; }
 .gen-file { margin-bottom: 16px; }
 .chat-input { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 
-@media (max-width: 640px) { .layout { flex-direction: column; } .nav { width: auto; flex-direction: row; flex-wrap: wrap; } .readonly { display: none; } .ws { flex-direction: column; } .ws-tree { width: auto; } }
+@media (max-width: 640px) {
+  .login-card { padding: 22px; }
+  .login-card h1 { font-size: 22px; }
+  .topbar { justify-content: space-between; }
+  .layout { flex-direction: column; }
+  .nav { width: auto; flex-direction: row; flex-wrap: wrap; }
+  .readonly { display: none; }
+  .ws { flex-direction: column; }
+  .ws-tree { width: auto; }
+}
 </style>

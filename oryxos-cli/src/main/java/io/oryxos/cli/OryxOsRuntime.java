@@ -13,6 +13,7 @@ import io.oryxos.core.agent.ScheduledTaskStore;
 import io.oryxos.core.agent.ToolExecutor;
 import io.oryxos.core.agent.ToolInvocationAuditor;
 import io.oryxos.core.agent.WorkspaceWatcher;
+import io.oryxos.core.auth.AdminAuthAuditStore;
 import io.oryxos.core.context.ContextLoader;
 import io.oryxos.core.memory.MemoryService;
 import io.oryxos.core.profile.ProfileRegistry;
@@ -29,6 +30,8 @@ import io.oryxos.provider.ProviderChatModelFactory;
 import io.oryxos.provider.ProvidersProperties;
 import io.oryxos.provider.SpringAiProviderServiceImpl;
 import io.oryxos.provider.ToolSchemaAdapter;
+import io.oryxos.storage.AdminAuthEventRepository;
+import io.oryxos.storage.JpaAdminAuthAuditStore;
 import io.oryxos.storage.JpaLlmCallAuditor;
 import io.oryxos.storage.JpaScheduledTaskStore;
 import io.oryxos.storage.JpaSessionManager;
@@ -117,6 +120,11 @@ public class OryxOsRuntime {
   @Bean
   ToolInvocationAuditor toolInvocationAuditor(ToolInvocationRepository repository) {
     return new JpaToolInvocationAuditor(repository);
+  }
+
+  @Bean
+  AdminAuthAuditStore adminAuthAuditStore(AdminAuthEventRepository repository) {
+    return new JpaAdminAuthAuditStore(repository);
   }
 
   @Bean

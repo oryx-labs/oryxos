@@ -7,6 +7,11 @@
 # 只需覆盖 oryxos.providers 一段；其余配置（端口、虚拟线程、autoconfigure.exclude、
 # 数据库、记忆后端等）继承自 jar 内置的 application.yml，无需在此重复。
 oryxos:
+  admin:
+    username: ""        # 建议通过 ORYXOS_ADMIN_USERNAME 注入；留空时管理 API 不会默认开放
+    password-hash: ""   # 建议通过 ORYXOS_ADMIN_PASSWORD_HASH 注入；必须是 {bcrypt} 等编码后的散列
+    # 本地 HTTP 自测可通过 ORYXOS_SECURITY_COOKIE_SECURE=false 覆盖；生产 HTTPS 应保持 true
+    secure-cookie: true
   providers:
     - name: deepseek
       api-key: ""          # ← 填入你的 DeepSeek API Key（留空启动会点名报错）

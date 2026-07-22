@@ -65,6 +65,11 @@ oryxos:
   author:
     provider: deepseek
     model: deepseek-chat
+  admin:
+    username: ${ORYXOS_ADMIN_USERNAME:}
+    password-hash: ${ORYXOS_ADMIN_PASSWORD_HASH:}
+    session-idle-timeout: ${ORYXOS_ADMIN_SESSION_IDLE_TIMEOUT:30m}
+    secure-cookie: ${ORYXOS_SECURITY_COOKIE_SECURE:true}
 
 # Observability: Actuator + Micrometer/Prometheus
 management:
