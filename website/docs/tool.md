@@ -30,7 +30,7 @@ When `retryable` is `true`, `ToolExecutor` appends the error to the conversation
 
 ## Built-in tools
 
-Seven tools ship with OryxOS core. All are registered automatically at startup. Which ones an agent can use depends on its Profile's `tools` list.
+Nine tools ship with OryxOS core. All are registered automatically at startup. Which ones an agent can use depends on its Profile's `tools` list.
 
 | Tool | Class | Description | Sandbox check |
 | --- | --- | --- | --- |
@@ -42,12 +42,28 @@ Seven tools ship with OryxOS core. All are registered automatically at startup. 
 | `http_post` | `HttpTools` | HTTP POST request with body | Domain wildcard whitelist |
 | `save_memory` | `MemoryTools` | Append text to `MEMORY.md` | None (always allowed) |
 | `recall_memory` | `MemoryTools` | Keyword search in `MEMORY.md` | None (always allowed) |
+| `notify` | `NotifyTools` | Push a message to a registered notify channel | Resolves channel by name |
 
 `ShellTools` enforces a configurable timeout (default 30 seconds) in addition to the command whitelist. A process that exceeds the timeout is killed and the tool returns a non-retryable error.
 
+## The `notify` tool and notify channels
+
+`notify` pushes a message to a **notify channel referenced by name**. The tool takes a `channel` argument (the channel's registered name) plus the `content` to send; it resolves that name to a registered channel, picks the adapter for the channel's type, and delivers to the channel's URL.
+
+Notify channels are managed as first-class resources — created, edited, and deleted via the **`/api/v1/notify-channels`** API or the web admin console (the "Notify 渠道" page), and stored in the SQLite `notify_channels` table. Each channel has a `name`, a `type`, a `url`, and an optional `description`. Supported types:
+
+| Type | Delivers to |
+| --- | --- |
+| `feishu` | Feishu / Lark group webhook |
+| `wecom` | WeCom (企业微信) group webhook |
+| `dingtalk` | DingTalk group webhook |
+| `webhook` | Generic HTTP webhook |
+
+An agent references a channel **by name from its `AGENT.md` body**, in plain language — for example, "call notify and send the report to `team-lark`". There is **no `notify_channels` field in AGENT.md frontmatter**; the channel is resolved at call time from the registry, so channels can be added or re-pointed without touching any agent.
+
 ## Three-tier extension
 
-Adding capabilities beyond the built-in seven follows one of three patterns depending on how much code you want to write:
+Adding capabilities beyond the built-in tools follows one of three patterns depending on how much code you want to write:
 
 | | Zero-code | Light-code | Heavy-code |
 | --- | --- | --- | --- |
@@ -79,41 +95,40 @@ OryxOS starts each MCP server as a subprocess at startup and communicates over J
 
 ## Sandbox
 
-`SandboxChecker` runs before every tool invocation. It enforces three independent whitelists configured in `oryxos.yaml`.
+`SandboxChecker` runs before every tool invocation. It enforces three independent whitelists configured as top-level keys in `application.yml`. An empty list means **deny-all** — the sandbox is closed by default and you widen it explicitly, following least privilege. The configured workspace root is added to the file whitelist automatically at runtime.
 
 **File path whitelist** — applies to `read_file`, `write_file`, `list_dir`. The requested path must match at least one entry.
 
 ```yaml
-sandbox:
-  file:
-    allowed_paths:
-      - /home/user/workspace
-      - /tmp/oryxos
+file:
+  allowed_paths:
+    - .oryxos
+    - /tmp/oryxos
 ```
 
 **Shell command whitelist** — applies to `shell`. Only the first token of the command is checked (the executable name). Arguments are not restricted by the whitelist.
 
 ```yaml
-sandbox:
-  shell:
-    allowed_commands:
-      - git
-      - grep
-      - cat
-      - curl
-    timeout_seconds: 30
+shell:
+  allowed_commands:
+    - ls
+    - cat
+    - grep
+    - python3
+  timeout_seconds: 30
 ```
 
 **HTTP domain whitelist** — applies to `http_get` and `http_post`. Supports `*` as a prefix wildcard.
 
 ```yaml
-sandbox:
-  http:
-    allowed_domains:
-      - "*.github.com"
-      - "api.openai.com"
-      - "*.internal.company.com"
+http:
+  allowed_domains:
+    - "*.feishu.cn"
+    - "api.deepseek.com"
+    - "api.open-meteo.com"
 ```
+
+The three whitelists are also **manageable at runtime** via the `/api/v1/sandbox/whitelist` API and the admin console — add or remove entries under the `FILE`, `SHELL`, or `HTTP` categories without a restart.
 
 If a tool call fails the sandbox check, `ToolExecutor` returns a non-retryable `ToolResult` with a clear error message describing which whitelist was violated. The call is still recorded in `tool_invocations` with `success = false`.
 

@@ -82,9 +82,15 @@ class MockProviderFlowTest {
     LlmCallAuditor llmAuditor = mock(LlmCallAuditor.class);
     ToolInvocationAuditor toolAuditor = mock(ToolInvocationAuditor.class);
 
+    io.oryxos.core.provider.ProviderRegistry providerRegistry =
+        mock(io.oryxos.core.provider.ProviderRegistry.class);
+    when(providerRegistry.find("mock"))
+        .thenReturn(
+            java.util.Optional.of(
+                new io.oryxos.core.provider.ProviderDef("mock", null, null, null)));
     ProviderService provider =
         new SpringAiProviderServiceImpl(
-            Map.of("mock", new MockChatModel()), new ToolSchemaAdapter(), llmAuditor);
+            providerRegistry, def -> new MockChatModel(), new ToolSchemaAdapter(), llmAuditor);
 
     PromptBuilder promptBuilder =
         new PromptBuilder(new ContextLoader(root), tools, memory, Clock.systemDefaultZone());

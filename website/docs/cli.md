@@ -8,10 +8,30 @@ oryxos <command> [options]
 
 **Global flags** (accepted by all commands):
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--workspace <path>` | `./.oryxos` | Override the workspace directory |
-| `--log-level <level>` | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
+| Flag | Description |
+|------|-------------|
+| `--help`, `-h` | Show usage for the command |
+| `--version`, `-V` | Print version plus JVM/OS info |
+
+---
+
+## Workspace root
+
+By default OryxOS reads and writes the `.oryxos` workspace in the current directory. The root is configurable:
+
+| Mechanism | Applies to | Notes |
+|-----------|-----------|-------|
+| `ORYXOS_ROOT` (env var) | all commands | Light commands read it directly; `serve`/`gateway` pick it up through Spring relaxed binding |
+| `-Doryxos.root=<path>` (JVM system property) | all commands | Highest precedence for light commands |
+| `oryxos.root` in `application.yml` | `serve` / `gateway` only | Not read by the light commands (`init`/`status`/`profile`) — they never boot Spring, so use the env var or system property for them |
+
+Resolution order for the light commands is: `-Doryxos.root` → `ORYXOS_ROOT` → default `.oryxos`. The configured root is auto-added to the file sandbox whitelist at runtime, so relocating the workspace never breaks file tools.
+
+```bash
+# Point every command at a custom workspace
+ORYXOS_ROOT=/data/ws oryxos init
+ORYXOS_ROOT=/data/ws oryxos status
+```
 
 ---
 
@@ -19,42 +39,41 @@ oryxos <command> [options]
 
 ### init
 
-Initialize the `.oryxos/` workspace in the current directory. Creates the directory structure, default bootstrap files, and an empty SQLite database. Safe to run multiple times — existing files are not overwritten.
+Initialize the workspace (default `.oryxos/`) in the current directory. Creates the directory structure and the default bootstrap files. Safe to run multiple times — existing files are never overwritten. This is a light command: it does not boot Spring, and it honors `ORYXOS_ROOT` / `-Doryxos.root`.
 
 ```bash
 oryxos init
+# Or into a custom workspace root:
+ORYXOS_ROOT=/data/ws oryxos init
 ```
 
 What gets created:
 
 ```text
 .oryxos/
-├── profiles/
-├── memory/MEMORY.md
-├── skills/
+├── agents/       # one sub-directory per agent (AGENT.md + optional skills/ scripts/ REFERENCE.md)
+├── memory/       # global long-term memory (per-agent MEMORY.md lives under agents/<name>/)
+├── sessions/     # reserved (session state lives in SQLite)
 ├── logs/
-├── mcp_servers.yaml
-├── oryxos.db
-├── AGENTS.md
-├── SOUL.md
-└── USER.md
+├── AGENTS.md     # bootstrap: project-level agent behavior
+├── SOUL.md       # bootstrap: agent persona
+└── USER.md       # bootstrap: user preferences (read-only)
 ```
+
+The `oryxos.db` SQLite database is created on first run of a heavy command (`serve`/`gateway`/`chat`), not by `init`.
 
 ### status
 
-Print current workspace configuration and runtime state: which profiles are loaded, provider connectivity, registered tools, and active session count.
+Print the workspace and data-file state: whether the workspace is initialized, how many agents live under `agents/`, and whether the SQLite database exists. Like `init`, this is a light command — it does not boot Spring and honors `ORYXOS_ROOT` / `-Doryxos.root`.
 
 ```bash
 oryxos status
 ```
 
 ```text
-Workspace:  /home/user/project/.oryxos
-Profiles:   3 loaded (default, ops-agent, reviewer)
-Providers:  deepseek [ok]  qwen [ok]
-Tools:      7 builtin  8 mcp (github-mcp)
-Sessions:   2 active
-DB:         oryxos.db (1.2 MB)
+Workspace .oryxos/  : initialized
+Agent directory     : 3
+SQLite database     : oryxos.db present
 ```
 
 ---
@@ -63,7 +82,7 @@ DB:         oryxos.db (1.2 MB)
 
 ### chat
 
-Start an interactive multi-turn conversation with an agent. Runs a ReAct Loop on each message and streams the final response to the terminal. Type `exit` or press `Ctrl-D` to end the session.
+Start an interactive multi-turn conversation with an agent. Runs a ReAct Loop on each message and prints the final response to the terminal. Type `/quit` or press `Ctrl-D` to end the session.
 
 ```bash
 oryxos chat [--profile <name>]
@@ -85,7 +104,7 @@ oryxos chat --profile ops-agent
 /dev/sda1  200G  84G  116G  42%  /
 Disk usage on /dev/sda1 is 42% (84G of 200G used). You have 116G free.
 
-[ops-agent] > exit
+[ops-agent] > /quit
 Session archived. Goodbye.
 ```
 
@@ -97,7 +116,7 @@ The session is persisted to SQLite and restored on subsequent `chat` invocations
 
 ### serve
 
-Start the HTTP API server. Exposes 10 REST endpoints under `/api/v1`. Runs synchronously with Java 21 virtual threads — no separate thread pool tuning required.
+Start the HTTP API server. It exposes the REST API under `/api/v1` and serves the web admin console at `/admin/`. Runs synchronously with Java 21 virtual threads — no separate thread pool tuning required. As a heavy command, `serve` boots Spring and reads its workspace root from `oryxos.root` in `application.yml` (Spring relaxed binding also honors the `ORYXOS_ROOT` env var).
 
 ```bash
 oryxos serve [--port <port>]
@@ -113,14 +132,15 @@ oryxos serve --port 9090
 
 ```text
 OryxOS API server starting...
-Loaded profiles: default, ops-agent
-Providers: deepseek [ok], qwen [ok]
 Listening on http://0.0.0.0:9090
+Admin console: http://0.0.0.0:9090/admin/
 ```
+
+Press `Ctrl-C` to stop.
 
 ### gateway
 
-Start OryxOS in daemon mode. Activates all channels configured in loaded profiles (CLI, API, and future channel types) simultaneously. Intended for production multi-agent deployments.
+Start OryxOS in daemon mode (full runtime, resident). Intended for production multi-agent deployments; multi-channel mounting is an extension-phase feature. Like `serve`, it boots Spring and reads its workspace root from `oryxos.root` (env `ORYXOS_ROOT` honored via relaxed binding). Press `Ctrl-C` to stop.
 
 ```bash
 oryxos gateway
@@ -128,28 +148,27 @@ oryxos gateway
 
 ---
 
-## Profile management
+## Agent (profile) management
 
-Profiles are YAML files stored in `.oryxos/profiles/`. Each file defines one agent — its identity, provider, tools, skills, and settings.
+Each agent is one directory under `<workspace>/agents/<name>/`, holding an `AGENT.md` (YAML frontmatter = the agent's profile: identity, provider, tools, settings; body = task instructions) plus optional `skills/`, `scripts/`, and `REFERENCE.md`. One directory = one agent — there is no `.oryxos/profiles/` directory. The `profile` sub-commands are light (no Spring) and read/write these `AGENT.md` files directly, honoring `ORYXOS_ROOT` / `-Doryxos.root`.
 
 ### profile list
 
-List all profiles found in the workspace.
+List all agents found under `<workspace>/agents/` (one line per agent directory).
 
 ```bash
 oryxos profile list
 ```
 
 ```text
-NAME          PROVIDER    MODEL              TOOLS
-default       qwen        qwen-max           4
-ops-agent     deepseek    deepseek-chat      5
-reviewer      kimi        moonshot-v1-8k     3
+default
+ops-agent
+reviewer
 ```
 
 ### profile create
 
-Scaffold a new profile YAML with default fields pre-filled.
+Scaffold a new agent directory with a minimal `AGENT.md` template. Existing agents are not overwritten.
 
 ```bash
 oryxos profile create <name>
@@ -157,12 +176,12 @@ oryxos profile create <name>
 
 ```bash
 oryxos profile create code-reviewer
-# Created .oryxos/profiles/code-reviewer.yaml
+# Created .oryxos/agents/code-reviewer/AGENT.md
 ```
 
 ### profile show
 
-Print the full contents of a profile.
+Print the full contents of an agent's `AGENT.md`.
 
 ```bash
 oryxos profile show <name>
@@ -174,7 +193,7 @@ oryxos profile show ops-agent
 
 ### profile delete
 
-Remove a profile YAML from the workspace. Running sessions using that profile are not affected until they are next loaded.
+Remove an agent's entire directory from the workspace.
 
 ```bash
 oryxos profile delete <name>
@@ -186,51 +205,47 @@ oryxos profile delete <name>
 
 ### provider list
 
-List all providers defined in `application.yml` and report their connectivity status.
+List the providers declared for this instance. The light CLI command reads them straight from the packaged `application.yml` (`oryxos.providers`), printing each provider's name and base URL. (At runtime, providers are managed as a dynamic registry backed by SQLite, seeded from these declarations.)
 
 ```bash
 oryxos provider list
 ```
 
 ```text
-NAME       STATUS    BASE URL                        DEFAULT MODEL
-deepseek   ok        https://api.deepseek.com        deepseek-chat
-qwen       ok        https://dashscope.aliyuncs.com  qwen-max
-kimi       error     https://api.moonshot.cn         moonshot-v1-8k
+deepseek     https://api.deepseek.com
+qwen         https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
 ### tool list
 
-List all tools available in the `ToolRegistry` — both built-in tools and tools provided by connected MCP servers.
+List the built-in tools. Once the `ToolRegistry` is wired at runtime this reflects the live registry (built-in plus MCP tools).
 
 ```bash
 oryxos tool list
 ```
 
 ```text
-NAME            SOURCE           DESCRIPTION
-read_file       builtin          Read a file (path whitelist enforced)
-write_file      builtin          Write a file (path whitelist enforced)
-list_dir        builtin          List directory contents
-shell           builtin          Execute a shell command (whitelist enforced)
-http_get        builtin          HTTP GET request (domain whitelist enforced)
-http_post       builtin          HTTP POST request (domain whitelist enforced)
-save_memory     builtin          Append to MEMORY.md
-recall_memory   builtin          Search MEMORY.md by keyword
-github_list_pr  mcp:github-mcp   List open pull requests
-github_create_pr mcp:github-mcp  Create a pull request
+Built-in tools:
+  read_file
+  write_file
+  list_dir
+  shell
+  http_get
+  http_post
+  save_memory
+  recall_memory
+  notify
 ```
 
 ### session list
 
-List active sessions stored in the SQLite database.
+List sessions stored in the SQLite database (`oryxos.db` in the current directory), newest first. Columns: session id, profile name, status, last active time.
 
 ```bash
 oryxos session list
 ```
 
 ```text
-SESSION ID      PROFILE       CHANNEL   USER         LAST ACTIVE
-sess-a1b2c3     ops-agent     cli       user-001     2025-06-01 10:05
-sess-d4e5f6     default       api       user-002     2025-06-01 09:30
+cli:user-001:ops-agent                   ops-agent        active    2025-06-01 10:05
+cli:user-002:default                      default          active    2025-06-01 09:30
 ```

@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# OryxOS 发行版启停脚本（随 make release 打进 tar.gz 的 bin/ 目录）。
+# 相对自身位置定位发行版根，无需源码树：
+#   <release>/bin/oryx-server   <-- 本脚本
+#   <release>/libs/oryxos-boot-*.jar
+#   <release>/config/application.yml(.example)
+#   <release>/logs/            运行时生成
+#   <release>/.oryxos, oryxos.db  运行时生成（工作区 + SQLite，相对发行版根）
+#
+# 用法：
+#   bin/oryx-server start [port]   启动（默认端口 8080，或环境变量 ORYX_PORT）
+#   bin/oryx-server stop           停止
+#   bin/oryx-server restart [port] 重启
+#   bin/oryx-server status         查看状态
+#
+# 配置：Provider 凭证等从 <release>/config/application.yml 读（首次启动自动由 .example 生成）。
+# 可选环境变量：ORYX_PORT（端口）、JAVA_OPTS（额外 JVM 参数）、ORYXOS_ROOT（自定义工作区根）。
+set -euo pipefail
+
+APP_NAME="OryxOS"
+HOME_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CONFIG_DIR="$HOME_DIR/config"
+CONFIG="$CONFIG_DIR/application.yml"
+CONFIG_EXAMPLE="$CONFIG_DIR/application.yml.example"
+LOG_DIR="$HOME_DIR/logs"
+LOG="$LOG_DIR/oryx-server.log"
+PIDFILE="$HOME_DIR/bin/oryx-server.pid"
+DEFAULT_PORT="${ORYX_PORT:-8080}"
+
+info()  { echo "[INFO]  $*"; }
+error() { echo "[ERROR] $*" >&2; }
+
+jar_path() { ls "$HOME_DIR"/libs/oryxos-boot-*.jar 2>/dev/null | grep -v 'original' | head -1; }
+
+is_running() {
+  [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null
+}
+
+start() {
+  local port="${1:-$DEFAULT_PORT}"
+
+  if is_running; then
+    info "$APP_NAME 已在运行 (pid $(cat "$PIDFILE"))。"
+    return 0
+  fi
+
+  local jar
+  jar="$(jar_path)"
+  if [ -z "$jar" ]; then
+    error "libs/ 下找不到 oryxos-boot-*.jar，发行版不完整。"
+    exit 1
+  fi
+
+  # 配置：首次从模板生成并提示填 key
+  if [ ! -f "$CONFIG" ]; then
+    if [ -f "$CONFIG_EXAMPLE" ]; then
+      cp "$CONFIG_EXAMPLE" "$CONFIG"
+      info "已生成 $CONFIG"
+      echo "[ACTION] 请在其中填入 Provider 的 api-key，然后重跑：bin/oryx-server start"
+      exit 1
+    else
+      error "缺少 $CONFIG 且无 $CONFIG_EXAMPLE 模板。"
+      exit 1
+    fi
+  fi
+
+  mkdir -p "$LOG_DIR"
+  # 工作区 .oryxos/、oryxos.db 相对 CWD，切到发行版根再启动
+  cd "$HOME_DIR"
+
+  # shellcheck disable=SC2086  # JAVA_OPTS 需按空格分词
+  nohup java ${JAVA_OPTS:-} \
+    -Dspring.config.additional-location="optional:file:$CONFIG_DIR/" \
+    -jar "$jar" serve --port "$port" \
+    > "$LOG" 2>&1 &
+  local pid=$!
+  echo "$pid" > "$PIDFILE"
+  info "$APP_NAME 启动中 (pid $pid)，端口 ${port}，等待就绪…"
+
+  # 等健康检查通过再报成功；进程中途退出或超时则报失败并贴日志尾
+  local i
+  for i in $(seq 1 45); do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      error "进程已退出，启动失败。日志尾："
+      tail -15 "$LOG" || true
+      rm -f "$PIDFILE"
+      exit 1
+    fi
+    if command -v curl >/dev/null 2>&1 &&
+       curl -fs -o /dev/null "http://localhost:$port/api/v1/health" 2>/dev/null; then
+      info "$APP_NAME 已就绪 (pid $pid)"
+      echo "        REST:   http://localhost:$port/api/v1/health"
+      echo "        管理台: http://localhost:$port/admin/"
+      echo "        日志:   $LOG"
+      return 0
+    fi
+    sleep 1
+  done
+
+  # curl 不可用时退化为"进程存活即视为已启动"
+  if ! command -v curl >/dev/null 2>&1; then
+    info "$APP_NAME 已启动 (pid $pid)（未装 curl，跳过健康检查）。日志：$LOG"
+    return 0
+  fi
+  error "等待就绪超时（进程仍在，但 /api/v1/health 未通）。日志尾："
+  tail -15 "$LOG" || true
+  exit 1
+}
+
+stop() {
+  if [ ! -f "$PIDFILE" ]; then
+    info "未找到 ${PIDFILE}，$APP_NAME 可能未通过本脚本启动。"
+    return 0
+  fi
+  local pid
+  pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid"
+    local i
+    for i in $(seq 1 10); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -9 "$pid" 2>/dev/null || true
+      info "已强制停止 $APP_NAME (pid $pid)。"
+    else
+      info "已停止 $APP_NAME (pid $pid)。"
+    fi
+  else
+    info "进程 ${pid:-?} 不在运行（可能已退出）。"
+  fi
+  rm -f "$PIDFILE"
+}
+
+status() {
+  if is_running; then
+    info "$APP_NAME 运行中 (pid $(cat "$PIDFILE"))。"
+  else
+    info "$APP_NAME 未运行。"
+    return 1
+  fi
+}
+
+usage() {
+  echo "用法: $(basename "$0") {start [port]|stop|restart [port]|status}"
+  exit 2
+}
+
+case "${1:-}" in
+  start)   shift; start "${1:-}" ;;
+  stop)    stop ;;
+  restart) shift; stop; start "${1:-}" ;;
+  status)  status ;;
+  *)       usage ;;
+esac

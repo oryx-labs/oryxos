@@ -32,7 +32,7 @@
 26. 首页的左上角的logo 要小一点，现在太大了
 27. 再一点点 现在有点小
 28. 新的提示词也放到docs/prompt/01.md 中
-29. 理解一下这个文件：/Users/oker/robustmq/scripts/package.sh的功能
+29. 理解一下这个文件：robustmq/scripts/package.sh的功能
 30. 这个项目也需要这个文件，把文件传到远程。但是需要注意target 下的文件不需要传到远程
 31. 是的，你执行一下这个脚本
 32. 理解一下website的布局，你全部重新设计一下首页风格，要有特点的。可以全部重新设计。你给我设计一个有特点的的，你自由发挥。你主要理解一下文档：docs/what.md。重写readme.md。重新画架构图。重新设计website主页。其他你自己来，不用问我。
@@ -96,7 +96,7 @@
 83. 架构图直接用这个：website/public/images/architecture.svg 就好了，不用重复画？
 84. 也可以画一个新的website/public/images/docs-agent-lifecycle.svg 这种风格的架构图。也就是白底彩色的
 85. docs/TechnicalSolution.md 用website/public/images/docs-architecture-light.svg 这个架构图
-86. 把/Users/oker/Desktop/doc/ 下16～25的md挪到docs/class。后面16 开始的md 都在这里维护，因为进入开发阶段了
+86. 把Desktop/doc/ 下16～25的md挪到docs/class。后面16 开始的md 都在这里维护，因为进入开发阶段了
 87. 你基于：docs/TechnicalSolution.md review 一下当前16～25的文档，看是否有需要完善和丰富的。先讨论下，你知道16～25 这些文档的目的吧。这些文档是用来跟人讲的，教学的文档，跟人讲清楚。意思就是课纲。也是用来给后续spec kit 执行的大纲
 88. 注意21和23 这两节有点像docs/TechnicalSolution.md。也就是作memory和sandbox这两个模块的评审。内容风格要跟docs/TechnicalSolution.md类似，就是技术评审。
 89. 可以，然后输出中文
@@ -310,3 +310,24 @@
 274. 每个列表加刷新按钮
 275. 每次触发都应记录到记忆；记忆用两个 table 展示（核心 / 归档）；会话要有自己的滚动框、不跟大页面滚
 276. 把新增的这些 prompt 记录到 docs/prompt/prompt.md
+
+## 第十一轮（Provider 动态 CRUD 落库 + 管理台/配置打磨 + 可配置工作区根）
+
+277. Provider 支持动态 CRUD、存 SQLite；（clarify）api-key 存库明文回显 + 启动把 config 的 oryxos.providers 播种进 DB（库里没有才写，之后以 DB 为准），运行时按名动态建/缓存 ChatModel
+278. 查一下用户级的记忆看都记了什么（被打断）
+279. manager 中所有的新增 / 编辑都改成弹出框（modal）形式
+280. 侧边栏加"Skill 列表 / 知识库"两个占位空列表（暂无真实数据），放在"定时任务"下方、"OS 运行时"上方
+281. 梳理 config/application.yml，把该有的默认配置都放上（端口、数据目录等）——只铺运行期默认，框架内部管道仍从 jar 继承
+282. 允许配置 Agent 存放目录——可自定义 .oryxos 的路径与名字（轻命令走 ORYXOS_ROOT / -Doryxos.root，serve 走 oryxos.root；根自动纳入文件白名单）
+283. 继续处理 application.yml 的问题；（选）理顺打包内 application.yml 与外部 config/application.yml 的分歧（对齐 python/python3 等列表、加"列表整体替换不合并"提醒）
+284. config/application.yml.example 也同步成与 application.yml 一致、只是把真实 token 置空（随仓库提交的无密钥模板）
+
+## 第十二轮（贴近实现的文档大更新 + Agent Harness OS 重定位 + Sandbox 白名单持久化 CRUD + 发行版打包 make release + GitHub Release 工作流）
+
+285. 根据最新实现更新 README、首页、doc，尽量全、贴近实现（并行 subagent 全量重写；纠偏 API 端点、统一 {code,message,data} envelope、去掉 .oryxos/profiles 等陈旧说法）
+286. Sandbox 白名单数据也写入 SQLite、管理台支持 CRUD（区分 FILE/SHELL/HTTP 三类）、启动时从配置文件初始化插入（WhitelistSandbox 改 store-backed：启动从库恢复、运行时增删写穿落库）
+287. 加入 Harness 概念（README 与 what），Agent OS 改为 Agent Harness OS，从这个定义重新设计 README / doc / 首页（Model → Harness → OS 三层）
+288. 开发 make 脚本：make release 打成 .tar.gz，含 bin / config / libs 三目录；bin/oryx-server 支持 start / stop（先整理需求再实现）
+289. 执行 make release → 解压 → bin/oryx-server start，验证 server 与 manager 正常、日志正常打印（本沙箱禁 nohup，用等价后台方式跑通验证）
+290. 加 GitHub release workflow：PR 标题以 release: 开头且合入 main 触发，自动创建 Release 并上传 tar.gz、版本号从 pom 读；（clarify）合入 main 时触发、版本改为 0.1.0-RELEASE
+291. 把新增的提示词放入 docs/prompt/prompt.md

@@ -2,6 +2,8 @@ package io.oryxos.provider;
 
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.provider.LlmCallAuditor;
+import io.oryxos.core.provider.ProviderDef;
+import io.oryxos.core.provider.ProviderRegistry;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.provider.ProviderResponse;
 import io.oryxos.core.provider.ProviderService;
@@ -11,6 +13,8 @@ import io.oryxos.core.session.Message;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
@@ -31,13 +35,23 @@ import org.springframework.ai.openai.OpenAiChatOptions;
  */
 public class SpringAiProviderServiceImpl implements ProviderService {
 
-  private final Map<String, ChatModel> providerMap;
+  private final ProviderRegistry registry;
+  private final Function<ProviderDef, ChatModel> chatModelBuilder;
   private final ToolSchemaAdapter adapter;
   private final LlmCallAuditor audit;
+  // 已建的 ChatModel 缓存：key = name|apiKey|baseUrl；provider 改了 key/url（缓存键变）→ 下次自动重建（31 节动态 provider）
+  private final Map<String, ChatModel> cache = new ConcurrentHashMap<>();
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "registry/builder/adapter/audit 均为 Spring 注入的共享单例，构造注入共享同一引用正是意图")
   public SpringAiProviderServiceImpl(
-      Map<String, ChatModel> providerMap, ToolSchemaAdapter adapter, LlmCallAuditor audit) {
-    this.providerMap = Map.copyOf(providerMap);
+      ProviderRegistry registry,
+      Function<ProviderDef, ChatModel> chatModelBuilder,
+      ToolSchemaAdapter adapter,
+      LlmCallAuditor audit) {
+    this.registry = registry;
+    this.chatModelBuilder = chatModelBuilder;
     this.adapter = adapter;
     this.audit = audit;
   }
@@ -45,10 +59,10 @@ public class SpringAiProviderServiceImpl implements ProviderService {
   @Override
   public ProviderResponse chat(String sessionId, Profile profile, ProviderRequest request) {
     String providerName = profile.provider().name();
-    ChatModel model = providerMap.get(providerName);
-    if (model == null) {
-      throw new ProviderNotFoundException(providerName);
-    }
+    // 宪法 III：仍是按 name 的显式查找，只是从"启动静态 map"变成"运行时注册表 + 按名动态建/缓存"
+    ProviderDef def =
+        registry.find(providerName).orElseThrow(() -> new ProviderNotFoundException(providerName));
+    ChatModel model = resolveModel(def);
     Prompt prompt = buildPrompt(profile, request);
     long startedAt = System.currentTimeMillis();
     try {
@@ -75,6 +89,12 @@ public class SpringAiProviderServiceImpl implements ProviderService {
           System.currentTimeMillis() - startedAt);
       throw e;
     }
+  }
+
+  /** 按 name+key+url 缓存构建好的 ChatModel；参数变化即换缓存键、下次重建（provider CRUD 改了配置立即生效）。 */
+  private ChatModel resolveModel(ProviderDef def) {
+    String cacheKey = def.name() + "|" + def.apiKey() + "|" + def.baseUrl();
+    return cache.computeIfAbsent(cacheKey, k -> chatModelBuilder.apply(def));
   }
 
   private Prompt buildPrompt(Profile profile, ProviderRequest request) {

@@ -8,17 +8,14 @@ const TOP_NAV = [
   { key: 'overview', label: '概览' },
   { key: 'agents', label: 'Agent 列表' },
   { key: 'schedules', label: '定时任务', path: '/api/v1/schedules' },
+  // Skill 列表 / 知识库：占位页，暂无 path（不拉数据）、渲染空列表，后续接入端点
+  { key: 'skills', label: 'Skill 列表' },
+  { key: 'knowledge', label: '知识库' },
 ]
 
 const RUNTIME_NAV = [
   { key: 'sessions', label: '会话列表', path: '/api/v1/sessions' },
-  {
-    key: 'providers',
-    label: 'Provider 列表',
-    path: '/api/v1/info',
-    // /info 返回 {application, providers:[名字…]}，投影成列表行
-    transform: (d) => (d?.providers ?? []).map((name) => ({ name, status: '已配置' })),
-  },
+  { key: 'providers', label: 'Provider 列表' },
   { key: 'tools', label: 'Tool 列表', path: '/api/v1/tools' },
   { key: 'notify-channels', label: 'Notify 渠道' },
   { key: 'whitelist', label: 'SandBox 列表' },
@@ -104,6 +101,8 @@ function select(key) {
   if (NAV.find((n) => n.key === key)?.path && !state[key]) load(key)
   if (key === 'agents') { agentDetail.value = null; fileView.value = null; loadAgents() }
   if (key === 'notify-channels') { cancelNc(); loadNotifyChannels() }
+  if (key === 'providers') { cancelPv(); loadProviders() }
+  if (key === 'whitelist') { cancelWl(); loadWhitelist() }
 }
 
 // 刷新当前页的列表：各页复用各自的加载函数（agents / notify-channels / 概览 / 其余按 path 的通用列表）
@@ -111,6 +110,8 @@ function refresh() {
   const key = active.value
   if (key === 'agents') { loadAgents(); return }
   if (key === 'notify-channels') { loadNotifyChannels(); return }
+  if (key === 'providers') { loadProviders(); return }
+  if (key === 'whitelist') { loadWhitelist(); return }
   if (key === 'overview') { loadRuntimeInfo(); return }
   if (NAV.find((n) => n.key === key)?.path) load(key)
 }
@@ -320,6 +321,116 @@ async function deleteNotifyChannel(name) {
     if (body.code !== 0) throw new Error(body.message || '删除失败')
     await loadNotifyChannels()
   } catch (e) { notifyChannels.value = { ...notifyChannels.value, error: e.message } }
+}
+
+// —— Provider 管理（CRUD /api/v1/providers）：命名的模型 Provider，apiKey 明文返回 ——
+const providers = ref({ loading: false, error: null, data: [] })
+async function loadProviders() {
+  providers.value = { loading: true, error: null, data: [] }
+  try {
+    const res = await fetch('/api/v1/providers')
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    providers.value = { loading: false, error: null, data: body.data || [] }
+  } catch (e) {
+    providers.value = { loading: false, error: e.message, data: [] }
+  }
+}
+
+// 新建/编辑表单：editing 存被编辑 Provider 的 name（此时 name 只读），null 表示新建
+const pv = reactive({ open: false, editing: null, name: '', apiKey: '', baseUrl: '', description: '', busy: false, error: null })
+
+async function saveProvider() {
+  pv.busy = true; pv.error = null
+  try {
+    const url = pv.editing
+      ? `/api/v1/providers/${encodeURIComponent(pv.editing)}`
+      : '/api/v1/providers'
+    const payload = pv.editing
+      ? { apiKey: pv.apiKey, baseUrl: pv.baseUrl, description: pv.description }
+      : { name: pv.name, apiKey: pv.apiKey, baseUrl: pv.baseUrl, description: pv.description }
+    const res = await fetch(url, {
+      method: pv.editing ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '保存失败')
+    cancelPv(); await loadProviders()
+  } catch (e) { pv.error = e.message } finally { pv.busy = false }
+}
+
+function editProvider(row) {
+  pv.editing = row.name
+  pv.name = row.name
+  pv.apiKey = row.apiKey || ''
+  pv.baseUrl = row.baseUrl || ''
+  pv.description = row.description || ''
+  pv.error = null
+  pv.open = true
+}
+
+function cancelPv() {
+  pv.open = false; pv.editing = null; pv.name = ''; pv.apiKey = ''; pv.baseUrl = ''; pv.description = ''; pv.error = null
+}
+
+async function deleteProvider(name) {
+  if (!confirm(`删除 Provider「${name}」？`)) return
+  try {
+    const res = await fetch(`/api/v1/providers/${encodeURIComponent(name)}`, { method: 'DELETE' })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '删除失败')
+    await loadProviders()
+  } catch (e) { providers.value = { ...providers.value, error: e.message } }
+}
+
+// —— Sandbox 白名单管理（CRUD /api/v1/sandbox/whitelist）：三类 file/shell/http 的白名单条目 ——
+const WL_CATS = [
+  { key: 'file', label: '文件路径', ph: '允许访问的路径，如 /data 或 /tmp/*' },
+  { key: 'shell', label: 'Shell 命令', ph: '允许执行的命令首 token，如 ls' },
+  { key: 'http', label: 'HTTP 域名', ph: '允许访问的域名，如 *.example.com' },
+]
+const wl = ref({ loading: false, error: null, file: [], shell: [], http: [] })
+async function loadWhitelist() {
+  wl.value = { loading: true, error: null, file: [], shell: [], http: [] }
+  try {
+    const res = await fetch('/api/v1/sandbox/whitelist')
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    const d = body.data || {}
+    wl.value = { loading: false, error: null, file: d.file || [], shell: d.shell || [], http: d.http || [] }
+  } catch (e) {
+    wl.value = { loading: false, error: e.message, file: [], shell: [], http: [] }
+  }
+}
+
+// 新增白名单表单：category ∈ file/shell/http，value 为一条白名单条目
+const wlForm = reactive({ open: false, category: 'file', value: '', busy: false, error: null })
+const wlPlaceholder = computed(() => WL_CATS.find((c) => c.key === wlForm.category)?.ph || '')
+
+async function addWhitelist() {
+  wlForm.busy = true; wlForm.error = null
+  try {
+    const res = await fetch(`/api/v1/sandbox/whitelist/${encodeURIComponent(wlForm.category)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: wlForm.value }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '新增失败')
+    cancelWl(); await loadWhitelist()
+  } catch (e) { wlForm.error = e.message } finally { wlForm.busy = false }
+}
+
+function cancelWl() { wlForm.open = false; wlForm.category = 'file'; wlForm.value = ''; wlForm.error = null }
+
+async function deleteWhitelist(category, value) {
+  if (!confirm(`删除白名单条目「${value}」？`)) return
+  try {
+    const res = await fetch(`/api/v1/sandbox/whitelist/${encodeURIComponent(category)}?value=${encodeURIComponent(value)}`, { method: 'DELETE' })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '删除失败')
+    await loadWhitelist()
+  } catch (e) { wl.value = { ...wl.value, error: e.message } }
 }
 
 // —— Agent 详情：Tab 切换（基本信息 / 生成 / 文件 / 会话 / 记忆）——
@@ -644,11 +755,61 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
             <button class="btn" @click="refresh()">刷新</button>
           </div>
 
-          <!-- Sandbox 白名单：列表占位，内容暂空（待接入端点） -->
-          <table v-if="active === 'whitelist'">
-            <thead><tr><th>类别</th><th>规则</th></tr></thead>
-            <tbody><tr><td colspan="2" class="empty">（暂无数据 · 待接入沙箱白名单端点）</td></tr></tbody>
+          <!-- Skill 列表：占位空列表（待接入 Skill 端点） -->
+          <table v-if="active === 'skills'">
+            <thead><tr><th>名称</th><th>描述</th></tr></thead>
+            <tbody><tr><td colspan="2" class="empty">（暂无 Skill · 待接入 Skill 端点）</td></tr></tbody>
           </table>
+
+          <!-- 知识库：占位空列表（待接入知识库端点） -->
+          <table v-else-if="active === 'knowledge'">
+            <thead><tr><th>名称</th><th>描述</th></tr></thead>
+            <tbody><tr><td colspan="2" class="empty">（暂无知识库条目 · 待接入知识库端点）</td></tr></tbody>
+          </table>
+
+          <!-- Sandbox 白名单：三类 file/shell/http 的 CRUD（新增走弹框 / 逐行删除） -->
+          <div v-else-if="active === 'whitelist'">
+            <div class="toolbar">
+              <button class="btn" @click="wlForm.open = true">+ 新增白名单</button>
+            </div>
+            <!-- 新增白名单 弹出框 -->
+            <div v-if="wlForm.open" class="modal-overlay" @click.self="cancelWl()">
+              <div class="modal-card">
+                <div class="modal-head"><h3>新增白名单</h3><button class="modal-x" @click="cancelWl()">✕</button></div>
+                <div class="modal-body">
+                  <select v-model="wlForm.category" class="gen-input">
+                    <option value="file">文件路径</option>
+                    <option value="shell">Shell 命令</option>
+                    <option value="http">HTTP 域名</option>
+                  </select>
+                  <input v-model="wlForm.value" class="gen-input" :placeholder="wlPlaceholder" />
+                  <p class="empty">选择类别并填写一条白名单条目：文件路径 / Shell 命令首 token / HTTP 域名（支持通配，如 *.example.com）。</p>
+                  <p v-if="wlForm.error" class="error">{{ wlForm.error }}</p>
+                </div>
+                <div class="modal-foot">
+                  <button class="btn" @click="cancelWl">取消</button>
+                  <button class="btn" :disabled="wlForm.busy || !wlForm.value.trim()" @click="addWhitelist">新增</button>
+                </div>
+              </div>
+            </div>
+            <p v-if="wl.loading" class="empty">加载中…</p>
+            <p v-else-if="wl.error" class="error">出错：{{ wl.error }}</p>
+            <template v-else>
+              <div v-for="cat in WL_CATS" :key="cat.key">
+                <h3 class="sec" style="margin-top:20px">{{ cat.label }}</h3>
+                <table>
+                  <thead><tr><th>规则</th><th style="width:90px">操作</th></tr></thead>
+                  <tbody>
+                    <tr v-if="!wl[cat.key].length"><td colspan="2" class="empty">（暂无{{ cat.label }}白名单）</td></tr>
+                    <tr v-for="(entry, i) in wl[cat.key]" :key="i">
+                      <td class="mono">{{ entry }}</td>
+                      <td class="ops"><button class="btn" @click="deleteWhitelist(cat.key, entry)">删除</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
 
           <!-- 30 节：Agent —— 一个列表（含一句话新建/删除）；点"详情"进这个 Agent 的文件浏览器 -->
           <div v-else-if="active === 'agents'">
@@ -783,20 +944,24 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
 
             <!-- 列表视图：所有 Agent + 新建（只填 name + description，后台脚手架完整目录） -->
             <template v-else>
-              <div class="gen-box">
-                <button v-if="!gen.open" class="btn" @click="gen.open = true">+ 新建 Agent</button>
-                <template v-else>
-                  <div class="gen-row">
+              <div class="toolbar">
+                <button class="btn" @click="gen.open = true">+ 新建 Agent</button>
+              </div>
+              <!-- 新建 Agent 弹出框 -->
+              <div v-if="gen.open" class="modal-overlay" @click.self="cancelCreate()">
+                <div class="modal-card">
+                  <div class="modal-head"><h3>新建 Agent</h3><button class="modal-x" @click="cancelCreate()">✕</button></div>
+                  <div class="modal-body">
                     <input v-model="gen.name" class="gen-input" placeholder="Agent 名（字母/数字/下划线/连字符）" />
                     <input v-model="gen.description" class="gen-input" placeholder="描述这个 Agent 做什么" />
+                    <p class="empty">创建后后台自动生成完整目录：AGENT.md + scripts/ + skills/ + REFERENCE.md（模板内容，可在文件浏览器查看）。</p>
+                    <p v-if="gen.error" class="error">{{ gen.error }}</p>
                   </div>
-                  <div class="ops">
-                    <button class="btn" :disabled="gen.busy || !gen.name" @click="createAgent">创建</button>
+                  <div class="modal-foot">
                     <button class="btn" @click="cancelCreate">取消</button>
+                    <button class="btn" :disabled="gen.busy || !gen.name" @click="createAgent">创建</button>
                   </div>
-                  <p class="empty">创建后后台自动生成完整目录：AGENT.md + scripts/ + skills/ + REFERENCE.md（模板内容，可在文件浏览器查看）。</p>
-                </template>
-                <p v-if="gen.error" class="error">{{ gen.error }}</p>
+                </div>
               </div>
               <p v-if="agents.loading" class="empty">加载中…</p>
               <p v-else-if="agents.error" class="error">出错：{{ agents.error }}</p>
@@ -823,10 +988,14 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
 
           <!-- Notify 渠道：命名通知出口的 CRUD（新建/编辑/删除） -->
           <div v-else-if="active === 'notify-channels'">
-            <div class="gen-box">
-              <button v-if="!nc.open" class="btn" @click="nc.open = true">+ 新建渠道</button>
-              <template v-else>
-                <div class="gen-row">
+            <div class="toolbar">
+              <button class="btn" @click="nc.open = true">+ 新建渠道</button>
+            </div>
+            <!-- 新建/编辑通知渠道 弹出框 -->
+            <div v-if="nc.open" class="modal-overlay" @click.self="cancelNc()">
+              <div class="modal-card">
+                <div class="modal-head"><h3>{{ nc.editing ? '编辑通知渠道' : '新建通知渠道' }}</h3><button class="modal-x" @click="cancelNc()">✕</button></div>
+                <div class="modal-body">
                   <input v-model="nc.name" class="gen-input" :disabled="!!nc.editing" placeholder="渠道名（唯一标识）" />
                   <select v-model="nc.type" class="gen-input">
                     <option value="feishu">feishu</option>
@@ -834,18 +1003,16 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
                     <option value="dingtalk">dingtalk</option>
                     <option value="webhook">webhook</option>
                   </select>
-                </div>
-                <div class="gen-row">
                   <input v-model="nc.url" class="gen-input" placeholder="Webhook URL" />
                   <input v-model="nc.description" class="gen-input" placeholder="描述（可选）" />
+                  <p class="empty">{{ nc.editing ? '编辑现有渠道，渠道名不可改。' : 'type 支持 feishu / wecom / dingtalk / webhook；URL 为对应的 Webhook 地址。' }}</p>
+                  <p v-if="nc.error" class="error">{{ nc.error }}</p>
                 </div>
-                <div class="ops">
-                  <button class="btn" :disabled="nc.busy || !nc.name || !nc.url" @click="saveNotifyChannel">{{ nc.editing ? '保存修改' : '创建' }}</button>
+                <div class="modal-foot">
                   <button class="btn" @click="cancelNc">取消</button>
+                  <button class="btn" :disabled="nc.busy || !nc.name || !nc.url" @click="saveNotifyChannel">{{ nc.editing ? '保存修改' : '创建' }}</button>
                 </div>
-                <p class="empty">{{ nc.editing ? '编辑现有渠道，渠道名不可改。' : 'type 支持 feishu / wecom / dingtalk / webhook；URL 为对应的 Webhook 地址。' }}</p>
-                <p v-if="nc.error" class="error">{{ nc.error }}</p>
-              </template>
+              </div>
             </div>
             <p v-if="notifyChannels.loading" class="empty">加载中…</p>
             <p v-else-if="notifyChannels.error" class="error">出错：{{ notifyChannels.error }}</p>
@@ -861,6 +1028,49 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
                   <td class="ops">
                     <button class="btn" @click="editNotifyChannel(c)">编辑</button>
                     <button class="btn" @click="deleteNotifyChannel(c.name)">删除</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Provider：命名模型 Provider 的 CRUD（新建/编辑/删除），apiKey 明文展示 -->
+          <div v-else-if="active === 'providers'">
+            <div class="toolbar">
+              <button class="btn" @click="pv.open = true">+ 新建 Provider</button>
+            </div>
+            <!-- 新建/编辑 Provider 弹出框 -->
+            <div v-if="pv.open" class="modal-overlay" @click.self="cancelPv()">
+              <div class="modal-card">
+                <div class="modal-head"><h3>{{ pv.editing ? '编辑 Provider' : '新建 Provider' }}</h3><button class="modal-x" @click="cancelPv()">✕</button></div>
+                <div class="modal-body">
+                  <input v-model="pv.name" class="gen-input" :disabled="!!pv.editing" placeholder="Provider 名（唯一标识）" />
+                  <input v-model="pv.apiKey" class="gen-input" placeholder="api-key；mock provider 可留空" />
+                  <input v-model="pv.baseUrl" class="gen-input" placeholder="https://api.deepseek.com；mock 可留空" />
+                  <input v-model="pv.description" class="gen-input" placeholder="描述（可选）" />
+                  <p class="empty">{{ pv.editing ? '编辑现有 Provider，Provider 名不可改。' : 'name 为 ProviderService 显式映射的 key；apiKey / baseUrl 对 mock provider 可留空。' }}</p>
+                  <p v-if="pv.error" class="error">{{ pv.error }}</p>
+                </div>
+                <div class="modal-foot">
+                  <button class="btn" @click="cancelPv">取消</button>
+                  <button class="btn" :disabled="pv.busy || !pv.name" @click="saveProvider">{{ pv.editing ? '保存修改' : '创建' }}</button>
+                </div>
+              </div>
+            </div>
+            <p v-if="providers.loading" class="empty">加载中…</p>
+            <p v-else-if="providers.error" class="error">出错：{{ providers.error }}</p>
+            <table v-else>
+              <thead><tr><th>name</th><th>apiKey</th><th>baseUrl</th><th>description</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr v-if="!providers.data.length"><td colspan="5" class="empty">（暂无 Provider · 点上面「新建 Provider」）</td></tr>
+                <tr v-for="p in providers.data" :key="p.name">
+                  <td class="mono">{{ p.name }}</td>
+                  <td class="mono">{{ p.apiKey || '—' }}</td>
+                  <td class="mono">{{ p.baseUrl || '—' }}</td>
+                  <td>{{ p.description || '—' }}</td>
+                  <td class="ops">
+                    <button class="btn" @click="editProvider(p)">编辑</button>
+                    <button class="btn" @click="deleteProvider(p.name)">删除</button>
                   </td>
                 </tr>
               </tbody>
@@ -1054,6 +1264,16 @@ th { color: var(--text-2); font-weight: 500; }
 .gen-row { display: flex; gap: 10px; align-items: center; }
 .gen-input { flex: 1; background: var(--bg-mute); color: var(--text-1); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; width: 100%; }
 .gen-draft { width: 100%; background: var(--bg-mute); color: var(--text-1); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px; margin-bottom: 10px; resize: vertical; }
+/* 列表页新建按钮工具栏 */
+.toolbar { margin-bottom: 16px; }
+/* 弹出框（新建/编辑表单） */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.modal-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.3); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.modal-head h3 { margin: 0; font-size: 15px; }
+.modal-x { background: none; border: none; color: var(--text-3, var(--text-2)); font-size: 16px; cursor: pointer; }
+.modal-body { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--border); }
 .ws { display: flex; gap: 16px; align-items: flex-start; }
 .ws-tree { width: 300px; flex-shrink: 0; background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; max-height: 70vh; overflow: auto; }
 .ws-node { padding: 3px 6px; border-radius: 4px; cursor: default; font-size: 12px; }
