@@ -21,13 +21,16 @@ public class ProviderChatModelFactory {
     properties.validate();
     Map<String, ChatModel> providerMap = new LinkedHashMap<>();
     for (ProvidersProperties.ProviderConfig config : properties.providers()) {
-      if (MOCK.equals(config.name())) {
-        providerMap.put(config.name(), new MockChatModel()); // 不连真实端点，无需 key/url
-        continue;
-      }
-      OpenAiApi api = new OpenAiApi(config.baseUrl(), config.apiKey());
-      providerMap.put(config.name(), new OpenAiChatModel(api));
+      providerMap.put(config.name(), buildOne(config.name(), config.apiKey(), config.baseUrl()));
     }
     return providerMap;
+  }
+
+  /** 按单个 provider 的参数手工构造 ChatModel（31 节动态 provider：按名从注册表取参数后即时建）。mock 名走内置假模型。 */
+  public ChatModel buildOne(String name, String apiKey, String baseUrl) {
+    if (MOCK.equals(name)) {
+      return new MockChatModel(); // 不连真实端点，无需 key/url
+    }
+    return new OpenAiChatModel(new OpenAiApi(baseUrl, apiKey));
   }
 }

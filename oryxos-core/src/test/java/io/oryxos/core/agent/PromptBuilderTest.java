@@ -64,15 +64,14 @@ class PromptBuilderTest {
   }
 
   @Test
-  @DisplayName("四部分顺序正确：system→记忆→历史→（工具走 availableTools）")
+  @DisplayName("system 段进 systemPrompt、历史进结构化 messages、工具走 availableTools")
   void fourPartsAssembledInFixedOrder() {
     Session session = sessionWithTurns(1);
 
     ProviderRequest request = builder.build(session, profile(20, List.of("http_get")));
 
-    int system = request.content().indexOf("system-context");
-    int history = request.content().indexOf("问题1");
-    assertTrue(system >= 0 && history > system, "system 段在前、历史段在后");
+    assertTrue(request.systemPrompt().contains("system-context"), "system 段进 systemPrompt");
+    assertTrue(hasMsg(request, "问题1"), "历史进结构化 messages（不再拍平进文本）");
     assertEquals(List.of(httpGetTool), request.availableTools(), "工具列表经 availableTools 传递");
   }
 
@@ -83,9 +82,9 @@ class PromptBuilderTest {
 
     ProviderRequest request = builder.build(session, profile(20, List.of()));
 
-    assertFalse(request.content().contains("问题5"), "最早的轮次被截掉");
-    assertTrue(request.content().contains("问题6"), "保留最近 20 轮的第一轮");
-    assertTrue(request.content().contains("问题25"), "最新一轮必在");
+    assertFalse(hasMsg(request, "问题5"), "最早的轮次被截掉");
+    assertTrue(hasMsg(request, "问题6"), "保留最近 20 轮的第一轮");
+    assertTrue(hasMsg(request, "问题25"), "最新一轮必在");
   }
 
   @Test
@@ -95,7 +94,7 @@ class PromptBuilderTest {
 
     ProviderRequest request = builder.build(session, profile(20, List.of()));
 
-    assertTrue(request.content().contains("问题1"), "恰好 N 轮时一条不丢");
+    assertTrue(hasMsg(request, "问题1"), "恰好 N 轮时一条不丢");
   }
 
   @Test
@@ -104,7 +103,7 @@ class PromptBuilderTest {
     ProviderRequest request = builder.build(sessionWithTurns(1), profile(20, List.of()));
 
     // Clock.fixed: 2026-07-10T08:30Z = 北京时间 16:30——模型自己不知道今天几号，全靠这一行
-    assertTrue(request.content().contains("2026-07-10 16:30"), "缺日期时间行，定时场景的'今天'就没了");
+    assertTrue(request.systemPrompt().contains("2026-07-10 16:30"), "缺日期时间行，定时场景的'今天'就没了");
   }
 
   @Test
@@ -121,14 +120,22 @@ class PromptBuilderTest {
     Session session = new Session("s-1", "ops-agent");
     for (int i = 1; i <= 3; i++) {
       session.appendUser("问题" + i);
-      session.appendToolResult("http_get", io.oryxos.core.ToolResult.ok("结果" + i));
+      session.appendToolResult(
+          new io.oryxos.core.provider.ToolCallRequest("http_get", "{}"),
+          io.oryxos.core.ToolResult.ok("结果" + i));
     }
 
     ProviderRequest request = builder.build(session, profile(2, List.of()));
 
-    assertFalse(request.content().contains("问题1"), "第 1 轮整体被截");
-    assertFalse(request.content().contains("结果1"), "轮内工具消息随轮整体截掉，不撕裂");
-    assertTrue(request.content().contains("问题2") && request.content().contains("结果2"));
-    assertTrue(request.content().contains("问题3") && request.content().contains("结果3"));
+    assertFalse(hasMsg(request, "问题1"), "第 1 轮整体被截");
+    assertFalse(hasMsg(request, "结果1"), "轮内工具消息随轮整体截掉，不撕裂");
+    assertTrue(hasMsg(request, "问题2") && hasMsg(request, "结果2"));
+    assertTrue(hasMsg(request, "问题3") && hasMsg(request, "结果3"));
+  }
+
+  /** 结构化历史里是否有一条消息的 content 含 sub（替代旧的 request.content() 文本包含判断）。 */
+  private static boolean hasMsg(ProviderRequest request, String sub) {
+    return request.messages().stream()
+        .anyMatch(m -> m.content() != null && m.content().contains(sub));
   }
 }

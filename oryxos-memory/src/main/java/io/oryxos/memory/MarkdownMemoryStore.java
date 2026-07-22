@@ -6,7 +6,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -26,6 +27,8 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   private static final String ARCHIVE_HEADER = "## 归档记忆";
   private static final int MAX_ARCHIVE_CHARS = 4000;
   private static final Pattern SAFE_AGENT = Pattern.compile("[A-Za-z0-9_-]+");
+  private static final DateTimeFormatter TIMESTAMP =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
   private final Path oryxosRoot;
 
@@ -45,7 +48,7 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   @Override
   public void append(String content, MemoryScope scope) {
     String header = scope == MemoryScope.CORE ? CORE_HEADER : ARCHIVE_HEADER;
-    String entry = "- [" + LocalDate.now() + "] " + content;
+    String entry = "- [" + LocalDateTime.now().format(TIMESTAMP) + "] " + content;
     String raw = read();
     String core = extractSection(raw, CORE_HEADER);
     String archive = extractSection(raw, ARCHIVE_HEADER);

@@ -25,15 +25,18 @@ import picocli.CommandLine.Parameters;
     })
 public class ProfileCommand implements Runnable {
 
-  private static final Path AGENTS_DIR = Path.of(".oryxos", "agents");
-
   @Override
   public void run() {
     new picocli.CommandLine(this).usage(System.out);
   }
 
+  /** Agent 目录区：{@code <工作区根>/agents}（根默认 .oryxos，可用 ORYXOS_ROOT 自定义）。 */
+  static Path agentsDir() {
+    return Workspace.root().resolve("agents");
+  }
+
   static Path agentDir(String name) {
-    return AGENTS_DIR.resolve(name);
+    return agentsDir().resolve(name);
   }
 
   static Path agentFile(String name) {
@@ -44,11 +47,12 @@ public class ProfileCommand implements Runnable {
   static class ListCommand implements Runnable {
     @Override
     public void run() {
-      if (!Files.isDirectory(AGENTS_DIR)) {
+      Path agentsDir = agentsDir();
+      if (!Files.isDirectory(agentsDir)) {
         System.out.println("Agent 目录不存在（先跑 oryxos init）。");
         return;
       }
-      try (Stream<Path> dirs = Files.list(AGENTS_DIR)) {
+      try (Stream<Path> dirs = Files.list(agentsDir)) {
         dirs.filter(Files::isDirectory).sorted().forEach(p -> System.out.println(p.getFileName()));
       } catch (IOException e) {
         throw new UncheckedIOException("读取 Agent 目录失败", e);

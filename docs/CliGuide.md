@@ -19,7 +19,14 @@ oryxos --help      # 总览
 oryxos --version   # 版本与 JVM/OS 信息
 ```
 
-**运行目录约定**：CLI 在**当前目录**寻找 `.oryxos/` 工作区和 `oryxos.db` 数据库。请固定在同一个目录下运行各命令，否则 chat 写的会话、`session list` 会查不到。
+**运行目录约定**：CLI 默认在**当前目录**寻找 `.oryxos/` 工作区和 `oryxos.db` 数据库。请固定在同一个目录下运行各命令，否则 chat 写的会话、`session list` 会查不到。
+
+**工作区根可自定义**：默认根是 `.oryxos`，可通过环境变量 `ORYXOS_ROOT` 或 JVM 系统属性 `-Doryxos.root=<path>` 覆盖。轻命令（init/status/profile）不启动 Spring、不读 yaml，只认这两者（解析顺序 `-Doryxos.root` → `ORYXOS_ROOT` → 默认 `.oryxos`）；重命令（serve/gateway）从 `application.yml` 的 `oryxos.root` 读取，Spring relaxed binding 同样把 `ORYXOS_ROOT` 绑上去，所以设一个环境变量两边都认。配置的根会自动加入文件沙箱白名单，换根不破坏文件工具。
+
+```bash
+ORYXOS_ROOT=/data/ws oryxos init      # 初始化到自定义工作区
+ORYXOS_ROOT=/data/ws oryxos chat      # 重命令同样指向它
+```
 
 ---
 
@@ -81,15 +88,16 @@ oryxos init
 
 ```text
 .oryxos/
-├── profiles/    # Agent 定义（YAML，每个 Agent 一个文件）
-├── skills/      # SKILL.md 技能文件
-├── memory/      # 长期记忆（22 节启用）
+├── agents/      # 每个子目录 = 一个 Agent（AGENT.md + 可选 skills/ scripts/ REFERENCE.md）
+├── memory/      # 全局长期记忆（每个 Agent 自己的 MEMORY.md 在 agents/<name>/ 下）
 ├── sessions/    # 备用（会话已入 SQLite）
 ├── logs/
 ├── AGENTS.md    # Bootstrap：项目级 agent 行为说明
 ├── SOUL.md      # Bootstrap：agent 人格定义
 └── USER.md      # Bootstrap：用户偏好（只读）
 ```
+
+`oryxos.db` 由首次运行的重命令创建，`init` 本身不建库。
 
 **幂等**：重复运行不覆盖任何已有文件，放心多敲。
 
@@ -116,22 +124,24 @@ oryxos chat --profile weather  # 用指定 Agent
 ### 4.4 serve / gateway——常驻模式
 
 ```bash
-oryxos serve --port 8080   # REST API 服务（端点第 26 节交付，当前为启动骨架）
+oryxos serve --port 8080   # REST API（/api/v1）+ Web 管理台（/admin/）
 oryxos gateway             # 守护进程（多 Channel 挂载属扩展阶段）
 ```
+
+`serve` 除了对外暴露 `/api/v1` 下的 REST 端点，还在 `http://<host>:<port>/admin/` 提供 Web 管理台。serve/gateway 是重命令，从 `application.yml` 的 `oryxos.root` 读取工作区根（也认 `ORYXOS_ROOT`）。
 
 三种运行模式（chat/serve/gateway）**共享同一份 Profile 配置和同一套会话存储**，差异只是消息从哪进来。Ctrl-C 退出。
 
 ### 4.5 profile 四件——Agent 管理
 
 ```bash
-oryxos profile create ops-agent   # 生成最小模板到 .oryxos/profiles/ops-agent.yaml
-oryxos profile show ops-agent     # 打印 YAML 内容
-oryxos profile list               # 列出全部
-oryxos profile delete ops-agent   # 删除（不存在则报错点名）
+oryxos profile create ops-agent   # 生成最小模板到 .oryxos/agents/ops-agent/AGENT.md
+oryxos profile show ops-agent     # 打印 AGENT.md 内容
+oryxos profile list               # 列出全部（每行一个 Agent 目录名）
+oryxos profile delete ops-agent   # 删除整个 Agent 目录（不存在则报错点名）
 ```
 
-create 生成的模板含 identity/provider/tools/skills/bootstrap/settings 六段，直接编辑 YAML 即可定制——**改配置就是改 Agent，不需要写代码**。改完无需重启：下一轮对话即生效（上下文文件每次组装都重新读取）。
+**一个目录 = 一个 Agent**：每个 Agent 是 `.oryxos/agents/<name>/` 下的一个目录，核心是 `AGENT.md`——YAML frontmatter（这个 Agent 的 profile：identity/provider/tools/bootstrap/settings）+ 正文（任务指令），外加可选的 `skills/`、`scripts/`、`REFERENCE.md`。**不再有 `.oryxos/profiles/` 目录**。create 生成的模板直接编辑即可定制——**改配置就是改 Agent，不需要写代码**。改完无需重启：下一轮对话即生效（上下文文件每次组装都重新读取）。
 
 ### 4.6 provider list / tool list / session list——三张清单
 
@@ -183,9 +193,8 @@ export DEEPSEEK_API_KEY=sk-xxx    # Provider 凭证
 ## 8. 能力边界（核心阶段）
 
 - IM Channel（企业微信/飞书/钉钉/Slack）：扩展阶段；
-- `serve` 的 REST 端点：第 26 节交付（当前为启动骨架）；
-- 定时触发（"钟推"）：第 25 节；
-- 工具真实执行（文件/Shell/HTTP）：第 20 节接入 ToolRegistry 后，chat 里的 Agent 才能真正调工具。
+- `serve` 的 REST 端点与 `/admin/` Web 管理台已交付（详见 REST API 文档）；
+- 定时触发（"钟推"）、工具真实执行（文件/Shell/HTTP）均已在核心阶段接入。
 
 ---
 

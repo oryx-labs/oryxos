@@ -47,9 +47,22 @@ class ProviderServiceTest {
     deepseek = mock(ChatModel.class);
     kimi = mock(ChatModel.class);
     audit = mock(LlmCallAuditor.class);
+    io.oryxos.core.provider.ProviderRegistry registry =
+        mock(io.oryxos.core.provider.ProviderRegistry.class);
+    when(registry.find(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(java.util.Optional.empty());
+    when(registry.find("deepseek"))
+        .thenReturn(
+            java.util.Optional.of(
+                new io.oryxos.core.provider.ProviderDef("deepseek", "key", "https://x", null)));
+    when(registry.find("kimi"))
+        .thenReturn(
+            java.util.Optional.of(
+                new io.oryxos.core.provider.ProviderDef("kimi", "key", "https://x", null)));
+    java.util.Map<String, ChatModel> byName = java.util.Map.of("deepseek", deepseek, "kimi", kimi);
     service =
         new SpringAiProviderServiceImpl(
-            Map.of("deepseek", deepseek, "kimi", kimi), new ToolSchemaAdapter(), audit);
+            registry, def -> byName.get(def.name()), new ToolSchemaAdapter(), audit);
   }
 
   private static Profile profileUsing(String providerName) {

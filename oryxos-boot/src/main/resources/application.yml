@@ -42,10 +42,15 @@ shell:
     - cat
     - echo
     - grep
+    - python          # GitHub 日报 Agent 跑 scripts/github_trending.py（31 节 Demo 三）
+    - python3
 http:
   allowed_domains:
-    - api.deepseek.com   # Provider 端点（精确匹配）
-    - "*.feishu.cn"      # 飞书 webhook（通配真子域）
+    - api.deepseek.com      # Provider 端点（精确匹配）
+    - "*.feishu.cn"         # 飞书 webhook（通配真子域）
+    - api.open-meteo.com    # 天气 Agent（免 key 天气源，31 节 Demo 一）
+    - hn.algolia.com        # 科技日报 Agent 新闻源（免 key JSON，31 节 Demo 二）
+    - api.github.com        # GitHub 日报脚本走子进程网络；列此便于审计与将来收口（31 节 Demo 三 §信任边界）
 
 # 长期记忆后端（第 22 节可插拔）：markdown（默认，零依赖）| sqlite（结构化）| mem0（自托管外部服务）
 memory:

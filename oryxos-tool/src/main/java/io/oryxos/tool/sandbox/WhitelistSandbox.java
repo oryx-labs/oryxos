@@ -1,6 +1,7 @@
 package io.oryxos.tool.sandbox;
 
 import io.oryxos.core.sandbox.SandboxWhitelist;
+import io.oryxos.core.sandbox.SandboxWhitelistStore;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.List;
@@ -33,26 +34,50 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   private static final String WILDCARD_PREFIX = "*.";
 
   // 具体类型 CopyOnWriteArrayList（而非 List 接口）：需要 addIfAbsent 的原子"不存在才加"语义
-  private final CopyOnWriteArrayList<Path> allowedRoots;
-  private final Set<String> allowedCommands;
-  private final CopyOnWriteArrayList<String> allowedDomainPatterns;
+  private final CopyOnWriteArrayList<Path> allowedRoots = new CopyOnWriteArrayList<>();
+  private final Set<String> allowedCommands = ConcurrentHashMap.newKeySet();
+  private final CopyOnWriteArrayList<String> allowedDomainPatterns = new CopyOnWriteArrayList<>();
 
+  // 持久化后端（31 节）：非空则 add/remove 写穿落库、构造时从库恢复；为 null 时纯内存（单测 / 无库场景）。
+  private final SandboxWhitelistStore store;
+
+  /**
+   * 纯内存构造：三块白名单来自配置。null（配置键缺省）归一为空 = deny-all，绝不 NPE 也绝不放行。 根目录归一为绝对路径（{@code checkFilePath} 对
+   * target 做 {@code toAbsolutePath()}，根也须绝对化才能对称比对）。
+   */
   public WhitelistSandbox(
       FileSandboxProperties fileProps,
       ShellSandboxProperties shellProps,
       HttpSandboxProperties httpProps) {
-    // null（配置键缺省）归一为空 = deny-all，绝不 NPE 也绝不放行。装进并发集合以支持运行时管理。
-    // 根目录归一为绝对路径：checkFilePath 对 target 做 toAbsolutePath()，根也必须绝对化才能对称比对
-    // （否则相对配置如 .oryxos 永远匹配不上绝对化后的 target）。
-    this.allowedRoots =
-        new CopyOnWriteArrayList<>(
-            nullToEmpty(fileProps.allowedPaths()).stream()
-                .map(WhitelistSandbox::normalizeRoot)
-                .toList());
-    this.allowedCommands = ConcurrentHashMap.newKeySet();
-    this.allowedCommands.addAll(nullToEmpty(shellProps.allowedCommands()));
-    this.allowedDomainPatterns =
-        new CopyOnWriteArrayList<>(nullToEmpty(httpProps.allowedDomains()));
+    this.store = null;
+    nullToEmpty(fileProps.allowedPaths()).forEach(p -> applyToMemory(Category.FILE, p));
+    nullToEmpty(shellProps.allowedCommands()).forEach(c -> applyToMemory(Category.SHELL, c));
+    nullToEmpty(httpProps.allowedDomains()).forEach(d -> applyToMemory(Category.HTTP, d));
+  }
+
+  /**
+   * 持久化构造（31 节）：从 {@link SandboxWhitelistStore} 恢复已落库的三类白名单；之后 {@code add}/{@code remove}
+   * 写穿到库、重启保留。启动播种（把配置文件的白名单插进来）由装配层调用 {@code add} 完成——{@code add} 会算好规范形并幂等落库。
+   */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "store 是 Spring 注入的共享单例仓库，构造注入共享同一引用正是意图")
+  public WhitelistSandbox(SandboxWhitelistStore store) {
+    this.store = store;
+    for (SandboxWhitelistStore.Entry entry : store.loadAll()) {
+      applyToMemory(entry.category(), entry.value());
+    }
+  }
+
+  /** 仅更新内存（不写库）：构造 / 恢复时用。FILE 归一为绝对路径。 */
+  private void applyToMemory(Category category, String value) {
+    if (category == Category.FILE) {
+      allowedRoots.addIfAbsent(normalizeRoot(value));
+    } else if (category == Category.SHELL) {
+      allowedCommands.add(value);
+    } else {
+      allowedDomainPatterns.addIfAbsent(value);
+    }
   }
 
   private static List<String> nullToEmpty(List<String> list) {
@@ -147,12 +172,21 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   public boolean add(Category category, String value) {
     String entry = requireNonBlank(value);
     boolean changed;
+    String canonical; // 入内存的规范形，也是落库/展示/删除对齐的值（FILE 为归一后的绝对路径）
     if (category == Category.FILE) {
-      changed = allowedRoots.addIfAbsent(normalizeRoot(entry));
+      Path root = normalizeRoot(entry);
+      canonical = root.toString();
+      changed = allowedRoots.addIfAbsent(root);
     } else if (category == Category.SHELL) {
+      canonical = entry;
       changed = allowedCommands.add(entry);
     } else {
+      canonical = entry;
       changed = allowedDomainPatterns.addIfAbsent(entry);
+    }
+    // 写穿：只有内存确有变更才落库（幂等，避免重复写；启动播种重复调用不会重复插入）
+    if (changed && store != null) {
+      store.add(category, canonical);
     }
     LOG.info("Sandbox 白名单增加 {} -> {}（changed={}）", category, sanitize(entry), changed);
     return changed;
@@ -165,12 +199,20 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   public boolean remove(Category category, String value) {
     String entry = requireNonBlank(value);
     boolean changed;
+    String canonical;
     if (category == Category.FILE) {
-      changed = allowedRoots.remove(normalizeRoot(entry));
+      Path root = normalizeRoot(entry);
+      canonical = root.toString();
+      changed = allowedRoots.remove(root);
     } else if (category == Category.SHELL) {
+      canonical = entry;
       changed = allowedCommands.remove(entry);
     } else {
+      canonical = entry;
       changed = allowedDomainPatterns.remove(entry);
+    }
+    if (changed && store != null) {
+      store.remove(category, canonical);
     }
     LOG.info("Sandbox 白名单删除 {} -> {}（changed={}）", category, sanitize(entry), changed);
     return changed;

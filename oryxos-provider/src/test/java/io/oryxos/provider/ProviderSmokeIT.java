@@ -46,15 +46,21 @@ class ProviderSmokeIT {
     String apiKey = System.getenv("DEEPSEEK_API_KEY");
     assumeTrue(apiKey != null && !apiKey.isBlank(), "未设置 DEEPSEEK_API_KEY，跳过冒烟");
 
-    ProvidersProperties properties =
-        new ProvidersProperties(
-            List.of(
-                new ProvidersProperties.ProviderConfig(
-                    "deepseek", apiKey, "https://api.deepseek.com")));
     RecordingAuditor auditor = new RecordingAuditor();
+    io.oryxos.core.provider.ProviderRegistry registry =
+        org.mockito.Mockito.mock(io.oryxos.core.provider.ProviderRegistry.class);
+    org.mockito.Mockito.when(registry.find("deepseek"))
+        .thenReturn(
+            java.util.Optional.of(
+                new io.oryxos.core.provider.ProviderDef(
+                    "deepseek", apiKey, "https://api.deepseek.com", null)));
+    ProviderChatModelFactory factory = new ProviderChatModelFactory();
     ProviderService service =
         new SpringAiProviderServiceImpl(
-            new ProviderChatModelFactory().build(properties), new ToolSchemaAdapter(), auditor);
+            registry,
+            def -> factory.buildOne(def.name(), def.apiKey(), def.baseUrl()),
+            new ToolSchemaAdapter(),
+            auditor);
     Profile profile =
         new Profile(
             "smoke",

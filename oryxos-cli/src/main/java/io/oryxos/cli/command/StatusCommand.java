@@ -10,9 +10,9 @@ public class StatusCommand implements Runnable {
 
   @Override
   public void run() {
-    Path root = Path.of(".oryxos");
+    Path root = Workspace.root();
     System.out.println(
-        "工作区 .oryxos/  : " + (Files.isDirectory(root) ? "已初始化" : "未初始化（先跑 oryxos init）"));
+        "工作区 " + root + "/  : " + (Files.isDirectory(root) ? "已初始化" : "未初始化（先跑 oryxos init）"));
     System.out.println("Agent 目录      : " + describeDir(root.resolve("agents"), "*"));
     System.out.println(
         "SQLite 数据库   : "

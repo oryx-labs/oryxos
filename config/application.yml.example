@@ -1,17 +1,78 @@
-# OryxOS 运行配置（外部 yaml）——deepseek 等 Provider 凭证从这里读。
+# OryxOS 运行配置模板（外部 yaml）——复制成 config/application.yml 后填入真实 api-key。
 #
-# 用法：复制本文件为 config/application.yml，填入你的真实 api-key。
+# 用法：
 #   cp config/application.yml.example config/application.yml
+#   # 然后编辑 config/application.yml，把各 provider 的 api-key 填上
 # 真实的 config/application.yml 已在 .gitignore（勿提交密钥）；start.sh 会自动加载它。
+# 本 .example 不含任何真实凭证，随仓库提交，作为部署参考。
 #
-# 只需覆盖 oryxos.providers 一段；其余配置（端口、虚拟线程、autoconfigure.exclude、
-# 数据库、记忆后端等）继承自 jar 内置的 application.yml，无需在此重复。
+# 本文件铺开常用的「运行期默认」供部署时按机器调整；框架内部管道
+# （spring.autoconfigure.exclude、jpa 方言、sql.init、management、springdoc）
+# 不在此重复，继续从 jar 内置 application.yml 继承，避免与 jar 漂移。
+# 注意：列表类键（file/shell/http、oryxos.providers）Spring 是整体替换不是合并——
+# 在此覆盖时须与 jar 内置 application.yml 的对应列表保持一致，别只改一半造成两份分歧。
+
+# ── 服务 ────────────────────────────────────────────────
+server:
+  port: 8080                    # HTTP API / 管理台端口（oryxos serve --port 可临时覆盖）
+
+# ── 持久化 / 并发 ───────────────────────────────────────
+spring:
+  datasource:
+    url: jdbc:sqlite:oryxos.db  # SQLite 数据文件（会话 + 审计表），相对启动目录
+  threads:
+    virtual:
+      enabled: true             # 宪法七：Java 21 虚拟线程扛并发，不引入异步框架
+
+# ── 长期记忆后端（22 节可插拔）──────────────────────────
+memory:
+  backend: markdown             # markdown（默认，零依赖）| sqlite（结构化）| mem0（自托管）
+  mem0:
+    base-url: ${MEM0_BASE_URL:} # 仅 backend=mem0 时用；走环境变量不落明文
+    user-id: ${MEM0_USER_ID:oryxos}
+
+# ── Sandbox 白名单（24 节，宪法六）：空列表 = deny-all，按最小权限收窄 ──
+file:
+  allowed_paths:
+    - .oryxos                   # Agent 工作区（Profile / 记忆 / 技能 / 日志）
+shell:
+  allowed_commands:             # 只放最小只读命令集；写 / 删类默认不在内
+    - ls
+    - cat
+    - echo
+    - grep
+    - python                    # 与 jar 默认对齐（部分环境 python 即 python3）
+    - python3                   # GitHub 日报 Agent 跑 scripts/github_trending.py（31 节 Demo 三）
+http:
+  allowed_domains:
+    - api.deepseek.com          # Provider 端点（精确匹配）
+    - "*.feishu.cn"             # 飞书 webhook（通配真子域）
+    - api.open-meteo.com        # 天气 Agent 免 key 天气源（31 节 Demo 一）
+    - hn.algolia.com            # 科技日报 Agent 新闻源（31 节 Demo 二）
+    - api.github.com            # GitHub 日报脚本子进程网络（31 节 Demo 三）
+
+# ── 日志级别（格式 / appender 在 logback-spring.xml）──────
+logging:
+  level:
+    root: INFO
+    io.oryxos: DEBUG
+
+# ── 工作区 + Provider 清单（宪法三显式映射；凭证勿提交）────
 oryxos:
+  # Agent 工作区根目录（可自定义路径与名字：agents/ memory/ logs/ mcp_servers.yaml 都在其下）。
+  # 此 yaml 值对 serve/gateway 生效；轻命令（init/status/profile 不启动 Spring）改用环境变量
+  # ORYXOS_ROOT（或 -Doryxos.root=）——设一个环境变量两边都认。改根后无需动 file.allowed_paths：
+  # 运行时会把该根自动纳入文件白名单。
+  root: .oryxos
   providers:
     - name: deepseek
-      api-key: ""          # ← 填入你的 DeepSeek API Key（留空启动会点名报错）
+      api-key: ""                # ← 填入你的 DeepSeek API Key（留空启动会点名报错）
       base-url: https://api.deepseek.com
-    # 内置 mock provider：不连真实模型、无需 key，用于无 key 自测全链路。
-    # 用它建/配一个 provider: mock 的 Agent，发一条"记住…"消息，即可在管理台看到
-    # 会话/记忆/工具端点被填充（一次 save_memory 工具调用 + 两轮 ReAct）。生产可删。
-    - name: mock
+    - name: codex
+      api-key: ""                # ← 可选：填入 Codex / OpenAI API Key（不用可删掉本条）
+      base-url: https://ai.soulecho.cc   # codex 中转代理；OryxOS 运行时走 /v1/chat/completions
+    - name: mock                 # 内置假模型：不连真实模型、无需 key，无 key 自测全链路（生产可删）
+  # 「一句话生成 Agent 草稿」调 LLM 用的作者模型；provider 缺省取 providers 第一个
+  author:
+    provider: deepseek
+    model: deepseek-chat

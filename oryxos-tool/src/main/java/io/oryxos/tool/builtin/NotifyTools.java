@@ -1,9 +1,12 @@
 package io.oryxos.tool.builtin;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.oryxos.core.OryxTool;
 import io.oryxos.core.ToolResult;
 import io.oryxos.core.agent.ProfileContext;
+import io.oryxos.core.notify.NotifyChannelDef;
+import io.oryxos.core.notify.NotifyChannelRegistry;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.tool.notify.NotifyChannelAdapter;
 import io.oryxos.tool.notify.NotifyTarget;
@@ -12,6 +15,8 @@ import io.oryxos.tool.sandbox.Sandbox;
 import io.oryxos.tool.sandbox.SandboxAction;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * 内置工具 notify：把一条消息推送到当前 Agent 配置好的通知渠道。
@@ -30,9 +35,19 @@ public class NotifyTools implements OryxTool {
   /** 推送前过 HTTP 域名白名单（宪法 VI）——与 http_post 共享同一份 http.allowed_domains（24 节接线）。 */
   private final Sandbox sandbox;
 
-  public NotifyTools(Map<String, NotifyChannelAdapter> adapters, Sandbox sandbox) {
+  /** 全局通知渠道注册表（31 节）：channel 传渠道名时按它解析成 {type,url}，不再依赖 AGENT.md 内联。 */
+  private final NotifyChannelRegistry channelRegistry;
+
+  @SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "channelRegistry 是 Spring 注入的共享单例，构造注入共享同一引用正是意图（与 adapters/sandbox 同）")
+  public NotifyTools(
+      Map<String, NotifyChannelAdapter> adapters,
+      Sandbox sandbox,
+      NotifyChannelRegistry channelRegistry) {
     this.adapters = Map.copyOf(adapters);
     this.sandbox = sandbox;
+    this.channelRegistry = channelRegistry;
   }
 
   @Override
@@ -42,7 +57,14 @@ public class NotifyTools implements OryxTool {
 
   @Override
   public String getDescription() {
-    return "把一条消息推送到当前 Agent 配置好的通知渠道";
+    // 动态列出当前已注册的渠道名，模型据此选 channel（31 节：出口全局管理、按名引用）
+    List<NotifyChannelDef> registered = channelRegistry.list();
+    if (registered.isEmpty()) {
+      return "把一条消息推送到指定通知渠道。channel 传渠道名；当前无已注册渠道——去管理台「Notify 渠道」里新建。";
+    }
+    String names =
+        registered.stream().map(NotifyChannelDef::name).collect(Collectors.joining(", "));
+    return "把一条消息推送到指定通知渠道。channel 传渠道名，当前可用：" + names;
   }
 
   @Override
@@ -66,6 +88,27 @@ public class NotifyTools implements OryxTool {
     }
     String channel = input.hasNonNull("channel") ? input.get("channel").asText() : null;
 
+    // 新模型（31 节）：channel 是全局注册表里的渠道名 → 按名解析成 {type,url}，与 Agent 内联配置无关。
+    // Agent 正文用自然语言指定"发到 <渠道名>"，模型把名字传进来即可。
+    if (channel != null && !channel.isBlank()) {
+      Optional<NotifyChannelDef> registered = channelRegistry.find(channel);
+      if (registered.isPresent()) {
+        NotifyChannelDef def = registered.get();
+        NotifyChannelAdapter adapter = adapters.get(def.type());
+        if (adapter == null) {
+          return ToolResult.error(
+              "渠道 " + def.name() + " 的类型 " + def.type() + " 没有对应实现（已装配: " + adapters.keySet() + "）",
+              false);
+        }
+        // 校验先于发送（宪法 VI）：推送地址过 HTTP 域名白名单，与 http_post 共享 http.allowed_domains。
+        sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, def.url()));
+        adapter.send(new NotifyTarget(def.type(), Map.of("url", def.url())), contentNode.asText());
+        return ToolResult.ok("已推送");
+      }
+      // channel 给了名字但注册表没有 → 落到下面的兼容路径（按 type 匹配 Agent 内联渠道）
+    }
+
+    // 兼容老模型：从当前 Profile 的内联 notify_channels 解析（channel 为空或按 type 匹配）
     Profile profile = ProfileContext.current();
     if (profile == null) {
       return ToolResult.error("当前无 Agent 上下文，无法解析通知渠道", false);
