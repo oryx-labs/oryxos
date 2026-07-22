@@ -4,6 +4,7 @@ import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.provider.ProviderService;
+import io.oryxos.core.skill.AgentSkillCoordinator;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -12,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Agent 生命周期编排（第 30 节）：三条录入（API create / WorkspaceWatcher 事件 / 启动扫描）都汇到同一段 {@link
@@ -66,7 +68,12 @@ public class AgentLifecycleService {
 
   private static final String SKILL_TEMPLATE =
       """
-      # 示例子指令
+      ---
+      name: example
+      description: 演示按需加载的 Agent 私有 Skill
+      ---
+
+      # 示例 Skill
       把较长的规范 / 清单 / 格式要求放这里。Agent 正文指到时，用底座的 read_file 把它读进上下文——平时不占常驻 prompt。
       """;
 
@@ -100,6 +107,7 @@ public class AgentLifecycleService {
   private final String defaultProvider;
   private final String authorProvider;
   private final String authorModel;
+  private final AgentSkillCoordinator skillCoordinator;
 
   public AgentLifecycleService(
       AgentLoader agentLoader,
@@ -110,6 +118,29 @@ public class AgentLifecycleService {
       String defaultProvider,
       String authorProvider,
       String authorModel) {
+    this(
+        agentLoader,
+        profileRegistry,
+        agentScheduler,
+        agentStore,
+        providerService,
+        defaultProvider,
+        authorProvider,
+        authorModel,
+        null);
+  }
+
+  /** 生产构造器：生命周期变更与请求期 Skill 读取共用同一 Agent 级协调器。 */
+  public AgentLifecycleService(
+      AgentLoader agentLoader,
+      ProfileRegistry profileRegistry,
+      AgentScheduler agentScheduler,
+      AgentStore agentStore,
+      ProviderService providerService,
+      String defaultProvider,
+      String authorProvider,
+      String authorModel,
+      AgentSkillCoordinator skillCoordinator) {
     this.agentLoader = agentLoader;
     this.profileRegistry = profileRegistry;
     this.agentScheduler = agentScheduler;
@@ -118,6 +149,7 @@ public class AgentLifecycleService {
     this.defaultProvider = defaultProvider;
     this.authorProvider = authorProvider;
     this.authorModel = authorModel;
+    this.skillCoordinator = skillCoordinator;
   }
 
   /**
@@ -125,10 +157,15 @@ public class AgentLifecycleService {
    * 冲突第一步就拒；中途失败回滚已写目录，不留半个 Agent。
    */
   public Profile create(String name, String description) {
-    if (profileRegistry.exists(name)) {
+    AgentName agentName = AgentName.parse(name);
+    return mutate(agentName, () -> createLocked(agentName.value(), description));
+  }
+
+  private Profile createLocked(String name, String description) {
+    if (profileRegistry.existsIdentity(name) || agentStore.agentIdentityExists(name)) {
       throw new IllegalArgumentException("Agent 已存在: " + name);
     }
-    Path agentDir = agentStore.writeAll(name, scaffold(name, description));
+    Path agentDir = agentStore.createAll(name, scaffold(name, description));
     try {
       return register(agentDir);
     } catch (RuntimeException e) {
@@ -149,7 +186,7 @@ public class AgentLifecycleService {
             .replace("{description}", desc)
             .replace("{provider}", provider));
     files.put("scripts/example.py", SCRIPT_TEMPLATE);
-    files.put("skills/example.md", SKILL_TEMPLATE);
+    files.put("skills/example/SKILL.md", SKILL_TEMPLATE);
     files.put("REFERENCE.md", REFERENCE_TEMPLATE);
     return files;
   }
@@ -179,14 +216,15 @@ public class AgentLifecycleService {
 
   /** 更新：覆写 AGENT.md；先注销旧定时、再注册新的（旧 cron 不会跟新 cron 一起跑）。 */
   public Profile update(String name, String agentMarkdown) {
+    AgentName agentName = AgentName.parse(name);
+    return mutate(agentName, () -> updateLocked(agentName.value(), agentMarkdown));
+  }
+
+  private Profile updateLocked(String name, String agentMarkdown) {
+    // 先校验再原子替换：坏定义不得覆盖仍可运行的旧 AGENT.md。
+    Profile updated = agentLoader.parse(agentMarkdown, name);
     Profile old = profileRegistry.get(name).orElse(null);
-    Path agentDir = agentStore.write(name, agentMarkdown);
-    Profile updated;
-    try {
-      updated = agentLoader.deriveProfile(agentDir);
-    } catch (IOException e) {
-      throw new UncheckedIOException("读取 Agent 目录失败: " + agentDir.getFileName(), e);
-    }
+    agentStore.write(name, agentMarkdown);
     if (old != null) {
       agentScheduler.unregisterProfile(old);
     }
@@ -247,19 +285,19 @@ public class AgentLifecycleService {
    * 变更先注销旧句柄再注册新的，同 {@link #update}）。用于「生成/编辑 Agent」的保存与文件浏览器的多文件保存。
    */
   public Profile saveFiles(String name, Map<String, String> files) {
+    AgentName agentName = AgentName.parse(name);
+    AgentStore.validateNoReservedSkillPaths(files == null ? null : files.keySet());
+    return mutate(agentName, () -> saveFilesLocked(agentName.value(), files));
+  }
+
+  private Profile saveFilesLocked(String name, Map<String, String> files) {
     String agentMarkdown = files == null ? null : files.get("AGENT.md");
     if (agentMarkdown == null || agentMarkdown.isBlank()) {
       throw new IllegalArgumentException("缺少 AGENT.md 内容");
     }
-    agentLoader.parse(agentMarkdown, name); // 先校验再落盘：非法定义不写进目录
+    Profile updated = agentLoader.parse(agentMarkdown, name); // 先校验再落盘：非法定义不写进目录
     Profile old = profileRegistry.get(name).orElse(null);
-    Path agentDir = agentStore.writeAll(name, files);
-    Profile updated;
-    try {
-      updated = agentLoader.deriveProfile(agentDir);
-    } catch (IOException e) {
-      throw new UncheckedIOException("读取 Agent 目录失败: " + agentDir.getFileName(), e);
-    }
+    agentStore.writeAll(name, files);
     if (old != null) {
       agentScheduler.unregisterProfile(old);
     }
@@ -282,15 +320,54 @@ public class AgentLifecycleService {
     return (lastFence < 0 ? body : body.substring(0, lastFence)).strip();
   }
 
-  /** 删除：先注销定时 → 再移出注册表 → 再把整个目录归档（不物理删）。顺序不能反（窗口期 cron 触发空指针）。 */
+  /** 删除：先原子归档目录，成功后再注销定时并移出注册表；归档失败时运行状态保持完整。 */
   public void delete(String name) {
+    AgentName agentName = AgentName.parse(name);
+    mutate(
+        agentName,
+        () -> {
+          deleteLocked(agentName.value());
+          return null;
+        });
+  }
+
+  private void deleteLocked(String name) {
     Profile profile = profileRegistry.get(name).orElse(null);
     if (profile == null) {
       return; // 幂等；404 由 web 层在调用前判定
     }
+    agentStore.archive(name);
     agentScheduler.unregisterProfile(profile);
     profileRegistry.remove(name);
-    agentStore.archive(name);
+  }
+
+  /**
+   * Workspace 文件 API 的受管 Skill 写入口。相对路径必须直接位于 {@code skills/<skill>/...}，实际写入由 AgentStore 同目录临时文件 +
+   * ATOMIC_MOVE 提交。
+   */
+  public Path writeManagedSkillFile(String name, String relativePath, String content) {
+    AgentName agentName = AgentName.parse(name);
+    String rawPath = relativePath == null ? "" : relativePath;
+    Path rawRelative = Path.of(rawPath);
+    boolean hasDotSegment = false;
+    for (Path segment : rawRelative) {
+      if (".".equals(segment.toString()) || "..".equals(segment.toString())) {
+        hasDotSegment = true;
+        break;
+      }
+    }
+    Path relative = rawRelative.normalize();
+    if (relative.isAbsolute()
+        || relative.getNameCount() < 3
+        || !"skills".equals(relative.getName(0).toString())
+        || rawPath.indexOf('\\') >= 0
+        || rawPath.indexOf('\0') >= 0
+        || hasDotSegment) {
+      throw new IllegalArgumentException("非法受管 Skill 文件路径");
+    }
+    AgentStore.validateNoReservedSkillPaths(List.of(relative.toString()));
+    return mutate(
+        agentName, () -> agentStore.writeFile(agentName.value(), relative.toString(), content));
   }
 
   /** WorkspaceWatcher 收到删除事件用：目录已被手工删，只注销 + 移索引，不归档。 */
@@ -302,5 +379,12 @@ public class AgentLifecycleService {
     }
     agentScheduler.unregisterProfile(profile);
     profileRegistry.remove(name);
+  }
+
+  private <T> T mutate(AgentName agentName, Supplier<T> operation) {
+    if (skillCoordinator == null) {
+      return operation.get();
+    }
+    return skillCoordinator.mutate(agentName.value(), operation::get);
   }
 }

@@ -46,4 +46,41 @@ class AgentMarkdownTest {
     assertEquals("ops", parsed.frontmatter().get("name"));
     assertTrue(parsed.body().contains("正文里的分隔线"), "首个闭合围栏之后的 --- 属于正文");
   }
+
+  @Test
+  @DisplayName("复用 BOM、CRLF 与 fence 空白规则但仍使用 Agent 宽松 YAML")
+  void split_normalizesSharedFenceRulesAndKeepsAgentYamlCompatibility() {
+    String content =
+        "\ufeff\r\n\r\n---   \r\nname: ops\r\ncustom: !!set {a: null}\r\n  --- \t\r\n正文";
+
+    AgentMarkdown.Parsed parsed = AgentMarkdown.split(content);
+
+    assertEquals("ops", parsed.frontmatter().get("name"));
+    assertTrue(parsed.frontmatter().containsKey("custom"));
+    assertEquals("正文", parsed.body());
+  }
+
+  @Test
+  @DisplayName("旧 Agent opening fence 的前导空格兼容行为保持不变")
+  void split_legacyOpeningFenceWithLeadingSpaces_remainsSupported() {
+    AgentMarkdown.Parsed parsed = AgentMarkdown.split("  ---  \nname: ops\n---\n正文");
+
+    assertEquals("ops", parsed.frontmatter().get("name"));
+    assertEquals("正文", parsed.body());
+  }
+
+  @Test
+  @DisplayName("不合法或未闭合 fence 对旧 Agent 降级为整篇正文")
+  void split_invalidOrUnclosedFence_remainsLegacyBody() {
+    String invalidOpening = "---yaml\nname: ops\n---\n正文";
+    String unclosed = "---\nname: ops\n正文";
+
+    AgentMarkdown.Parsed invalidParsed = AgentMarkdown.split(invalidOpening);
+    AgentMarkdown.Parsed unclosedParsed = AgentMarkdown.split(unclosed);
+
+    assertTrue(invalidParsed.frontmatter().isEmpty());
+    assertEquals(invalidOpening, invalidParsed.body());
+    assertTrue(unclosedParsed.frontmatter().isEmpty());
+    assertEquals(unclosed, unclosedParsed.body());
+  }
 }

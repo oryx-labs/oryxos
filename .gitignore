@@ -25,6 +25,7 @@ replay_pid*
 
 # Maven build output
 target/
+build/
 
 # SQLite runtime database
 *.db
@@ -43,6 +44,17 @@ website/node_modules/
 **/node_modules/
 oryxos-web/src/main/frontend/dist/
 oryxos-web/src/main/resources/static/admin/
+coverage/
+
+# Local environment, editor and temporary files
+.env*
+!.env.example
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
 
 # 运行时：外部配置（含 deepseek 等真实凭证，凭证不入库）、start.sh 的 pid、日志
 config/application.yml

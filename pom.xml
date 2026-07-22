@@ -25,6 +25,8 @@
         <spring-ai-alibaba.version>1.0.0-M6.1</spring-ai-alibaba.version>
         <picocli.version>4.7.6</picocli.version>
         <sqlite-jdbc.version>3.46.1.0</sqlite-jdbc.version>
+        <commons-compress.version>1.28.0</commons-compress.version>
+        <excludedGroups>integration</excludedGroups>
 
         <!-- Infrastructure libraries -->
         <logstash-logback.version>7.4</logstash-logback.version>
@@ -32,6 +34,7 @@
 
         <!-- Quality / format / security plugins -->
         <spotless.version>2.43.0</spotless.version>
+        <google-java-format.version>1.35.0</google-java-format.version>
         <maven-pmd-plugin.version>3.21.2</maven-pmd-plugin.version>
         <pmd.version>6.55.0</pmd.version>
         <p3c.version>2.1.1</p3c.version>
@@ -126,6 +129,13 @@
                 <version>${sqlite-jdbc.version}</version>
             </dependency>
 
+            <!-- ZIP central-directory metadata for secure Skill package import. -->
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-compress</artifactId>
+                <version>${commons-compress.version}</version>
+            </dependency>
+
             <!-- SpotBugs 局部抑制注解（带 justification 的显式声明，provided 不进运行时） -->
             <dependency>
                 <groupId>com.github.spotbugs</groupId>
@@ -166,7 +176,7 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <configuration>
-                        <excludedGroups>integration</excludedGroups>
+                        <excludedGroups>${excludedGroups}</excludedGroups>
                     </configuration>
                 </plugin>
 
@@ -178,6 +188,7 @@
                     <configuration>
                         <java>
                             <googleJavaFormat>
+                                <version>${google-java-format.version}</version>
                                 <style>GOOGLE</style>
                             </googleJavaFormat>
                             <removeUnusedImports/>

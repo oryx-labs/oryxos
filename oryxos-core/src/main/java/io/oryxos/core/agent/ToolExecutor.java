@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oryxos.core.OryxTool;
 import io.oryxos.core.ToolResult;
 import io.oryxos.core.provider.ToolCallRequest;
+import java.util.Collection;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 工具执行的唯一路径（宪法 I/II：执行权只在这里，Provider 侧自动执行已关闭）。
@@ -25,8 +27,18 @@ public class ToolExecutor {
     this.auditor = auditor;
   }
 
-  public ToolResult execute(String sessionId, String agentName, ToolCallRequest call) {
+  /** Executes only tools explicitly granted by the current Profile and audits every rejection. */
+  public ToolResult execute(
+      String sessionId,
+      String agentName,
+      Collection<String> allowedToolNames,
+      ToolCallRequest call) {
+    Objects.requireNonNull(allowedToolNames, "allowedToolNames");
+    Objects.requireNonNull(call, "call");
     long startedAt = System.currentTimeMillis();
+    if (!allowedToolNames.contains(call.name())) {
+      return fail(sessionId, call, "工具未获当前 Agent 授权: " + call.name(), startedAt);
+    }
     OryxTool tool = tools.get(call.name());
     if (tool == null) {
       return fail(sessionId, call, "未注册的工具: " + call.name(), startedAt);

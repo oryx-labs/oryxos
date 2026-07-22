@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import logoUrl from './assets/logo.svg'
+import AgentSkillsTab from './components/AgentSkillsTab.vue'
 
 // 顶层：概览 / Agent 列表 / 定时任务。「OS 运行时」下收纳 Provider/Tool/Sandbox/长期记忆/会话——
 // 这些都是底座本身的运行时状态，跟业务 Agent 管理分层展示（31 节：侧边栏重分组）。
@@ -433,7 +434,7 @@ async function deleteWhitelist(category, value) {
   } catch (e) { wl.value = { ...wl.value, error: e.message } }
 }
 
-// —— Agent 详情：Tab 切换（基本信息 / 生成 / 文件 / 会话 / 记忆）——
+// —— Agent 详情：Tab 切换（基本信息 / 生成 / 文件 / Skill / 会话 / 记忆）——
 const agentDetail = ref(null) // { name, agent, tab, loading, error, node }
 const fileView = ref(null) // { path, loading, error, content, saving, saved }
 // 生成：描述 → 大模型生成各文件内容，可编辑后保存生效
@@ -821,6 +822,7 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
                 <button :class="['tab', { on: agentDetail.tab === 'info' }]" @click="detailTab('info')">基本信息</button>
                 <button :class="['tab', { on: agentDetail.tab === 'generate' }]" @click="detailTab('generate')">生成</button>
                 <button :class="['tab', { on: agentDetail.tab === 'files' }]" @click="detailTab('files')">文件</button>
+                <button :class="['tab', { on: agentDetail.tab === 'skills' }]" @click="detailTab('skills')">Skill</button>
                 <button :class="['tab', { on: agentDetail.tab === 'chat' }]" @click="detailTab('chat')">会话</button>
                 <button :class="['tab', { on: agentDetail.tab === 'memory' }]" @click="detailTab('memory')">记忆</button>
               </div>
@@ -889,7 +891,14 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
                 </div>
               </div>
 
-              <!-- Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
+              <!-- Tab 4：Skill —— Agent 私有 Skill 的导入、启停与归档删除 -->
+              <AgentSkillsTab
+                v-else-if="agentDetail.tab === 'skills'"
+                :key="agentDetail.name"
+                :agent-name="agentDetail.name"
+              />
+
+              <!-- Tab 5：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
               <div v-else-if="agentDetail.tab === 'chat'">
                 <div class="sess-meta"><span class="mono">{{ chat.sessionId || '（会话尚未创建）' }}</span></div>
                 <p v-if="chat.loading" class="empty">加载中…</p>
@@ -912,7 +921,7 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
                 </div>
               </div>
 
-              <!-- Tab 5：记忆 —— 这个 Agent 自己的长期记忆（只读） -->
+              <!-- Tab 6：记忆 —— 这个 Agent 自己的长期记忆（只读） -->
               <div v-else-if="agentDetail.tab === 'memory'">
                 <p v-if="agentMemory.loading" class="empty">加载中…</p>
                 <p v-else-if="agentMemory.error" class="error">出错：{{ agentMemory.error }}</p>

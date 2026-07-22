@@ -48,6 +48,33 @@ class ProfileRegistryRuntimeTest {
   }
 
   @Test
+  @DisplayName("初始 Map 构造与运行时 register 使用同一身份校验")
+  void constructor_initialProfilesUseSameRegistrationRules() {
+    Profile ops = profile("Ops");
+
+    ProfileRegistry registry = new ProfileRegistry(Map.of("ignored-key", ops));
+
+    assertEquals(ops, registry.get("Ops").orElseThrow());
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new ProfileRegistry(Map.of("first", ops, "alias", profile("ops"))));
+  }
+
+  @Test
+  @DisplayName("大小写别名不能注册为两个 Agent，也不能用别名读写已有身份")
+  void caseAliasesShareOneIdentityButRequireExactNames() {
+    ProfileRegistry registry = new ProfileRegistry();
+    registry.register(profile("Ops"));
+
+    assertTrue(registry.existsIdentity("ops"));
+    assertFalse(registry.exists("ops"));
+    assertFalse(registry.get("ops").isPresent());
+    assertFalse(registry.remove("ops"));
+    assertThrows(IllegalArgumentException.class, () -> registry.register(profile("ops")));
+    assertEquals(List.of("Ops"), registry.all().stream().map(Profile::name).toList());
+  }
+
+  @Test
   @DisplayName("非法配置报错与启动加载路径完全一致（同一异常类型+同一消息）")
   void invalidConfig_runtimeAndStartup_sameExceptionSameMessage() {
     // 运行时（AgentLoader.deriveProfile）与启动扫描共用 ProfileLoader.fromMap 这同一段校验

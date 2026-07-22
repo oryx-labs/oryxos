@@ -90,11 +90,13 @@ Map<String, ChatModel> providerMap = Map.of(
 );
 ```
 
-### 原则四：一个目录 = 一个 Agent；`AGENT.md` 归 `ContextLoader`，不是 Tool
+### 原则四：一个目录 = 一个 Agent；Skill 只属于该 Agent
 
-**一个目录 = 一个 Agent**（借 Anthropic Agent Skills 的**目录形态**，但定义的是 Agent）：`.oryxos/agents/<name>/` 里 `AGENT.md` = frontmatter（这个 Agent 自己的 profile：name/description/provider/model/tools/notify_channels/schedules）+ 正文（任务指令）；外加可选 `skills/*.md`（子指令）、`scripts/`（脚本）、`REFERENCE.md`（参考）。`AgentLoader.deriveProfile(agentDir)` 把 frontmatter 派生成底座认识的 `Profile`——`.oryxos/profiles/` 取消，profile 就是 frontmatter。
+**一个目录 = 一个 Agent**：`.oryxos/agents/<name>/` 里 `AGENT.md` = frontmatter（这个 Agent 自己的 profile：name/description/provider/model/tools/notify_channels/schedules）+ 正文（任务指令）。`AgentLoader.deriveProfile(agentDir)` 把 frontmatter 派生成底座认识的 `Profile`——`.oryxos/profiles/` 取消，profile 就是 frontmatter。
 
-加载走**一个 Agent 内部的渐进式披露**：`AGENT.md` **正文**由 `ContextLoader`/`PromptBuilder` 注入 system prompt（跟 Bootstrap 文件 `AGENTS.md`/`SOUL.md`/`USER.md` 同一层，因为它就是这个 Agent）；目录里的**子指令 / 参考**用底座既有 `read_file` 按需读、**脚本**用 `shell` 按需跑——没有跨 Agent 的能力库、没有 `use_skill`、没有全局能力索引。**一个 Agent 目录永远不是一个可执行 Tool**，不进 `ToolRegistry`、不放在 `oryxos-tool` 模块里（详见 `docs/TechnicalSolution.md` §11）。
+Agent 可带多个**私有 Skill 包**，标准形态只认 `skills/<skill-name>/SKILL.md`；一个 Skill 不跨 Agent 共享。加载按 L1/L2/L3 渐进披露：每次顶层请求只把已启用 Skill 的 `name`、`description` 和入口路径作为 L1 注入；模型命中后才用既有 `read_file` 读取 L2 `SKILL.md` 正文；正文需要参考或脚本时，才继续用 `read_file`/`shell` 取 L3。`AGENT.md` 正文仍由 `ContextLoader`/`PromptBuilder` 全量注入 system prompt。
+
+没有跨 Agent 能力库、全局 Skill 索引或 `use_skill` Tool；Skill 目录也不进 `ToolRegistry`。`allowed-tools` 只是包的说明字段，绝不修改 `AGENT.md` 中显式配置的 Tool 权限，L2/L3 执行仍走既有 `ToolExecutor`、沙箱和审计。旧版 `skills/*.md` 保持 legacy/unmanaged，只能由 `AGENT.md` 显式指引读取，不自动迁移、不进入 L1，也不由 Skill 管理 API 禁用或删除（详见 `docs/TechnicalSolution.md` §11）。
 
 ### 原则五：审计表 Day One 写入
 
@@ -113,7 +115,7 @@ Map<String, ChatModel> providerMap = Map.of(
 
 ### 原则八：Tool 模块三合一
 
-内置 Tool、MCP Client 合并在一个 `oryxos-tool` 模块，**不拆成多个模块**。`AGENT.md`（及 Agent 目录里的子指令）加载归 `oryxos-core` 的 `ContextLoader`。
+内置 Tool、MCP Client 合并在一个 `oryxos-tool` 模块，**不拆成多个模块**。`AGENT.md` 正文、Skill catalog/snapshot 与 L1 渲染归 `oryxos-core` 的上下文层；L2/L3 只复用 `oryxos-tool` 已有工具。
 
 ---
 
@@ -123,7 +125,9 @@ OryxOS 启动后在当前目录创建 `.oryxos/` 工作区：
 
 ```
 .oryxos/
-├── agents/             # 每个子目录 = 一个 Agent（AGENT.md + 可选 skills/ scripts/ REFERENCE.md）
+├── agents/             # 每个子目录 = 一个 Agent（AGENT.md + 可选私有 skills/<name>/SKILL.md）
+├── archive/
+│   └── .skills/        # 删除后的 Skill 可恢复归档；不参与运行时发现
 ├── memory/
 │   └── MEMORY.md       # 长期记忆（Agent 通过 save_memory 写入，不得手动修改）
 ├── sessions/           # 会话数据（已迁入 SQLite，此目录备用）
@@ -145,7 +149,7 @@ OryxOS 启动后在当前目录创建 `.oryxos/` 工作区：
 
 ### AGENT.md（`.oryxos/agents/<name>/AGENT.md`）
 
-一个 Agent 目录里 `AGENT.md` = frontmatter（这个 Agent 自己的 profile）+ 正文（任务指令）。`AgentLoader.deriveProfile(agentDir)` 把 frontmatter 派生成底座认识的 `Profile`。子指令 / 脚本放同目录的 `skills/`、`scripts/`，由正文指引用 `read_file`/`shell` 按需取用（不在 frontmatter 里声明）。
+一个 Agent 目录里 `AGENT.md` = frontmatter（这个 Agent 自己的 profile）+ 正文（任务指令）。`AgentLoader.deriveProfile(agentDir)` 把 frontmatter 派生成底座认识的 `Profile`。标准 Skill 放在同目录的 `skills/<skill-name>/`；Agent 自身脚本可继续放 `scripts/`。
 
 ```markdown
 ---
@@ -180,6 +184,45 @@ settings:
 
 你是一个专业的运维助手。被触发时……（Agent 的任务指令正文，注入 system prompt）
 ```
+
+### Agent 私有 Skill（`.oryxos/agents/<agent>/skills/<skill>/SKILL.md`）
+
+新建 Agent/Skill 的标准脚手架如下；每个 Skill 目录以 `SKILL.md` 为入口，可选资源放在包内：
+
+```text
+.oryxos/agents/ops-agent/
+├── AGENT.md
+└── skills/
+    └── incident-triage/
+        ├── SKILL.md
+        ├── references/
+        │   └── severity.md
+        ├── scripts/
+        │   └── collect.sh
+        └── assets/
+```
+
+```markdown
+---
+name: incident-triage
+description: 分析故障告警并生成分级处置建议；收到生产告警或排障请求时使用。
+license: Apache-2.0
+compatibility: Requires read_file; optional scripts require shell.
+metadata:
+  author: ops-team
+allowed-tools: read_file shell
+---
+
+# Incident Triage
+
+先读取 `references/severity.md` 判断级别；只有确需采集本机信息时才运行 `scripts/collect.sh`。
+```
+
+`name` 必须与目录名一致，`description` 要同时说明“做什么、何时使用”。`allowed-tools` 不授予权限：上例只有在 `AGENT.md` 已显式配置 `read_file`/`shell` 且沙箱允许时才可读取或执行。
+
+运行时三态为 `enabled`、`disabled`、`invalid`。合法导入包默认启用；禁用写入包内 `.oryxos-disabled`，跨重启保留，并从下一次顶层请求起移出 L1，重新启用前会完整校验。删除不会物理擦除，而是把完整包原子归档到 `.oryxos/archive/.skills/`；归档不参与发现，当前版本不提供恢复 API。禁用/删除不改写旧 Session、Tool 审计或 LLM 审计，已进入历史的内容不会被追溯“遗忘”。
+
+导入是管理员的显式信任动作。ZIP/路径/资源限制只保证包不会破坏文件系统，不证明指令、references 或 scripts 善意；必须像审查代码一样审查来源。禁用保证的是退出 OryxOS 的 L1 与正常渐进加载链路，不是操作系统级文件 ACL。
 
 ### SQLite 核心表
 
@@ -235,13 +278,13 @@ settings:
 用户消息
   → 追加到 Session 对话历史
   → PromptBuilder 组装 Prompt：
-      [1] system prompt（AGENT.md 正文 + Bootstrap；子指令/脚本经 read_file/shell 按需取）← ContextLoader
+      [1] system prompt（AGENT.md 正文 + Bootstrap + 已启用 Skill 的 L1 元数据快照）← ContextLoader
       [2] 长期记忆（MEMORY.md 全文，超 4000 字自动截断）         ← MemoryService
       [3] 对话历史（最近 max_history_turns 轮）                  ← SessionManager
       [4] 可用 Tool 列表（Function Calling 格式）                ← ToolRegistry
   → ProviderService 调 LLM（写 llm_calls 表）
   → [无 Tool 调用] → 返回最终响应
-  → [有 Tool 调用] → ToolExecutor 执行 Tool
+  → [有 Tool 调用] → ToolExecutor 执行 Tool（命中 Skill 后也只通过 read_file/shell 读取 L2/L3）
       → SandboxChecker 白名单校验
       → 执行（内置 Tool 在进程内 / MCP Tool 通过 JSON-RPC 转发）
       → 写 tool_invocations 表
@@ -284,7 +327,7 @@ interface OryxTool {
 
 | 方式 | 门槛 | 推荐 | 实现 |
 |------|------|------|------|
-| 零代码 | 最低 | ⭐ 主推 | 写 SKILL.md + 复用社区 MCP server |
+| 零代码 | 最低 | ⭐ 主推 | 写 Agent 私有 SKILL.md，复用已显式配置的内置 Tool / 社区 MCP server |
 | 轻代码 | 中 | ⭐⭐ | 任意语言写 MCP server，配置在 `mcp_servers.yaml` |
 | 重代码 | 高 | ⭐⭐⭐ | Java `@Tool` 注解 Spring Bean，进程内直接调用 |
 
@@ -310,6 +353,18 @@ interface OryxTool {
 | `GET` | `/info` | 运行信息 + Provider 状态 |
 
 **核心阶段不做**：认证（假设内网）、SSE 流式、WebSocket、限流、RBAC。
+
+Agent 私有 Skill 的管理资源位于 `/api/v1/agents/{agentName}/skills`：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/agents/{agentName}/skills` | 列出 enabled/disabled/invalid Skill |
+| `POST` | `/agents/{agentName}/skills` | 以 multipart `file` 上传单 Skill ZIP；合法包默认启用 |
+| `GET` | `/agents/{agentName}/skills/{skillName}` | 查询相对入口、资源与校验状态，不返回正文或本机绝对路径 |
+| `PUT` | `/agents/{agentName}/skills/{skillName}` | 用 `{\"enabled\": true|false}` 启用或禁用 |
+| `DELETE` | `/agents/{agentName}/skills/{skillName}` | 从活动区删除并留存可追溯归档 |
+
+管理变更从下一次顶层请求生效；一次已开始的 ReAct 使用固定 Skill 快照。进程内管理操作会等待该 Agent 当前请求释放读租约，避免一轮 ReAct 中途改变 L1/L2/L3。
 
 ---
 
@@ -339,7 +394,7 @@ oryxos session list
 
 ## 配置加载规则
 
-敏感配置（API key、MCP server 凭证）通过环境变量注入，**不得**明文写在 Profile YAML 里：
+敏感配置（API key、MCP server 凭证）通过环境变量注入，**不得**明文写在 `AGENT.md` frontmatter 里：
 
 ```yaml
 provider:
@@ -380,7 +435,10 @@ provider:
 |------|------|------|
 | Spring AI 自动执行 tool | Tool 被调两次，结果重复 | 禁用 `ChatClient` 的自动 tool 执行，由 `ToolExecutor` 接管 |
 | Provider 靠类型扫描区分 | 多 Provider 时路由错乱 | 改用显式 `Map<String, ChatModel>` 映射 |
-| `AGENT.md` / 子指令放进 Tool 模块 | Agent 目录被当 Tool 注册，执行时报错 | 归 `ContextLoader`：正文注入 system prompt，子指令/脚本经 read_file/shell 按需取 |
+| `AGENT.md` / Skill 放进 Tool 模块 | Agent/Skill 目录被当 Tool 注册，形成执行旁路 | 归 core 上下文层：正文与 L1 注入，L2/L3 只经已有 read_file/shell 按需取 |
+| 把 `skills/*.md` 当成受管 Skill | legacy 文件突然进入 L1 或被管理 API 改写 | 只认 `skills/<name>/SKILL.md`；平铺文件保持 unmanaged |
+| 相信 `allowed-tools` 会授权 | Skill 获得超出 Agent Profile 的能力 | 该字段只展示；权限只来自 `AGENT.md`，执行仍过沙箱 |
+| 把结构校验当内容审查 | 恶意指令或脚本借用 Agent 已有 Tool | 导入视为信任动作，先人工审查 Skill 全包 |
 | 审计表只写日志不落库 | 扩展阶段审计功能需要反解析日志 | `tool_invocations` + `llm_calls` 核心阶段就写入 SQLite |
 | 用 `hibernate.ddl-auto=update` 迁移表结构 | SQLite ALTER TABLE 报错 | 手动维护建表脚本或引入 Flyway |
 | 在 ReAct Loop 里用异步 | 复杂度激增，Virtual Thread 优势消失 | 保持同步阻塞，Virtual Thread 自动处理 IO 等待 |
@@ -393,7 +451,7 @@ provider:
 
 - **底座优先于 Agent**：最重要的交付不是某个强大的 Agent，而是让任意 Agent 可靠运行的环境
 - **自实现核心，复用管道**：ReAct 循环手写；LLM 协议适配委托给 Spring AI Alibaba
-- **一个目录 = 一个 Agent**：一个业务 Agent 由一个目录定义——`AGENT.md`（frontmatter 配置：谁/何时/怎么跑 + 正文指令），可选 `skills/` 子指令、`scripts/` 脚本；子资源经底座 `read_file`/`shell` 按需取用，不需要写 Java 代码
+- **一个目录 = 一个 Agent**：一个业务 Agent 由一个目录定义——`AGENT.md`（frontmatter 配置：谁/何时/怎么跑 + 正文指令），可选 Agent 私有 `skills/<name>/SKILL.md`；Skill 以 L1/L2/L3 按需加载，不需要写 Java 代码
 - **对接开放标准**：工具用 MCP，Agent 间协作用 A2A，Agent 目录借 Anthropic Agent Skills 的形态（目录 + 渐进式披露）
 - **无状态实例，状态外置**：这是未来走向分布式架构而不需要大改设计的前提
 - **安全是地基，不是补丁**：工具来源管控、最小权限、强制沙箱白名单、凭证走环境变量、完整审计记录从第一天就写入 SQLite

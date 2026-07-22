@@ -6,6 +6,7 @@ import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.profile.ProfileValidationException;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -48,7 +49,7 @@ public class AgentLoader {
       return registry;
     }
     try (Stream<Path> dirs = Files.list(agentsDir)) {
-      dirs.filter(Files::isDirectory)
+      dirs.filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
           .sorted()
           .forEach(
               dir -> {
@@ -72,11 +73,35 @@ public class AgentLoader {
    * Profile}。缺 name/provider 抛 {@link ProfileValidationException}（与启动同一异常同一消息）。
    */
   Profile deriveProfile(Path agentDir) throws IOException {
+    AgentName directoryName;
+    try {
+      directoryName = AgentName.fromDirectory(agentDir);
+    } catch (IllegalArgumentException e) {
+      throw new ProfileValidationException(
+          "非法 Agent 目录名: " + sanitize(directoryBasename(agentDir)));
+    }
+    try {
+      if (Files.isSymbolicLink(agentDir)
+          || !Files.isDirectory(agentDir, LinkOption.NOFOLLOW_LINKS)) {
+        throw new IllegalArgumentException("Agent 目录必须是真实目录");
+      }
+      directoryName.requireFilesystemDirectoryName(agentDir);
+    } catch (IllegalArgumentException error) {
+      throw new ProfileValidationException("非法 Agent 目录身份: " + directoryName.value());
+    }
     Path agentMd = agentDir.resolve(AGENT_FILE);
     if (!Files.isRegularFile(agentMd)) {
-      throw new ProfileValidationException("Agent 目录缺少 AGENT.md: " + agentDir.getFileName());
+      throw new ProfileValidationException("Agent 目录缺少 AGENT.md: " + directoryName);
     }
-    return parse(Files.readString(agentMd), String.valueOf(agentDir.getFileName()));
+    return parse(Files.readString(agentMd), directoryName.value());
+  }
+
+  private static String directoryBasename(Path directory) {
+    if (directory == null) {
+      return "";
+    }
+    Path basename = directory.getFileName();
+    return basename == null ? "" : basename.toString();
   }
 
   /**
@@ -84,8 +109,19 @@ public class AgentLoader {
    * name/provider 抛 {@link ProfileValidationException}（与目录派生同一套校验）。
    */
   Profile parse(String agentMarkdown, String source) {
+    AgentName expectedName;
+    try {
+      expectedName = AgentName.parse(source);
+    } catch (IllegalArgumentException e) {
+      throw new ProfileValidationException("非法 Agent 名: " + sanitize(source));
+    }
     AgentMarkdown.Parsed parsed = AgentMarkdown.split(agentMarkdown);
     Profile profile = validator.fromMap(parsed.frontmatter(), source);
+    try {
+      expectedName.requireProfileName(profile.name());
+    } catch (IllegalArgumentException e) {
+      throw new ProfileValidationException(e.getMessage());
+    }
     warnUnknownTools(profile, source);
     return profile;
   }

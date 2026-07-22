@@ -7,6 +7,7 @@ import io.oryxos.core.profile.Profile;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.session.Message;
 import io.oryxos.core.session.Session;
+import io.oryxos.core.skill.SkillSnapshot;
 import java.time.Clock;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -52,10 +53,14 @@ public class PromptBuilder {
   }
 
   public ProviderRequest build(Session session, Profile profile) {
-    // ①+② systemPrompt：不随对话变的部分——ContextLoader 供给 + 日期时间行 + 长期记忆
+    return build(session, profile, SkillSnapshot.empty(profile.name()));
+  }
+
+  /** 使用顶层请求冻结的同一份 Skill L1 快照构建本轮 Prompt。 */
+  public ProviderRequest build(Session session, Profile profile, SkillSnapshot skills) {
+    // ①+② systemPrompt：ContextLoader + 日期时间 + 长期记忆；Skill 使用顶层请求冻结的快照。
     StringBuilder system = new StringBuilder();
-    // 每次重新经 ContextLoader 读文件（无缓存铁律在 ContextLoader 内保证）
-    system.append(contextLoader.load(profile));
+    system.append(contextLoader.load(profile, skills));
     // 模型自己不知道今天几号——定时场景里的"今天"全靠这一行
     system.append("当前日期时间：").append(DATE_TIME.format(ZonedDateTime.now(clock))).append('\n');
     // 长期记忆：经门面注入（核心区全量 + 归档区截断后）；未装配 Memory 时该段留空

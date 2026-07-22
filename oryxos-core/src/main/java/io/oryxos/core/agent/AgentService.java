@@ -6,6 +6,9 @@ import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
+import io.oryxos.core.skill.AgentSkillCoordinator;
+import io.oryxos.core.skill.SkillLease;
+import io.oryxos.core.skill.SkillSnapshot;
 
 /**
  * 一次处理的编排者：三种触发源（CLI / Web / 定时）最终都调同一个 {@link #process}。
@@ -24,33 +27,87 @@ public class AgentService {
   private final ReActLoop reActLoop;
   private final SessionManager sessionManager;
   private final MemoryService memoryService;
+  private final AgentSkillCoordinator skillCoordinator;
+
+  public AgentService(
+      ProfileRegistry profileRegistry, ReActLoop reActLoop, SessionManager sessionManager) {
+    this(profileRegistry, reActLoop, sessionManager, null, null);
+  }
 
   public AgentService(
       ProfileRegistry profileRegistry,
       ReActLoop reActLoop,
       SessionManager sessionManager,
       MemoryService memoryService) {
+    this(profileRegistry, reActLoop, sessionManager, memoryService, null);
+  }
+
+  public AgentService(
+      ProfileRegistry profileRegistry,
+      ReActLoop reActLoop,
+      SessionManager sessionManager,
+      AgentSkillCoordinator skillCoordinator) {
+    this(profileRegistry, reActLoop, sessionManager, null, skillCoordinator);
+  }
+
+  /** 生产运行时构造器：同时保留触发记忆，并经 Skill 协调器冻结快照、持有读租约。 */
+  public AgentService(
+      ProfileRegistry profileRegistry,
+      ReActLoop reActLoop,
+      SessionManager sessionManager,
+      MemoryService memoryService,
+      AgentSkillCoordinator skillCoordinator) {
     this.profileRegistry = profileRegistry;
     this.reActLoop = reActLoop;
     this.sessionManager = sessionManager;
     this.memoryService = memoryService;
+    this.skillCoordinator = skillCoordinator;
   }
 
   public String process(Session session, String userMessage) {
-    Profile profile =
-        profileRegistry
-            .get(session.profileName())
-            .orElseThrow(
-                () ->
-                    new IllegalStateException("Session 引用的 Profile 不存在: " + session.profileName()));
-    ProfileContext.set(profile); // 工具执行时靠它知道"当前是哪个 Agent"
+    if (skillCoordinator == null) {
+      return processCompatibility(session, userMessage);
+    }
     try {
-      String reply = reActLoop.run(session, userMessage, profile);
-      sessionManager.save(session); // 把累积完的历史持久化（仅正常路径）
-      recordTrigger(profile.name(), userMessage, reply); // 每次触发留一条归档记忆（运行足迹）
+      try (SkillLease lease = skillCoordinator.openRequest(session.profileName())) {
+        Profile profile = resolveProfile(session);
+        ProfileContext.set(profile); // 工具执行时靠它知道"当前是哪个 Agent"
+        String reply = reActLoop.run(session, userMessage, profile, lease.snapshot());
+        sessionManager.save(session); // 读租约覆盖正常路径的会话持久化
+        recordTriggerIfConfigured(profile.name(), userMessage, reply);
+        return reply;
+      }
+    } finally {
+      // 外层 finally 同时覆盖 openRequest、Profile 查询、循环和 save 的全部异常路径。
+      ProfileContext.clear();
+    }
+  }
+
+  /** 仅供旧调用/旧测试兼容；生产装配必须使用带 coordinator 的构造器。 */
+  private String processCompatibility(Session session, String userMessage) {
+    SkillSnapshot skills = SkillSnapshot.empty(session.profileName());
+    try {
+      Profile profile = resolveProfile(session);
+      ProfileContext.set(profile);
+      String reply = reActLoop.run(session, userMessage, profile, skills);
+      sessionManager.save(session);
+      recordTriggerIfConfigured(profile.name(), userMessage, reply);
       return reply;
     } finally {
-      ProfileContext.clear(); // 虚拟线程每请求独立，用完必须清
+      ProfileContext.clear();
+    }
+  }
+
+  private Profile resolveProfile(Session session) {
+    return profileRegistry
+        .get(session.profileName())
+        .orElseThrow(
+            () -> new IllegalStateException("Session 引用的 Profile 不存在: " + session.profileName()));
+  }
+
+  private void recordTriggerIfConfigured(String agentName, String userMessage, String reply) {
+    if (memoryService != null) {
+      recordTrigger(agentName, userMessage, reply);
     }
   }
 

@@ -3,12 +3,16 @@ package io.oryxos.tool.sandbox;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * 课件《第24节》验收 harness：WhitelistSandboxTest——安全模块测的重点不是"放行对不对"，而是"绕得过绕不过"。 三类校验各"允许 +
@@ -51,6 +55,16 @@ class WhitelistSandboxTest {
     }
 
     @Test
+    @DisplayName("空路径_拒绝并给出沙箱异常")
+    void nullPathIsRejected(@TempDir Path allowed) {
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, null)));
+    }
+
+    @Test
     @DisplayName("相对路径穿越_爬出白名单目录_被拦")
     void relativePathTraversalIsBlocked(@TempDir Path allowed) {
       // 关键回归：normalize 前形似落在白名单内，normalize 后爬到 /etc/passwd——必须在标准化后判定越界
@@ -61,13 +75,62 @@ class WhitelistSandboxTest {
           SandboxViolationException.class,
           () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, traversal)));
     }
+
+    @Test
+    @DisplayName("白名单内文件链接指向外部_读写均拒绝")
+    void fileSymlinkEscapingRootIsBlocked(@TempDir Path temp) throws IOException {
+      Path allowed = Files.createDirectory(temp.resolve("allowed"));
+      Path outside = Files.writeString(temp.resolve("secret.txt"), "secret");
+      Path link = Files.createSymbolicLink(allowed.resolve("linked.txt"), outside);
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, link.toString())));
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_WRITE, link.toString())));
+    }
+
+    @Test
+    @DisplayName("白名单内目录链接指向外部_现有文件与新写入路径均拒绝")
+    void directorySymlinkEscapingRootIsBlocked(@TempDir Path temp) throws IOException {
+      Path allowed = Files.createDirectory(temp.resolve("allowed"));
+      Path outside = Files.createDirectory(temp.resolve("outside"));
+      Files.writeString(outside.resolve("secret.txt"), "secret");
+      Path link = Files.createSymbolicLink(allowed.resolve("linked-dir"), outside);
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+
+      assertThrows(
+          SandboxViolationException.class,
+          () ->
+              sb.enforce(
+                  new SandboxAction(ActionType.FILE_READ, link.resolve("secret.txt").toString())));
+      assertThrows(
+          SandboxViolationException.class,
+          () ->
+              sb.enforce(
+                  new SandboxAction(ActionType.FILE_WRITE, link.resolve("new.txt").toString())));
+    }
+
+    @Test
+    @DisplayName("白名单内链接仍留在根目录_按真实落点放行")
+    void symlinkStayingInsideRootIsAllowed(@TempDir Path allowed) throws IOException {
+      Path target = Files.writeString(allowed.resolve("target.txt"), "safe");
+      Path link = Files.createSymbolicLink(allowed.resolve("linked.txt"), target.getFileName());
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+
+      assertDoesNotThrow(
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, link.toString())));
+    }
   }
 
   @Nested
   @DisplayName("Shell 命令白名单")
   class ShellCommandWhitelist {
 
-    private final WhitelistSandbox sb = sandbox(List.of(), List.of("ls", "cat"), List.of());
+    private final WhitelistSandbox sb =
+        sandbox(List.of(), List.of("ls", "cat", "echo", "bash", "env"), List.of());
 
     @Test
     @DisplayName("白名单内命令_首token放行")
@@ -81,6 +144,48 @@ class WhitelistSandboxTest {
       assertThrows(
           SandboxViolationException.class,
           () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "rm -rf /")));
+    }
+
+    @ParameterizedTest(name = "拒绝: {0}")
+    @ValueSource(
+        strings = {
+          "echo ok; touch /tmp/oryxos-pwned",
+          "echo ok && touch /tmp/oryxos-pwned",
+          "echo ok | cat",
+          "echo ok > /tmp/oryxos-pwned",
+          "cat < /etc/passwd",
+          "echo $(touch /tmp/oryxos-pwned)",
+          "echo `touch /tmp/oryxos-pwned`",
+          "echo $HOME",
+          "echo ok\ntouch /tmp/oryxos-pwned",
+          "bash -c 'touch /tmp/oryxos-pwned'",
+          "bash -lc 'touch /tmp/oryxos-pwned'",
+          "env bash -c 'touch /tmp/oryxos-pwned'",
+          "env rm -rf /tmp/oryxos-pwned"
+        })
+    @DisplayName("复合语法_命令替换_重定向_换行与 shell-c 均拒绝")
+    void compoundShellSyntaxIsRejected(String command) {
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, command)));
+    }
+
+    @Test
+    @DisplayName("带普通参数与引用的单命令仍放行")
+    void simpleCommandWithQuotedArgumentIsAllowed() {
+      assertDoesNotThrow(
+          () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "echo 'hello world'")));
+    }
+
+    @Test
+    @DisplayName("空命令与未闭合引用拒绝并给出沙箱异常")
+    void malformedSimpleCommandIsRejected() {
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "   ")));
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "echo 'oops")));
     }
   }
 
