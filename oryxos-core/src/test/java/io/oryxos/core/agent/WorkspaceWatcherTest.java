@@ -41,7 +41,9 @@ class WorkspaceWatcherTest {
             mock(io.oryxos.core.provider.ProviderService.class),
             "deepseek",
             "deepseek",
-            "deepseek-chat");
+            "deepseek-chat",
+            java.util.Map.of(),
+            mock(io.oryxos.core.notify.NotifyChannelRegistry.class));
     watcher = new WorkspaceWatcher(lifecycle, oryxosRoot, Runnable::run);
   }
 

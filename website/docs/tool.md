@@ -30,19 +30,33 @@ When `retryable` is `true`, `ToolExecutor` appends the error to the conversation
 
 ## Built-in tools
 
-Nine tools ship with OryxOS core. All are registered automatically at startup. Which ones an agent can use depends on its Profile's `tools` list.
+About two dozen tools ship with OryxOS core — a set of **universal primitives** chosen to cover the vast majority of agent needs without domain lock-in. All are registered automatically at startup. Which ones an agent can use depends on its Profile's `tools` list.
 
 | Tool | Class | Description | Sandbox check |
 | --- | --- | --- | --- |
 | `read_file` | `FileTools` | Read a file from disk | Path whitelist |
 | `write_file` | `FileTools` | Write or overwrite a file | Path whitelist |
+| `edit_file` | `FileTools` | Replace a unique snippet in a file | Path whitelist |
+| `append_file` | `FileTools` | Append content to a file | Path whitelist |
 | `list_dir` | `FileTools` | List directory contents | Path whitelist |
+| `glob` | `FileTools` | Find files by glob pattern | Path whitelist |
+| `grep` | `FileTools` | Regex-search file contents | Path whitelist |
+| `make_dir` | `FileTools` | Create a directory | Path whitelist |
+| `move_file` | `FileTools` | Move / rename a file | Path whitelist (source + target) |
+| `copy_file` | `FileTools` | Copy a file | Path whitelist (source + target) |
+| `delete_file` | `FileTools` | Delete a file (never a directory) | Path whitelist |
 | `shell` | `ShellTools` | Execute a shell command | Command first-token whitelist + timeout |
-| `http_get` | `HttpTools` | HTTP GET request | Domain wildcard whitelist |
-| `http_post` | `HttpTools` | HTTP POST request with body | Domain wildcard whitelist |
+| `http_get` / `http_post` | `HttpTools` | HTTP GET / POST | Domain wildcard whitelist |
+| `http_request` | `HttpTools` | HTTP with any method (GET/POST/PUT/PATCH/DELETE) + headers | Domain wildcard whitelist |
+| `fetch_webpage` | `HttpTools` | Fetch a URL and extract readable text (strip HTML) | Domain wildcard whitelist |
+| `download_file` | `HttpTools` | Download a URL to a local file | Domain + path whitelist |
+| `web_search` | `WebSearchTools` | Search the web | Domain wildcard whitelist |
+| `current_time` | `UtilTools` | Current date/time in a timezone | None (pure) |
+| `json_extract` | `UtilTools` | Extract a value from JSON text by path | None (pure) |
 | `save_memory` | `MemoryTools` | Append text to `MEMORY.md` | None (always allowed) |
 | `recall_memory` | `MemoryTools` | Keyword search in `MEMORY.md` | None (always allowed) |
 | `notify` | `NotifyTools` | Push a message to a registered notify channel | Resolves channel by name |
+| `ask_user` | `InteractionTools` | Ask the user a question (interactive channels) | None |
 
 `ShellTools` enforces a configurable timeout (default 30 seconds) in addition to the command whitelist. A process that exceeds the timeout is killed and the tool returns a non-retryable error.
 
@@ -92,6 +106,27 @@ servers:
 ```
 
 OryxOS starts each MCP server as a subprocess at startup and communicates over JSON-RPC via stdio. Tools exposed by the server are registered in `ToolRegistry` under their declared names.
+
+> **Config schema.** `McpConfigLoader` parses a top-level `servers:` list where each entry has four fields: `name`, `transport` (only `stdio` in the core phase — `http`/`sse` entries are skipped at startup with a WARN), `command` (a single string, split on whitespace into executable + args — there is no separate `args:` field), and `env` (a map). `${ENV_VAR}` placeholders are resolved **only inside `env:` values**, not inside `command:` — so secrets belong in `env:`, never inline in `command:`.
+
+## Recommended MCP servers
+
+OryxOS keeps its built-in tools small on purpose. Built-in tools are **universal primitives** — file, shell, HTTP, memory, notify. Everything domain-specific reaches the agent through **MCP servers**: GitHub, GitLab, Slack, Google Drive, Notion, browser automation, web search, error tracking — and, deliberately, **SQL databases (PostgreSQL, SQLite, …) too**. OryxOS ships no built-in SQL tool; a database is a domain integration, so you connect its MCP server rather than baking a query tool into the core. This is the intended zero/low-code extension path: to add a capability you name a package, not write Java.
+
+To make this concrete, OryxOS ships a curated, ready-to-copy catalog at **`config/mcp_servers.yaml.example`**. Copy it to `.oryxos/mcp_servers.yaml`, uncomment only the servers you want (everything is commented out by default so a fresh copy connects to nothing), set the environment variables each server needs, and restart. The catalog matches the loader's exact schema and lists real, well-known community servers across these categories:
+
+| Category | Servers in the catalog |
+| --- | --- |
+| Code hosting | GitHub, GitLab |
+| Databases (SQL) | PostgreSQL, SQLite |
+| Messaging | Slack |
+| Documents / storage | Google Drive, Notion |
+| Filesystem | Filesystem (richer ops than the built-ins) |
+| Browser automation | Playwright (recommended), Puppeteer |
+| Web search | Brave Search |
+| Observability | Sentry |
+
+Each entry carries comments on prerequisites (Node.js/`npx` or `uv`/`uvx` on the host), credential handling, and — where relevant — whether the vendor now ships an official replacement or a remote (HTTP) server that the core phase's stdio-only transport cannot use yet. Where an exact package name may have changed, the catalog says so in a comment rather than guessing.
 
 ## Sandbox
 

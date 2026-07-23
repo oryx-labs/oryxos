@@ -93,7 +93,11 @@ class MockProviderFlowTest {
             providerRegistry, def -> new MockChatModel(), new ToolSchemaAdapter(), llmAuditor);
 
     PromptBuilder promptBuilder =
-        new PromptBuilder(new ContextLoader(root), tools, memory, Clock.systemDefaultZone());
+        new PromptBuilder(
+            new ContextLoader(root, new io.oryxos.core.skill.SkillRegistry()),
+            tools,
+            memory,
+            Clock.systemDefaultZone());
     ToolExecutor toolExecutor = new ToolExecutor(tools, toolAuditor);
     ReActLoop loop = new ReActLoop(promptBuilder, provider, toolExecutor);
 
@@ -155,7 +159,8 @@ class MockProviderFlowTest {
                     agent,
                     sessionManager,
                     profileRegistry,
-                    memory),
+                    memory,
+                    mock(io.oryxos.core.agent.AgentExecutionService.class)),
                 new ToolApiController(tools),
                 new SessionApiController(agent, sessionManager))
             .setControllerAdvice(new GlobalExceptionHandler())

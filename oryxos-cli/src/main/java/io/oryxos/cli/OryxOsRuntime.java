@@ -3,6 +3,8 @@ package io.oryxos.cli;
 import io.oryxos.channel.cli.CliChannel;
 import io.oryxos.cli.config.SkillProperties;
 import io.oryxos.core.OryxTool;
+import io.oryxos.core.agent.AgentExecutionService;
+import io.oryxos.core.agent.AgentExecutionStore;
 import io.oryxos.core.agent.AgentLifecycleService;
 import io.oryxos.core.agent.AgentLoader;
 import io.oryxos.core.agent.AgentScheduler;
@@ -28,13 +30,15 @@ import io.oryxos.core.session.SessionManager;
 import io.oryxos.core.skill.AgentSkillCatalog;
 import io.oryxos.core.skill.AgentSkillCoordinator;
 import io.oryxos.core.skill.AgentSkillLockRegistry;
-import io.oryxos.core.skill.GlobalSkillManagementService;
-import io.oryxos.core.skill.SkillAssociationStore;
 import io.oryxos.core.skill.SkillContentValidator;
 import io.oryxos.core.skill.SkillLimits;
+import io.oryxos.core.skill.SkillLoader;
 import io.oryxos.core.skill.SkillManagementService;
 import io.oryxos.core.skill.SkillMetadataReader;
 import io.oryxos.core.skill.SkillPackageImporter;
+import io.oryxos.core.skill.SkillRegistry;
+import io.oryxos.core.skill.SkillService;
+import io.oryxos.core.skill.SkillStore;
 import io.oryxos.memory.LongTermMemoryStore;
 import io.oryxos.memory.MarkdownMemoryStore;
 import io.oryxos.memory.Mem0MemoryStore;
@@ -45,6 +49,8 @@ import io.oryxos.provider.ProviderChatModelFactory;
 import io.oryxos.provider.ProvidersProperties;
 import io.oryxos.provider.SpringAiProviderServiceImpl;
 import io.oryxos.provider.ToolSchemaAdapter;
+import io.oryxos.storage.AgentExecutionRepository;
+import io.oryxos.storage.JpaAgentExecutionStore;
 import io.oryxos.storage.JpaLlmCallAuditor;
 import io.oryxos.storage.JpaNotifyChannelRegistry;
 import io.oryxos.storage.JpaProviderRegistry;
@@ -61,16 +67,13 @@ import io.oryxos.storage.ScheduledTaskRepository;
 import io.oryxos.storage.SessionRepository;
 import io.oryxos.storage.TaskExecutionRepository;
 import io.oryxos.storage.ToolInvocationRepository;
-import io.oryxos.storage.WebSessionRepository;
-import io.oryxos.storage.WebSessionService;
-import io.oryxos.storage.WebUserRepository;
-import io.oryxos.storage.WebUserService;
 import io.oryxos.tool.ToolRegistry;
 import io.oryxos.tool.builtin.FileTools;
 import io.oryxos.tool.builtin.HttpTools;
 import io.oryxos.tool.builtin.InteractionTools;
 import io.oryxos.tool.builtin.NotifyTools;
 import io.oryxos.tool.builtin.ShellTools;
+import io.oryxos.tool.builtin.UtilTools;
 import io.oryxos.tool.builtin.WebSearchTools;
 import io.oryxos.tool.interaction.ConsoleUserInteraction;
 import io.oryxos.tool.mcp.McpClientService;
@@ -87,8 +90,11 @@ import io.oryxos.tool.sandbox.ShellSandboxProperties;
 import io.oryxos.tool.sandbox.WhitelistSandbox;
 import io.oryxos.tool.web.DuckDuckGoSearchProvider;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
@@ -97,7 +103,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -215,7 +220,10 @@ public class OryxOsRuntime {
       ProviderService providerService,
       ProvidersProperties providers,
       AgentSkillCoordinator skillCoordinator,
-      SkillAssociationStore skillAssociations,
+      Map<String, OryxTool> tools,
+      NotifyChannelRegistry notifyChannelRegistry,
+      io.oryxos.core.mcp.McpServerAdmin mcpServerAdmin,
+      SkillRegistry skillRegistry,
       @Value("${oryxos.author.provider:}") String authorProvider,
       @Value("${oryxos.author.model:}") String authorModel) {
     String defaultProvider =
@@ -223,6 +231,8 @@ public class OryxOsRuntime {
     // 生成用 provider 缺省取 providers 第一个（宪法 III 显式映射的 key）
     String genProvider =
         authorProvider == null || authorProvider.isBlank() ? defaultProvider : authorProvider;
+    // 30 节：把真实工具清单 + notify 渠道注入作者提示词，让"一句话生成"只用真实能力、可直接运行
+    // 31 节：再把已连接 MCP server 目录也喂给它，生成的 AGENT.md 才可能正确带上 mcp_servers
     return new AgentLifecycleService(
         agentLoader,
         profileRegistry,
@@ -232,8 +242,11 @@ public class OryxOsRuntime {
         defaultProvider,
         genProvider,
         authorModel,
-        skillCoordinator,
-        skillAssociations);
+        tools,
+        notifyChannelRegistry,
+        mcpServerAdmin,
+        skillRegistry,
+        skillCoordinator);
   }
 
   /** 30 节 WorkspaceWatcher 专用守护线程执行器（跟 25 节调度线程池同类，不手工 new Thread）。 */
@@ -257,8 +270,34 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  ContextLoader contextLoader() {
-    return new ContextLoader(oryxosRoot());
+  ContextLoader contextLoader(SkillRegistry skillRegistry) {
+    // 32 节：Agent 引用的全局 Skill 由 ContextLoader 按名从注册表解析并注入 system prompt（约束产出）
+    return new ContextLoader(oryxosRoot(), skillRegistry);
+  }
+
+  @Bean
+  SkillStore skillStore() {
+    return new SkillStore(oryxosRoot());
+  }
+
+  @Bean
+  SkillLoader skillLoader() {
+    return new SkillLoader(oryxosRoot().resolve("skills"));
+  }
+
+  /** 32 节：启动全量扫 .oryxos/skills/ 建全局 Skill 索引（CRUD 与它共用同一份注册表）。 */
+  @Bean
+  SkillRegistry skillRegistry(SkillLoader skillLoader) {
+    return skillLoader.loadAll();
+  }
+
+  /** 32 节：全局 Skill 库 CRUD；启动播种内置 Skill（report-format，幂等——用户改过不覆盖）。 */
+  @Bean
+  SkillService skillService(
+      SkillStore skillStore, SkillRegistry skillRegistry, SkillLoader skillLoader) {
+    SkillService service = new SkillService(skillStore, skillRegistry, skillLoader);
+    service.seedBuiltins();
+    return service;
   }
 
   /** 31 节：Sandbox 白名单持久化（SQLite）。运行时增删写穿落库、重启保留。 */
@@ -286,15 +325,9 @@ public class OryxOsRuntime {
   AgentSkillCatalog agentSkillCatalog(
       SkillMetadataReader metadataReader,
       SkillContentValidator contentValidator,
-      SkillLimits limits,
-      SkillAssociationStore associations) {
+      SkillLimits limits) {
     return new AgentSkillCatalog(
-        oryxosRoot().resolve("agents"), metadataReader, contentValidator, limits, associations);
-  }
-
-  @Bean
-  SkillAssociationStore skillAssociationStore() {
-    return new SkillAssociationStore(oryxosRoot());
+        oryxosRoot().resolve("agents"), metadataReader, contentValidator, limits);
   }
 
   @Bean
@@ -332,28 +365,6 @@ public class OryxOsRuntime {
             oryxosRoot().resolve("agents"), profileRegistry, catalog, importer, lockRegistry);
     service.cleanupArchiveOrphans(limits.stagingTtl());
     return service;
-  }
-
-  @Bean
-  GlobalSkillManagementService globalSkillManagementService(
-      ProfileRegistry profileRegistry,
-      AgentSkillCatalog catalog,
-      SkillPackageImporter importer,
-      SkillMetadataReader metadataReader,
-      SkillContentValidator contentValidator,
-      SkillLimits limits,
-      SkillAssociationStore associations,
-      AgentSkillLockRegistry lockRegistry) {
-    return new GlobalSkillManagementService(
-        oryxosRoot(),
-        profileRegistry,
-        catalog,
-        importer,
-        metadataReader,
-        contentValidator,
-        limits,
-        associations,
-        lockRegistry);
   }
 
   @Bean
@@ -410,17 +421,32 @@ public class OryxOsRuntime {
     return new MemoryServiceImpl(store);
   }
 
+  /** 31 节：MCP server 配置读写（读写 {@code .oryxos/mcp_servers.yaml}），管理台 CRUD 与启动扫描共用同一份。 */
+  @Bean
+  McpConfigLoader mcpConfigLoader() {
+    return new McpConfigLoader(oryxosRoot().resolve("mcp_servers.yaml"));
+  }
+
+  /** 31 节：长驻 bean（而非 toolRegistry() 里的一次性局部变量）——管理台增/删一个 server 靠同一个实例的连接状态。 */
+  @Bean
+  McpClientService mcpClientService(McpConfigLoader mcpConfigLoader) {
+    return new McpClientService(mcpConfigLoader);
+  }
+
   @Bean
   ToolRegistry toolRegistry(
       Sandbox sandbox,
       RestClient restClient,
       MemoryService memoryService,
-      NotifyChannelRegistry notifyChannelRegistry) {
+      NotifyChannelRegistry notifyChannelRegistry,
+      McpClientService mcpClientService) {
     ToolRegistry registry = new ToolRegistry();
     // 内置工具走 @Tool 注解管道（schema 自动生成，宪法 II 第二件事）
     registry.registerAnnotated(new FileTools(sandbox)); // read/write/list/edit/grep/glob
     registry.registerAnnotated(new ShellTools(sandbox));
-    registry.registerAnnotated(new HttpTools(sandbox, restClient));
+    registry.registerAnnotated(
+        new HttpTools(sandbox, restClient)); // + http_request/fetch_webpage/download_file
+    registry.registerAnnotated(new UtilTools()); // current_time / json_extract（纯计算，无沙箱）
     registry.registerAnnotated(
         new WebSearchTools(sandbox, new DuckDuckGoSearchProvider(restClient)));
     // chat 是交互终端，ask_user 读控制台；serve/gateway 无人值守时应换 UnsupportedUserInteraction
@@ -435,10 +461,19 @@ public class OryxOsRuntime {
     registry.register(new NotifyTools(notifyAdapters, sandbox, notifyChannelRegistry));
     // 记忆工具：save_memory / recall_memory（补齐 20 节预留的两工具面），只认门面对后端无感
     registry.registerAnnotated(new MemoryTools(memoryService));
-    // MCP：失联的 server 只 WARN 跳过，不拖垮启动
-    new McpClientService(new McpConfigLoader(oryxosRoot().resolve("mcp_servers.yaml")))
-        .connectAll(registry);
+    // MCP：失联的 server 只 WARN 跳过，不拖垮启动；31 节起走长驻 bean，管理台 CRUD 复用同一份连接状态
+    mcpClientService.connectAll(registry);
     return registry;
+  }
+
+  /** 31 节：MCP server 管理台 CRUD 落地实现——core 契约 {@code McpServerAdmin}，web 层只认接口不认这个类。 */
+  @Bean
+  io.oryxos.core.mcp.McpServerAdmin mcpServerAdmin(
+      McpConfigLoader mcpConfigLoader,
+      McpClientService mcpClientService,
+      ToolRegistry toolRegistry) {
+    return new io.oryxos.tool.mcp.McpServerAdminService(
+        mcpConfigLoader, mcpClientService, toolRegistry);
   }
 
   @Bean
@@ -456,8 +491,13 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  ToolExecutor toolExecutor(Map<String, OryxTool> tools, ToolInvocationAuditor auditor) {
-    return new ToolExecutor(tools, auditor);
+  ToolExecutor toolExecutor(
+      Map<String, OryxTool> tools,
+      ToolRegistry toolRegistry,
+      ProfileRegistry profileRegistry,
+      ToolInvocationAuditor auditor) {
+    // 31 节：mcp_servers 白名单在此接线——Agent 只能调它声明过的 server 提供的工具
+    return new ToolExecutor(tools, toolRegistry.mcpToolOwners(), profileRegistry, auditor);
   }
 
   @Bean
@@ -469,24 +509,6 @@ public class OryxOsRuntime {
   @Bean
   SessionManager sessionManager(SessionRepository repository) {
     return new JpaSessionManager(repository);
-  }
-
-  /** 012-web-auth：管理台 Basic Auth 账号管理（密码哈希由 PasswordEncoderFactory 的 bean 提供）。 */
-  @Bean
-  WebUserService webUserService(WebUserRepository repository, PasswordEncoder passwordEncoder) {
-    return new WebUserService(repository, passwordEncoder);
-  }
-
-  /**
-   * 012-web-auth US3：浏览器登录 session 管理（create/findValid 惰性清过期/delete）。ttl 走 @Value 读字面量，避免 cli 引
-   * oryxos-web 的 WebAuthProperties 类。
-   */
-  @Bean
-  WebSessionService webSessionService(
-      WebSessionRepository repository,
-      @org.springframework.beans.factory.annotation.Value("${oryxos.web.auth.session-ttl:12h}")
-          java.time.Duration sessionTtl) {
-    return new WebSessionService(repository, sessionTtl);
   }
 
   @Bean
@@ -538,8 +560,34 @@ public class OryxOsRuntime {
       ProfileRegistry profileRegistry,
       AgentService agentService,
       SessionManager sessionManager,
-      ScheduledTaskStore scheduledTaskStore) {
+      ScheduledTaskStore scheduledTaskStore,
+      AgentExecutionStore agentExecutionStore) {
     return new AgentScheduler(
-        taskScheduler, profileRegistry, agentService, sessionManager, scheduledTaskStore);
+        taskScheduler,
+        profileRegistry,
+        agentService,
+        sessionManager,
+        scheduledTaskStore,
+        agentExecutionStore);
+  }
+
+  /** 32 节：Agent 执行历史落 SQLite（手动触发 + 定时触发都记，起止时间 / 状态）。 */
+  @Bean
+  AgentExecutionStore agentExecutionStore(AgentExecutionRepository repository) {
+    return new JpaAgentExecutionStore(repository);
+  }
+
+  /** 32 节：异步触发的后台执行器——虚拟线程（宪法 VII：虚拟线程处理并发，非 Reactor/WebFlux）。 */
+  @Bean(destroyMethod = "shutdown")
+  @SuppressWarnings("PMD.ThreadPoolCreationRule") // JDK 21 虚拟线程执行器，不是手工配置的平台线程池
+  ExecutorService agentExecutionExecutor() {
+    return Executors.newVirtualThreadPerTaskExecutor();
+  }
+
+  @Bean
+  AgentExecutionService agentExecutionService(
+      AgentExecutionStore agentExecutionStore, ExecutorService agentExecutionExecutor) {
+    return new AgentExecutionService(
+        agentExecutionStore, agentExecutionExecutor, Clock.systemDefaultZone());
   }
 }

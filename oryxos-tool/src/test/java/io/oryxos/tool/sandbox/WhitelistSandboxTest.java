@@ -236,6 +236,47 @@ class WhitelistSandboxTest {
   }
 
   @Nested
+  @DisplayName("HTTP 读默认放行 + 内网黑名单（第 32 节）")
+  class HttpReadDefaultAllow {
+
+    // http 白名单为空也不挡读——读默认放行，只挡 SSRF（内网/回环/云元数据）
+    private final WhitelistSandbox sb = sandbox(List.of(), List.of(), List.of());
+
+    @Test
+    @DisplayName("读公网地址放行（即使不在白名单）")
+    void publicReadAllowed() {
+      assertDoesNotThrow(
+          () -> sb.enforce(new SandboxAction(ActionType.HTTP_READ, "https://8.8.8.8/x")));
+    }
+
+    @Test
+    @DisplayName("无主机的伪目标（web_search）放行")
+    void hostlessReadAllowed() {
+      assertDoesNotThrow(
+          () -> sb.enforce(new SandboxAction(ActionType.HTTP_READ, "web_search:foo")));
+    }
+
+    @Test
+    @DisplayName("读内网/回环/链路本地/localhost 一律拒绝（SSRF）")
+    void internalReadBlocked() {
+      for (String url :
+          new String[] {
+            "http://127.0.0.1/x",
+            "http://10.1.2.3/x",
+            "http://192.168.1.1/x",
+            "http://169.254.1.1/x",
+            "http://[::1]/x", // IPv6 回环
+            "http://[fd00::1]/x", // IPv6 ULA fc00::/7
+            "http://localhost/x"
+          }) {
+        assertThrows(
+            SandboxViolationException.class,
+            () -> sb.enforce(new SandboxAction(ActionType.HTTP_READ, url)));
+      }
+    }
+  }
+
+  @Nested
   @DisplayName("空白名单 = deny-all")
   class EmptyWhitelistDeniesAll {
 

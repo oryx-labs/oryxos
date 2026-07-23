@@ -29,7 +29,7 @@ class ProgressiveDisclosureTest {
   void setUp() throws IOException {
     agentDir = oryxosRoot.resolve("agents").resolve("reconcile");
     Files.createDirectories(agentDir);
-    loader = new ContextLoader(oryxosRoot);
+    loader = new ContextLoader(oryxosRoot, new io.oryxos.core.skill.SkillRegistry());
   }
 
   private Profile profile() {

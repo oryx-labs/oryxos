@@ -1,5 +1,6 @@
 package io.oryxos.web.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,6 +10,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -72,13 +75,15 @@ class WorkspaceApiControllerTest {
   }
 
   @Test
-  @DisplayName("tree 返回 agents/archive 结构、可钻进 Agent 目录列文件")
+  @DisplayName("tree 返回 agents/skills/output/archive 结构、可钻进 Agent 目录列文件")
   void tree_returnsAgentsAndArchive() throws Exception {
     mvc.perform(get("/api/v1/workspace/tree"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.children[0].name").value("agents"))
         .andExpect(jsonPath("$.data.children[0].children[0].name").value("demo"))
-        .andExpect(jsonPath("$.data.children[1].name").value("archive"));
+        .andExpect(jsonPath("$.data.children[1].name").value("skills"))
+        .andExpect(jsonPath("$.data.children[2].name").value("output"))
+        .andExpect(jsonPath("$.data.children[3].name").value("archive"));
   }
 
   @Test
@@ -390,5 +395,35 @@ class WorkspaceApiControllerTest {
             .getContentAsString();
 
     assertFalse(json.contains("secret.txt"));
+  }
+
+  @Test
+  @DisplayName("download 正常文件：附件头 + 原始字节")
+  void download_validPath_returnsAttachment() throws Exception {
+    Path report = oryxosRoot.resolve("agents").resolve("demo").resolve("output");
+    Files.createDirectories(report);
+    Files.writeString(report.resolve("report.md"), "# 研报\n今日无异常");
+    mvc.perform(get("/api/v1/workspace/download").param("path", "agents/demo/output/report.md"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Content-Disposition", containsString("attachment")))
+        .andExpect(header().string("Content-Disposition", containsString("report.md")))
+        .andExpect(
+            content().bytes("# 研报\n今日无异常".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+  }
+
+  @Test
+  @DisplayName("download 目录穿越 → 400")
+  void download_pathTraversal_returns400() throws Exception {
+    mvc.perform(get("/api/v1/workspace/download").param("path", "../../etc/passwd"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+  }
+
+  @Test
+  @DisplayName("download 文件不存在 → 404")
+  void download_missingFile_returns404() throws Exception {
+    mvc.perform(get("/api/v1/workspace/download").param("path", "agents/demo/output/nope.md"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value(404));
   }
 }

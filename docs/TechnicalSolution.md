@@ -709,11 +709,15 @@ mvn clean package
 - **底座 = 系统基础能力**：Provider、ReAct、内置 Tool（`read_file`/`shell`/`http_get`/`notify`/`save_memory`…）、Memory、Sandbox、定时、Web（第 1~10 章）。所有 Agent 共享。
 - **Agent = 一个目录** `.oryxos/agents/<name>/`：`AGENT.md`（frontmatter = 这个 Agent 自己的 profile：`name`/`description`/`provider`/`model`/`tools`/`notify_channels`/`schedules`；正文 = 任务指令）+ 可选私有 `skills/<skill>/SKILL.md` 包、Agent 级 `scripts/` 等资源。一个自足的业务 Agent，**自带一切、不再另写 Profile YAML**（`.oryxos/profiles/` 取消）。
 
-**Skill 有私有和公共两种作用域。** 私有受管形态为 `.oryxos/agents/<agent>/skills/<skill>/SKILL.md`；公共受管形态为 `.oryxos/skills/<skill>/SKILL.md`，通过显式关联复用到多个 Agent。两者都不是可执行 Tool，也不引入 `use_skill` Tool；同名私有 Skill 与公共关联冲突时拒绝关联。旧版 `skills/*.md`、`skills/SKILL.md` 以及没有 `SKILL.md`/OryxOS marker 的普通子目录保持 legacy/unmanaged：不自动迁移、不进入 L1、不由 Skill 管理 API 改写或删除，但仍可由 `AGENT.md` 显式指引 `read_file`。
+**借 Anthropic Agent Skills 的形态、但定义的是 Agent。** Anthropic 把这种目录叫一个 Skill（Claude 这个大 Agent 的一项可加载能力）；我们借的是目录的**形态**，不是命名——在 OryxOS，**一个目录 = 一个 Agent**。每个 Agent 独立自足，只调用底座的系统基础能力。
+
+> **修订（v1.2.0，第 32 节）：Skill 升级为全局共享能力库。** 上一段"skill 只是 Agent 目录里的子指令、不做跨 Agent 的共享能力库、没有 `use_skill`、没有全局索引"**已废止**。现在 Skill 是全局的：存 `.oryxos/skills/<name>/SKILL.md`，由 `SkillService`/`SkillStore`/`SkillRegistry`（`oryxos-core`，与 Agent 那套同构）做 CRUD，`/api/v1/skills` 暴露。Agent 在 `AGENT.md` frontmatter 用 `skills: [名]` 按名引用，`ContextLoader` 组装 system prompt 时把引用到的 Skill 正文**注入**来强约束产出。边界不变：Skill 不是可执行 Tool、不进 `ToolRegistry`，加载/注入归 `oryxos-core` 的 `ContextLoader`。详见 `CLAUDE.md` 原则四修订。
+
+Agent 目录可另外携带私有 `skills/<skill>/SKILL.md`，由 Agent 私有 Skill 管理 API 做导入、启停和归档，并按 L1/L2/L3 渐进披露；公共 Skill 的关联则直接写入 `AGENT.md` frontmatter 的 `skills` 列表。两者都不引入 `use_skill` Tool，也不修改 Agent 的显式 Tool 权限。
 
 **派生 Profile**：底座（第 1~10 章的一切）都吃 `Profile`，所以 `AgentLoader.deriveProfile(agentDir)` 把 `AGENT.md` 的 frontmatter 映射成一个 `Profile`，让 Agent 目录**零改动复用整台底座**。
 
-**渐进式披露（L1/L2/L3）**：每次顶层请求把该 Agent 已启用的私有 Skill 与已关联的有效公共 Skill 合并，只把 `name`、`description` 和可交给 `read_file` 的入口作为 L1 放入 system context；模型判断命中后才读取 L2 `SKILL.md` 正文；正文确实需要时，才继续读取 reference/assets 或运行 L3 script。一次请求只建一次快照并持有该 Agent 的读租约到 ReAct 与会话保存结束，所以管理变更不会让同一轮前后看到不同文件。
+**渐进式披露（L1/L2/L3）**：每次顶层请求只把该 Agent 已启用的私有 Skill 的 `name`、`description` 和可交给 `read_file` 的入口作为 L1 放入 system context；模型判断命中后才读取 L2 `SKILL.md` 正文；正文确实需要时，才继续读取 reference/assets 或运行 L3 script。公共 Skill 由 `AGENT.md` 显式引用并由 `ContextLoader` 直接注入正文。一次请求只建一次私有 Skill 快照并持有该 Agent 的读租约到 ReAct 与会话保存结束，所以管理变更不会让同一轮前后看到不同文件。
 
 > **底线不变（宪法原则四）**：`AGENT.md` 正文由 `ContextLoader` 注入 system prompt（与 Bootstrap 文件同层）；Agent/Skill 目录都不是可执行 Tool。`allowed-tools` 只作说明，不修改 Profile 的显式 Tool 列表；L2/L3 仍经底座既有 `read_file`/`shell`、`ToolExecutor`、沙箱与审计，不自动扩权。
 

@@ -22,6 +22,9 @@ import java.util.Map;
  * 消息及其后全部消息）④可用工具——不进文本， 经 {@link ProviderRequest#availableTools()} 传递，schema 挂载由 16 节
  * ToolSchemaAdapter 单点负责。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "ContextLoader is an intentionally shared runtime collaborator.")
 public class PromptBuilder {
 
   private static final DateTimeFormatter DATE_TIME =

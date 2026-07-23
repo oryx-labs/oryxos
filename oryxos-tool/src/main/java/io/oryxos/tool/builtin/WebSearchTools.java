@@ -12,7 +12,7 @@ import org.springframework.ai.tool.annotation.ToolParam;
 /**
  * 内置网页搜索工具：web_search——日报/调研类 Agent 的第一入口。
  *
- * <p>搜索走网络，同 http_get 一样先过域名白名单（HTTP_REQUEST 检查位）；具体引擎由 {@link SearchProvider}
+ * <p>搜索走网络，同 http_get 一样是只读涉外请求（HTTP_READ：默认放行 + 内网黑名单）；具体引擎由 {@link SearchProvider}
  * 决定，本工具只负责把结果渲染成模型好读的文本。
  */
 public class WebSearchTools {
@@ -29,8 +29,8 @@ public class WebSearchTools {
 
   @Tool(name = "web_search", description = "用搜索引擎检索网页，返回标题、链接和摘要列表")
   public String webSearch(@ToolParam(description = "搜索关键词") String query) {
-    // 搜索是一次涉外请求，与 http_get 共享域名白名单机制（HTTP_REQUEST）
-    sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, "web_search:" + query));
+    // 搜索是一次只读涉外请求，与 http_get 同走 HTTP_READ（默认放行 + 内网黑名单；伪目标无主机=放行）
+    sandbox.enforce(new SandboxAction(ActionType.HTTP_READ, "web_search:" + query));
     List<SearchProvider.SearchResult> results = provider.search(query);
     if (results.isEmpty()) {
       return "（未搜到相关结果）";

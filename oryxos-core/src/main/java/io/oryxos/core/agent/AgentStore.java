@@ -81,6 +81,23 @@ public class AgentStore {
     return dir;
   }
 
+  /** Reads one Agent definition after applying the same identity and symlink checks as writes. */
+  String readAgentMarkdown(String name) {
+    AgentName agentName = AgentName.parse(name);
+    Path dir = agentsDir.resolve(agentName.value());
+    Path file = dir.resolve(AGENT_FILE);
+    try {
+      requireExactIdentityOrAbsent(agentName);
+      ensureNoSymbolicLinks(agentsDir, file);
+      if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
+        throw new IllegalArgumentException("Agent 定义不存在: " + agentName);
+      }
+      return Files.readString(file);
+    } catch (IOException e) {
+      throw new UncheckedIOException("读取 Agent 定义失败: " + agentName, e);
+    }
+  }
+
   /**
    * 脚手架式写入整个 Agent 目录：{@code files} 的键是相对 Agent 目录的路径（如 {@code AGENT.md}、{@code
    * scripts/example.py}），值是文件内容。每个路径 normalize 后必须落在该 Agent 目录内（防穿越）。返回该 Agent 目录。

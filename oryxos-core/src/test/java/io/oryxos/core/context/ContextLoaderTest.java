@@ -1,6 +1,7 @@
 package io.oryxos.core.context;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ch.qos.logback.classic.Logger;
@@ -35,7 +36,7 @@ class ContextLoaderTest {
   void setUp() throws IOException {
     agentDir = oryxosRoot.resolve("agents").resolve("ops-agent");
     Files.createDirectories(agentDir);
-    loader = new ContextLoader(oryxosRoot);
+    loader = new ContextLoader(oryxosRoot, new io.oryxos.core.skill.SkillRegistry());
     logAppender = new ListAppender<>();
     logAppender.start();
     ((Logger) LoggerFactory.getLogger(ContextLoader.class)).addAppender(logAppender);
@@ -127,6 +128,67 @@ class ContextLoaderTest {
     String reloaded = loader.load(profile);
     assertTrue(reloaded.contains("v2"), "用户改完文件，下一次组装立即生效");
     assertEquals(-1, reloaded.indexOf("v1"));
+  }
+
+  @Test
+  @DisplayName("第32节：引用的全局 Skill 正文注入 system prompt；引用不存在的记 WARN 跳过")
+  void referencedGlobalSkillBodyIsInjected() throws IOException {
+    writeAgentBody("agent-body");
+    io.oryxos.core.skill.SkillRegistry reg = new io.oryxos.core.skill.SkillRegistry();
+    reg.register(new io.oryxos.core.skill.Skill("report-format", "研报格式", "SKILL-BODY-约束正文"));
+    ContextLoader withSkill = new ContextLoader(oryxosRoot, reg);
+    Profile p =
+        new Profile(
+            "ops-agent",
+            null,
+            new Profile.Identity("运维小欧", "你是助手"),
+            new Profile.ProviderRef("deepseek", "deepseek-chat", null),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of("report-format", "no-such-skill"),
+            Profile.Settings.defaults());
+
+    String context = withSkill.load(p);
+
+    assertTrue(context.contains("SKILL-BODY-约束正文"), "引用到的 Skill 正文应注入 system prompt");
+    boolean warned =
+        logAppender.list.stream()
+            .anyMatch(
+                e ->
+                    "WARN".equals(e.getLevel().toString())
+                        && e.getFormattedMessage().contains("no-such-skill"));
+    assertTrue(warned, "引用不存在的 Skill 记 WARN 跳过");
+  }
+
+  @Test
+  @DisplayName("第32节：会写盘的 Agent 注入绝对产出目录；不会写盘的不注入")
+  void outputDirInjectedForFileWritingAgents() throws IOException {
+    writeAgentBody("body");
+    Profile writer =
+        new Profile(
+            "ops-agent",
+            null,
+            new Profile.Identity("x", "p"),
+            new Profile.ProviderRef("deepseek", "deepseek-chat", null),
+            List.of("write_file"),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            Profile.Settings.defaults());
+    String ctx = loader.load(writer);
+    assertTrue(ctx.contains("你的文件产出目录"), "会写盘的 Agent 应被告知产出目录");
+    assertTrue(ctx.contains("ops-agent"), "路径含该 Agent 名");
+    assertTrue(ctx.contains("output"), "路径指向 output/");
+
+    // 没有任何写盘工具的 Agent（tools 空）→ 不注入，省 prompt
+    assertFalse(loader.load(profileWith(List.of())).contains("你的文件产出目录"));
   }
 
   @Test

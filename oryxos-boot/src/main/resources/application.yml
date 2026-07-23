@@ -92,13 +92,6 @@ oryxos:
       max-skills-per-agent: 64
       max-candidates-per-agent: 1024
       max-l1-chars: 12000
-  # 管理台 Basic Auth（012-web-auth）。默认关=假设内网现状不变（SC-001）；
-  # 开启后 /admin/** 需账密，/api/v1/** 不受影响（REST 不做 Basic Auth）。
-  # 开启前先 oryxos user add <username> 建账号，否则启动阻断（FR-006）。
-  web:
-    auth:
-      enabled: false
-      realm: OryxOS
 
 # Observability: Actuator + Micrometer/Prometheus
 management:

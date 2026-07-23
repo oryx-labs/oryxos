@@ -80,6 +80,7 @@ class ProfileLoaderTest {
     assertEquals(0.7, profile.provider().temperature());
     assertEquals(Set.of("http_get", "notify"), Set.copyOf(profile.tools()));
     assertEquals("github-mcp", profile.mcpServers().get(0)); // mcp_servers → mcpServers
+    assertEquals("daily-pr-digest", profile.skills().get(0)); // 第 32 节：skills 解析进 Profile
     assertEquals("webhook", profile.notifyChannels().get(0).type()); // notify_channels
     assertEquals("0 0 8 * * *", profile.schedules().get(0).cron());
     assertEquals("Asia/Shanghai", profile.schedules().get(0).zone());

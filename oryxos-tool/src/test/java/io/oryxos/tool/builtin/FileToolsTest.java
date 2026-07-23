@@ -31,6 +31,36 @@ class FileToolsTest {
   private final FileTools tools = new FileTools(new PermissiveSandbox());
 
   @Test
+  @DisplayName("make_dir + append_file + delete_file 基本闭环")
+  void fileManagementBasics() throws IOException {
+    tools.makeDir(dir.resolve("sub").toString());
+    assertTrue(Files.isDirectory(dir.resolve("sub")));
+    String f = dir.resolve("sub/log.txt").toString();
+    tools.appendFile(f, "line1\n");
+    tools.appendFile(f, "line2\n");
+    assertEquals("line1\nline2\n", Files.readString(Path.of(f)));
+    tools.deleteFile(f);
+    assertFalse(Files.exists(Path.of(f)));
+  }
+
+  @Test
+  @DisplayName("copy_file 复制、move_file 移动后源不在目标在")
+  void copyThenMove() throws IOException {
+    Files.writeString(dir.resolve("a.txt"), "x");
+    tools.copyFile(dir.resolve("a.txt").toString(), dir.resolve("b.txt").toString());
+    assertEquals("x", Files.readString(dir.resolve("b.txt")));
+    tools.moveFile(dir.resolve("b.txt").toString(), dir.resolve("c.txt").toString());
+    assertFalse(Files.exists(dir.resolve("b.txt")));
+    assertEquals("x", Files.readString(dir.resolve("c.txt")));
+  }
+
+  @Test
+  @DisplayName("delete_file 拒绝删除目录")
+  void deleteRejectsDirectory() {
+    assertThrows(IllegalArgumentException.class, () -> tools.deleteFile(dir.toString()));
+  }
+
+  @Test
   @DisplayName("read_file 正常读到内容")
   void readFileReturnsContent() throws IOException {
     Files.writeString(dir.resolve("a.txt"), "hello oryx");

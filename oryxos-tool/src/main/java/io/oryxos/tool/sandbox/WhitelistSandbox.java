@@ -3,7 +3,9 @@ package io.oryxos.tool.sandbox;
 import io.oryxos.core.sandbox.SandboxWhitelist;
 import io.oryxos.core.sandbox.SandboxWhitelistStore;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
@@ -42,10 +44,12 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   private static final String FORBIDDEN_SHELL_CHARACTERS = ";|&<>`$";
 
   private static final String SHELL_COMMAND_LONG_OPTION = "--command";
+  private static final String INTERNAL_DOMAIN_SUFFIX = ".internal";
 
   private static final Set<String> SHELL_INTERPRETERS = Set.of("sh", "bash", "dash", "ksh", "zsh");
   private static final Set<String> SHELL_EXECUTION_WRAPPERS =
       Set.of("command", "env", "nice", "nohup", "sudo", "timeout", "xargs");
+  private static final Set<String> INTERNAL_HOSTS = Set.of("localhost", "metadata.google.internal");
 
   // 具体类型 CopyOnWriteArrayList（而非 List 接口）：需要 addIfAbsent 的原子"不存在才加"语义
   private final CopyOnWriteArrayList<Path> allowedRoots = new CopyOnWriteArrayList<>();
@@ -114,8 +118,11 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
       case SHELL_COMMAND:
         checkShellCommand(action.target());
         break;
+      case HTTP_READ:
+        checkHttpRead(action.target());
+        break;
       case HTTP_REQUEST:
-        checkHttpUrl(action.target());
+        checkHttpWrite(action.target());
         break;
       default:
         // 安全默认：未来若新增未覆盖的动作类型，deny 而非静默放行（宪法 VI）
@@ -143,7 +150,12 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
                     normalizedTarget.startsWith(root)
                         && resolvedTarget.startsWith(resolveForContainment(root, rawPath)));
     if (!allowed) {
-      throw new SandboxViolationException("路径不在白名单内: " + rawPath);
+      throw new SandboxViolationException(
+          "路径不在白名单内: "
+              + rawPath
+              + "。这是安全策略，请勿反复重试；Agent 产出请写到工作区（"
+              + firstAllowedRoot()
+              + " 下，如 <该 Agent 目录>/output/）。确需读写别处，请在管理台「SandBox 列表」把该路径加入 file 白名单。");
     }
   }
 
@@ -151,7 +163,8 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
     List<String> tokens = parseSimpleCommand(command);
     String firstToken = tokens.get(0);
     if (!allowedCommands.contains(firstToken)) {
-      throw new SandboxViolationException("命令不在白名单内: " + firstToken);
+      throw new SandboxViolationException(
+          "命令不在白名单内: " + firstToken + "。这是安全策略，请勿反复重试；确需该命令，请在管理台「SandBox 列表」把它加入 shell 白名单。");
     }
     String executable = executableName(firstToken);
     if (SHELL_EXECUTION_WRAPPERS.contains(executable)) {
@@ -273,14 +286,84 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
     return slash >= 0 ? token.substring(slash + 1) : token;
   }
 
-  private void checkHttpUrl(String url) {
-    String host = URI.create(url).getHost();
-    boolean allowed =
-        host != null
-            && allowedDomainPatterns.stream().anyMatch(pattern -> matchesDomain(host, pattern));
-    if (!allowed) {
-      throw new SandboxViolationException("域名不在白名单内: " + host);
+  /** HTTP 读（GET 类）：默认放行，只挡内网/回环/云元数据等 SSRF 目标。无主机的伪目标（如 web_search）放行。 */
+  private void checkHttpRead(String url) {
+    String host = hostOf(url);
+    if (host == null) {
+      return;
     }
+    assertNotInternalHost(host);
+  }
+
+  /**
+   * HTTP 写（POST/PUT/…）：过域名白名单——防止把数据外发到任意端点。白名单本身即"运营者批准的目标"，故不再叠加 SSRF 解析（内网 POST
+   * 需运营者显式白名单，属其决定）；SSRF 兜底集中在默认放行的 READ 路径。
+   */
+  private void checkHttpWrite(String url) {
+    String host = hostOf(url);
+    if (host == null) {
+      throw new SandboxViolationException("写请求缺少主机名，拒绝: " + url);
+    }
+    boolean allowed =
+        allowedDomainPatterns.stream().anyMatch(pattern -> matchesDomain(host, pattern));
+    if (!allowed) {
+      throw new SandboxViolationException(
+          "写请求(POST/PUT 等)目标不在出网白名单: "
+              + host
+              + "。这是安全策略（防数据外发），请勿反复重试；确需向该地址发送数据，请在管理台「SandBox 列表」把该域名加入 http 白名单后再试。");
+    }
+  }
+
+  private static String hostOf(String url) {
+    try {
+      return URI.create(url).getHost();
+    } catch (RuntimeException e) {
+      return null;
+    }
+  }
+
+  /** SSRF 兜底：拒绝主机解析到回环/任意本地/链路本地(含云元数据 169.254.169.254)/站点内网/组播/CGNAT，及 localhost、*.internal。 */
+  private static void assertNotInternalHost(String host) {
+    String h = host.toLowerCase(Locale.ROOT);
+    if (INTERNAL_HOSTS.contains(h) || h.endsWith(INTERNAL_DOMAIN_SUFFIX)) {
+      throw new SandboxViolationException("拒绝访问内网 / 元数据主机（SSRF 防护）: " + host + "。这是安全策略，请勿重试。");
+    }
+    // IPv6 字面量 getHost() 带方括号（如 [fd00::1]），解析前剥掉，ULA/回环等判断才生效
+    String lookup = h.startsWith("[") && h.endsWith("]") ? h.substring(1, h.length() - 1) : host;
+    InetAddress[] addresses;
+    try {
+      addresses = InetAddress.getAllByName(lookup);
+    } catch (UnknownHostException e) {
+      throw new SandboxViolationException("无法解析主机: " + host + "。请检查地址是否正确，勿反复重试。");
+    }
+    for (InetAddress addr : addresses) {
+      if (addr.isLoopbackAddress()
+          || addr.isAnyLocalAddress()
+          || addr.isLinkLocalAddress()
+          || addr.isSiteLocalAddress()
+          || addr.isMulticastAddress()
+          || isCarrierGradeNat(addr)
+          || isIpv6UniqueLocal(addr)) {
+        throw new SandboxViolationException(
+            "拒绝访问内网 / 保留地址（SSRF 防护）: " + host + " → " + addr.getHostAddress() + "。这是安全策略，请勿重试。");
+      }
+    }
+  }
+
+  /** 100.64.0.0/10（运营商级 NAT，isSiteLocalAddress 不覆盖，单独判）。 */
+  private static boolean isCarrierGradeNat(InetAddress addr) {
+    byte[] b = addr.getAddress();
+    return b.length == 4 && (b[0] & 0xFF) == 100 && (b[1] & 0xC0) == 0x40;
+  }
+
+  /** IPv6 ULA fc00::/7（唯一本地地址，isSiteLocalAddress 对 IPv6 不覆盖，单独判——否则 [fd00::1] 可绕过）。 */
+  private static boolean isIpv6UniqueLocal(InetAddress addr) {
+    byte[] b = addr.getAddress();
+    return b.length == 16 && (b[0] & 0xFE) == 0xFC;
+  }
+
+  private String firstAllowedRoot() {
+    return allowedRoots.isEmpty() ? ".oryxos" : allowedRoots.get(0).toString();
   }
 
   /**

@@ -72,7 +72,8 @@ class WebSmokeIT {
                     mock(AgentService.class),
                     mock(SessionManager.class),
                     registry,
-                    memory),
+                    memory,
+                    mock(io.oryxos.core.agent.AgentExecutionService.class)),
                 new ToolApiController(Map.of("http_get", tool)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();

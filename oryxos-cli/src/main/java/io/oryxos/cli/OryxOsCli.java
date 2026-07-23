@@ -9,7 +9,6 @@ import io.oryxos.cli.command.ServeCommand;
 import io.oryxos.cli.command.SessionListCommand;
 import io.oryxos.cli.command.StatusCommand;
 import io.oryxos.cli.command.ToolListCommand;
-import io.oryxos.cli.command.UserCommand;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.IVersionProvider;
@@ -34,8 +33,7 @@ import picocli.CommandLine.IVersionProvider;
       ProfileCommand.class,
       ProviderListCommand.class,
       ToolListCommand.class,
-      SessionListCommand.class,
-      UserCommand.class
+      SessionListCommand.class
     })
 public class OryxOsCli implements Runnable {
 

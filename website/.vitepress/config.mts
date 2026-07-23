@@ -20,11 +20,11 @@ export default defineConfig({
     ['meta', { property: 'og:site_name', content: 'OryxOS' }],
     ['meta', { property: 'og:title', content: 'OryxOS — Enterprise Agent OS' }],
     ['meta', { property: 'og:description', content: 'Enterprise Agent OS built on Java — run multiple AI agents on your own infrastructure' }],
-    ['meta', { property: 'og:url', content: 'https://dengtianhang.github.io/oryxos/' }],
+    ['meta', { property: 'og:url', content: 'https://oryxos.robustmq.com' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:title', content: 'OryxOS — Enterprise Agent OS' }],
     ['meta', { name: 'twitter:description', content: 'Enterprise Agent OS built on Java — run multiple AI agents on your own infrastructure' }],
-    ['link', { rel: 'canonical', href: 'https://dengtianhang.github.io/oryxos/' }],
+    ['link', { rel: 'canonical', href: 'https://oryxos.robustmq.com' }],
   ],
 
   locales: {
@@ -134,6 +134,6 @@ export default defineConfig({
   },
 
   sitemap: {
-    hostname: 'https://dengtianhang.github.io/oryxos',
+    hostname: 'https://oryxos.robustmq.com',
   },
 })
