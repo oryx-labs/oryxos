@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.oryxos.core.mcp.McpServerConfig;
 import io.oryxos.tool.ToolRegistry;
 import java.io.IOException;
 import java.nio.file.Files;

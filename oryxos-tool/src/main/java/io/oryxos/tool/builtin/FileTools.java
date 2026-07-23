@@ -9,6 +9,8 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -167,6 +169,87 @@ public class FileTools {
       }
     } catch (IOException | java.io.UncheckedIOException e) {
       // 二进制/非 UTF-8 文件读不出来，跳过而非中断整次搜索
+    }
+  }
+
+  // —— 文件管理（31 节丰富默认工具库）：建目录 / 追加 / 删除 / 移动 / 复制，均过路径白名单 ——
+
+  @Tool(name = "make_dir", description = "创建目录（含父目录，幂等）")
+  public String makeDir(@ToolParam(description = "要创建的目录路径") String path) {
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+    try {
+      Files.createDirectories(Path.of(path));
+      return "已创建目录: " + path;
+    } catch (IOException e) {
+      throw new UncheckedIOException("创建目录失败: " + path, e);
+    }
+  }
+
+  @Tool(name = "append_file", description = "把内容追加到文件末尾（文件不存在则创建）")
+  public String appendFile(
+      @ToolParam(description = "文件路径") String path,
+      @ToolParam(description = "要追加的内容") String content) {
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+    try {
+      Path file = Path.of(path);
+      Path parent = file.getParent();
+      if (parent != null) {
+        Files.createDirectories(parent);
+      }
+      Files.writeString(file, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+      return "已追加到: " + path;
+    } catch (IOException e) {
+      throw new UncheckedIOException("追加文件失败: " + path, e);
+    }
+  }
+
+  @Tool(name = "delete_file", description = "删除一个文件（拒绝删除目录）")
+  public String deleteFile(@ToolParam(description = "要删除的文件路径") String path) {
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+    Path file = Path.of(path);
+    if (Files.isDirectory(file)) {
+      throw new IllegalArgumentException("拒绝删除目录（本工具只删文件）: " + path);
+    }
+    try {
+      return Files.deleteIfExists(file) ? "已删除: " + path : "文件不存在: " + path;
+    } catch (IOException e) {
+      throw new UncheckedIOException("删除文件失败: " + path, e);
+    }
+  }
+
+  @Tool(name = "move_file", description = "移动 / 重命名文件（源与目标都过白名单，目标已存在则覆盖）")
+  public String moveFile(
+      @ToolParam(description = "源路径") String from, @ToolParam(description = "目标路径") String to) {
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, from));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, to));
+    try {
+      Path dst = Path.of(to);
+      Path parent = dst.getParent();
+      if (parent != null) {
+        Files.createDirectories(parent);
+      }
+      Files.move(Path.of(from), dst, StandardCopyOption.REPLACE_EXISTING);
+      return "已移动: " + from + " -> " + to;
+    } catch (IOException e) {
+      throw new UncheckedIOException("移动文件失败: " + from, e);
+    }
+  }
+
+  @Tool(name = "copy_file", description = "复制文件（源读 + 目标写，都过白名单，目标已存在则覆盖）")
+  public String copyFile(
+      @ToolParam(description = "源路径") String from, @ToolParam(description = "目标路径") String to) {
+    sandbox.enforce(new SandboxAction(ActionType.FILE_READ, from));
+    sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, to));
+    try {
+      Path dst = Path.of(to);
+      Path parent = dst.getParent();
+      if (parent != null) {
+        Files.createDirectories(parent);
+      }
+      Files.copy(Path.of(from), dst, StandardCopyOption.REPLACE_EXISTING);
+      return "已复制: " + from + " -> " + to;
+    } catch (IOException e) {
+      throw new UncheckedIOException("复制文件失败: " + from, e);
     }
   }
 }

@@ -20,12 +20,31 @@ import org.springframework.ai.tool.ToolCallbacks;
 public class ToolRegistry {
 
   private final Map<String, OryxTool> tools = new LinkedHashMap<>();
+  // 工具名 -> 提供它的 MCP server 名（仅 MCP 来源的工具在此有记录）；ToolExecutor 据此校验 Agent 的 mcp_servers 声明。
+  private final Map<String, String> mcpToolOwners = new LinkedHashMap<>();
 
   public void register(OryxTool tool) {
     if (tools.containsKey(tool.getName())) {
       throw new IllegalStateException("工具重名，拒绝注册: " + tool.getName());
     }
     tools.put(tool.getName(), tool);
+  }
+
+  /** MCP 工具注册：额外记录"这个工具名属于哪个 server"，供运行时 mcp_servers 白名单校验。 */
+  public void registerMcpTool(String serverName, OryxTool tool) {
+    register(tool);
+    mcpToolOwners.put(tool.getName(), serverName);
+  }
+
+  /** 注销一个工具（MCP server 断开/删除时用）；未注册的名字幂等跳过。 */
+  public void unregister(String name) {
+    tools.remove(name);
+    mcpToolOwners.remove(name);
+  }
+
+  /** 工具名 -> 所属 MCP server 名（仅 MCP 来源的工具在内）；供 {@code ToolExecutor} 做 mcp_servers 白名单校验。 */
+  public Map<String, String> mcpToolOwners() {
+    return Map.copyOf(mcpToolOwners);
   }
 
   /**

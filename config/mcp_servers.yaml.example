@@ -1,0 +1,217 @@
+# =============================================================================
+# OryxOS — Recommended community MCP servers (catalog / 推荐社区 MCP 服务器目录)
+# =============================================================================
+#
+# HOW TO USE
+#   1. Copy this file to your workspace:   cp config/mcp_servers.yaml.example .oryxos/mcp_servers.yaml
+#   2. Uncomment ONLY the servers you actually want. Everything below is
+#      commented out on purpose so a fresh copy connects to NOTHING.
+#   3. Export the environment variables each server needs (see its `env:` block),
+#      then start OryxOS. Tools exposed by a connected server are auto-registered
+#      in ToolRegistry under the names the server declares.
+#
+# SCHEMA (exactly what McpConfigLoader parses — do not add other fields)
+#   servers:
+#     - name:      <string>   # unique id for this server
+#       transport: stdio      # ONLY "stdio" is supported in the core phase.
+#                             # http/sse entries are skipped at startup with a WARN.
+#       command:   <string>   # ONE line. It is split on whitespace: the first
+#                             # token is the executable, the rest are its args.
+#                             # There is NO separate `args:` field.
+#       env:                  # process environment for the subprocess (a map)
+#         KEY: value          # values MAY use ${ENV_VAR} placeholders (resolved
+#                             # from OryxOS's own environment at load time)
+#
+# CREDENTIALS — read this before configuring a database
+#   * ${ENV_VAR} placeholders are resolved ONLY inside `env:` values.
+#     They are NOT expanded inside `command:`. So never put a secret (token,
+#     password, DB connection URL with credentials) in `command:` — it would
+#     be a literal hardcoded secret. Put secrets in `env:` via ${ENV_VAR} and
+#     prefer MCP servers that read their credentials from environment variables.
+#   * Missing env vars are left as the literal "${VAR}" and logged as a WARN;
+#     the server simply fails to authenticate rather than crashing OryxOS.
+#
+# PREREQUISITES
+#   * Node-based servers launch via `npx` — needs Node.js / npm on the host.
+#   * Python-based servers launch via `uvx` (from Astral's `uv`) — needs uv on
+#     the host. Substitute `pipx run` / `python -m` if you prefer.
+#   * MCP subprocesses are launched directly (not through the built-in `shell`
+#     tool), so the shell command whitelist does NOT gate them — but the host
+#     must actually have npx/uvx/docker installed and on PATH.
+#
+# DESIGN STANCE
+#   Built-in tools are universal primitives (file / shell / http / memory /
+#   notify). Domain integrations — GitHub, Slack, Notion, browsers, AND SQL
+#   databases (Postgres / SQLite / …) — are delivered as MCP servers, not as
+#   built-in tools. This file is that extension surface: zero/low-code, swap a
+#   package name to add a capability.
+#
+# ACCURACY NOTE
+#   Anthropic split the reference-server repo in early 2025: a small core stays
+#   actively maintained (filesystem, fetch, memory, git, time, sequentialthinking,
+#   everything) under @modelcontextprotocol/*, while integration servers such as
+#   github / gitlab / postgres / sqlite / slack / gdrive / puppeteer /
+#   brave-search / sentry were moved to the archived set and/or handed to their
+#   vendors. The archived npm/PyPI packages below still install and run; where a
+#   vendor now ships an official replacement it is called out in a comment.
+# =============================================================================
+
+servers:
+
+  # ---------------------------------------------------------------------------
+  # GitHub — issues, PRs, code search, repo files
+  # ---------------------------------------------------------------------------
+  # Archived reference server (still installable). Reads its token from env.
+  # Official replacement: github/github-mcp-server (Go binary /
+  # ghcr.io/github/github-mcp-server Docker image, and a hosted remote server).
+  # The remote server is HTTP-based, so it is NOT usable in the core phase yet.
+  # - name: github
+  #   transport: stdio
+  #   command: npx -y @modelcontextprotocol/server-github
+  #   env:
+  #     GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
+  #
+  # Official Docker alternative (uncomment instead of the npx entry above):
+  # - name: github
+  #   transport: stdio
+  #   command: docker run -i --rm -e GITHUB_PERSONAL_ACCESS_TOKEN ghcr.io/github/github-mcp-server
+  #   env:
+  #     GITHUB_PERSONAL_ACCESS_TOKEN: ${GITHUB_TOKEN}
+
+  # ---------------------------------------------------------------------------
+  # GitLab — projects, issues, merge requests (gitlab.com or self-hosted)
+  # ---------------------------------------------------------------------------
+  # Archived reference server. GITLAB_API_URL is optional; set it for
+  # self-hosted instances (default is https://gitlab.com/api/v4).
+  # - name: gitlab
+  #   transport: stdio
+  #   command: npx -y @modelcontextprotocol/server-gitlab
+  #   env:
+  #     GITLAB_PERSONAL_ACCESS_TOKEN: ${GITLAB_TOKEN}
+  #     GITLAB_API_URL: ${GITLAB_API_URL}
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — schema inspection + read-only SQL
+  # ---------------------------------------------------------------------------
+  # NOTE on credentials: the archived reference server takes the connection
+  # string as a COMMAND ARGUMENT, and ${ENV} is NOT expanded in `command:`.
+  # So it cannot receive a secret URL safely here. Use it only for a
+  # credential-free local/trusted connection, e.g.:
+  # - name: postgres
+  #   transport: stdio
+  #   command: npx -y @modelcontextprotocol/server-postgres postgresql://localhost:5432/mydb
+  #
+  # For a credentialed database, prefer an MCP server that reads the connection
+  # string from an ENVIRONMENT VARIABLE (so the secret stays in `env:` via
+  # ${ENV}). The community "Postgres MCP Pro" server (crystaldba/postgres-mcp,
+  # PyPI package `postgres-mcp`) does this — verify the current package name /
+  # flags in its README before relying on it:
+  # - name: postgres
+  #   transport: stdio
+  #   command: uvx postgres-mcp --access-mode=restricted
+  #   env:
+  #     DATABASE_URI: ${POSTGRES_URL}
+
+  # ---------------------------------------------------------------------------
+  # SQLite — query a local .db file
+  # ---------------------------------------------------------------------------
+  # Archived reference server (Python). The DB path is a plain path (not a
+  # secret), so passing it on the command line is fine.
+  # - name: sqlite
+  #   transport: stdio
+  #   command: uvx mcp-server-sqlite --db-path /absolute/path/to/database.db
+  #   env: {}
+
+  # ---------------------------------------------------------------------------
+  # Slack — post messages, read channels
+  # ---------------------------------------------------------------------------
+  # Archived reference server. Create a Slack bot, install it to the workspace,
+  # then supply the bot token and team id.
+  # - name: slack
+  #   transport: stdio
+  #   command: npx -y @modelcontextprotocol/server-slack
+  #   env:
+  #     SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+  #     SLACK_TEAM_ID: ${SLACK_TEAM_ID}
+
+  # ---------------------------------------------------------------------------
+  # Google Drive — search and read Drive files
+  # ---------------------------------------------------------------------------
+  # Archived reference server. Requires a Google OAuth flow: create OAuth
+  # credentials in Google Cloud, run the server's one-time `auth` step to
+  # produce a saved-credentials file, then point the env vars at both files.
+  # See the server README for the exact auth steps.
+  # - name: gdrive
+  #   transport: stdio
+  #   command: npx -y @modelcontextprotocol/server-gdrive
+  #   env:
+  #     GDRIVE_OAUTH_PATH: ${GDRIVE_OAUTH_PATH}
+  #     GDRIVE_CREDENTIALS_PATH: ${GDRIVE_CREDENTIALS_PATH}
+
+  # ---------------------------------------------------------------------------
+  # Filesystem — richer file ops over one or more allowed directories
+  # ---------------------------------------------------------------------------
+  # Actively maintained reference server. Overlaps with OryxOS's built-in
+  # read_file/write_file/list_dir; use it when an agent needs the extra
+  # operations (move, search, tree, edit) the built-ins don't provide. The
+  # allowed directories are passed as command args (paths, not secrets).
+  # - name: filesystem
+  #   transport: stdio
+  #   command: npx -y @modelcontextprotocol/server-filesystem /srv/agent-workspace /tmp/shared
+  #   env: {}
+
+  # ---------------------------------------------------------------------------
+  # Browser automation — Playwright (recommended) or Puppeteer
+  # ---------------------------------------------------------------------------
+  # Playwright: official, actively maintained by Microsoft. Drives a real
+  # browser (navigate, click, fill, screenshot, extract). No credentials.
+  # - name: playwright
+  #   transport: stdio
+  #   command: npx -y @playwright/mcp@latest
+  #   env: {}
+  #
+  # Puppeteer: archived reference server, Chromium only. Use Playwright above
+  # for new setups.
+  # - name: puppeteer
+  #   transport: stdio
+  #   command: npx -y @modelcontextprotocol/server-puppeteer
+  #   env: {}
+
+  # ---------------------------------------------------------------------------
+  # Web search — Brave Search
+  # ---------------------------------------------------------------------------
+  # Needs a Brave Search API key (free tier available at brave.com/search/api).
+  # Official vendor server: @brave/brave-search-mcp-server (verify the exact
+  # package name in Brave's docs). The archived reference server is shown here:
+  # - name: brave-search
+  #   transport: stdio
+  #   command: npx -y @modelcontextprotocol/server-brave-search
+  #   env:
+  #     BRAVE_API_KEY: ${BRAVE_API_KEY}
+
+  # ---------------------------------------------------------------------------
+  # Sentry — inspect issues and error events
+  # ---------------------------------------------------------------------------
+  # Sentry's official offering is now a REMOTE (HTTP) server at
+  # https://mcp.sentry.dev — NOT usable in the core phase (stdio only).
+  # The archived stdio server (Python) takes the auth token as a command
+  # argument, which ${ENV} does NOT expand, so it cannot receive the secret
+  # safely through this file. Left here for reference only; prefer the remote
+  # server once OryxOS gains http/sse transport support:
+  # - name: sentry
+  #   transport: stdio
+  #   command: uvx mcp-server-sentry --auth-token PUT_TOKEN_ON_HOST_NOT_HERE
+  #   env: {}
+
+  # ---------------------------------------------------------------------------
+  # Notion — read/update pages and databases
+  # ---------------------------------------------------------------------------
+  # Official server from Notion. It reads an HTTP header blob from env; the
+  # ${NOTION_TOKEN} placeholder IS expanded because it lives inside an `env:`
+  # value. Create an internal integration in Notion and share the target pages
+  # with it to get the token.
+  # - name: notion
+  #   transport: stdio
+  #   command: npx -y @notionhq/notion-mcp-server
+  #   env:
+  #     OPENAPI_MCP_HEADERS: '{"Authorization":"Bearer ${NOTION_TOKEN}","Notion-Version":"2022-06-28"}'

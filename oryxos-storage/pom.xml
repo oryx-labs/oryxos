@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.oryxos</groupId>
         <artifactId>oryxos</artifactId>
-        <version>0.1.0-RELEASE</version>
+        <version>0.1.1-RELEASE</version>
     </parent>
 
     <artifactId>oryxos-storage</artifactId>
@@ -35,17 +35,6 @@
         <dependency>
             <groupId>org.hibernate.orm</groupId>
             <artifactId>hibernate-community-dialects</artifactId>
-        </dependency>
-        <!-- 012-web-auth: 密码哈希用 DelegatingPasswordEncoder（{bcrypt} 前缀），单 jar，非 spring-boot-starter-security 全套 -->
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-crypto</artifactId>
-        </dependency>
-        <!-- 012-web-auth US3: @SuppressFBWarnings 注解（provided 不进运行时，跟 oryxos-web 一致） -->
-        <dependency>
-            <groupId>com.github.spotbugs</groupId>
-            <artifactId>spotbugs-annotations</artifactId>
-            <scope>provided</scope>
         </dependency>
     </dependencies>
 

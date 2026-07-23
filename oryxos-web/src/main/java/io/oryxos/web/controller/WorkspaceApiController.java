@@ -7,12 +7,19 @@ import io.oryxos.web.controller.dto.WriteFileRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -53,6 +60,8 @@ public class WorkspaceApiController {
   public ApiResponse<FileNode> tree() {
     List<FileNode> roots = new ArrayList<>();
     roots.add(treeOf(oryxosRoot.resolve("agents")));
+    roots.add(treeOf(oryxosRoot.resolve("skills"))); // 全局 Skill 库：每个 Skill 一个目录（SKILL.md + 可选脚本/子文档），供详情查看文件列表
+    roots.add(treeOf(oryxosRoot.resolve("output"))); // 第 32 节：Agent 产出的共享目录（研报/汇总/导出）
     roots.add(treeOf(oryxosRoot.resolve("archive")));
     // 根节点显示名取实际工作区目录名（自定义 oryxos.root 时不再写死 .oryxos）
     Path rootName = oryxosRoot.getFileName();
@@ -75,6 +84,44 @@ public class WorkspaceApiController {
     } catch (IOException e) {
       throw new UncheckedIOException("读取文件失败: " + path, e);
     }
+  }
+
+  /**
+   * 下载文件（二进制附件流）：把 Agent {@code output/} 里的研报 / 汇总 / 导出等产出下载到本地。防目录穿越同 {@link #file}：越界 → 400，不存在 →
+   * 404。区别于 {@link #file}（只返回文本、用于查看/编辑），这里带 {@code Content-Disposition:
+   * attachment}、按内容类型返回原始字节，任意文件类型都能下。
+   */
+  @GetMapping("/download")
+  public ResponseEntity<Resource> download(@RequestParam String path) {
+    Path target = oryxosRoot.resolve(path).normalize();
+    if (!target.startsWith(oryxosRoot)) {
+      throw new IllegalArgumentException("路径越界，拒绝访问: " + path); // → 400
+    }
+    if (!Files.isRegularFile(target)) {
+      throw new ResourceNotFoundException("文件不存在: " + path); // → 404
+    }
+    String filename = String.valueOf(target.getFileName());
+    // 文件名可能含中文/空格：用 RFC 5987 编码进 Content-Disposition，避免乱码或截断
+    String disposition =
+        ContentDisposition.attachment()
+            .filename(filename, StandardCharsets.UTF_8)
+            .build()
+            .toString();
+    MediaType contentType;
+    long length;
+    try {
+      String probed = Files.probeContentType(target);
+      contentType =
+          probed != null ? MediaType.parseMediaType(probed) : MediaType.APPLICATION_OCTET_STREAM;
+      length = Files.size(target);
+    } catch (IOException e) {
+      throw new UncheckedIOException("读取文件失败: " + path, e);
+    }
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+        .contentType(contentType)
+        .contentLength(length)
+        .body(new FileSystemResource(target));
   }
 
   /** 写文件文本；防目录穿越：越界 → 400。编辑 Agent 的 AGENT.md 走 update 即时生效，其余文件直接写盘。 */

@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.oryxos</groupId>
         <artifactId>oryxos</artifactId>
-        <version>0.1.0-RELEASE</version>
+        <version>0.1.1-RELEASE</version>
     </parent>
 
     <artifactId>oryxos-cli</artifactId>
@@ -59,11 +59,6 @@
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-        </dependency>
-        <!-- 012-web-auth: PasswordEncoder 接口（webUserService bean 装配需；bean 本身由 oryxos-web 的 PasswordEncoderFactory 声明） -->
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-crypto</artifactId>
         </dependency>
     </dependencies>
 

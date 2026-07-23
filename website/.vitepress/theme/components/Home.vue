@@ -199,7 +199,7 @@ const flowColumns = computed(() => [
   {
     id: 'capabilities',
     label: t('能力层', 'Capabilities'),
-    nodes: [t('工具体系 (9+)', 'Tool System (9+)'), t('记忆系统', 'Memory System'), 'MCP Client'],
+    nodes: [t('工具体系 (24+)', 'Tool System (24+)'), t('记忆系统', 'Memory System'), 'MCP Client'],
     highlight: false,
   },
   {
@@ -305,7 +305,7 @@ const flowColumns = computed(() => [
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
-          <span class="stat-num">9</span>
+          <span class="stat-num">24</span>
           <span class="stat-label">{{ t('内置工具', 'built-in tools') }}</span>
         </div>
         <div class="stat-divider"></div>

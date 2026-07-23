@@ -94,7 +94,9 @@ Map<String, ChatModel> providerMap = Map.of(
 
 **一个目录 = 一个 Agent**（借 Anthropic Agent Skills 的**目录形态**，但定义的是 Agent）：`.oryxos/agents/<name>/` 里 `AGENT.md` = frontmatter（这个 Agent 自己的 profile：name/description/provider/model/tools/notify_channels/schedules）+ 正文（任务指令）；外加可选 `skills/*.md`（子指令）、`scripts/`（脚本）、`REFERENCE.md`（参考）。`AgentLoader.deriveProfile(agentDir)` 把 frontmatter 派生成底座认识的 `Profile`——`.oryxos/profiles/` 取消，profile 就是 frontmatter。
 
-加载走**一个 Agent 内部的渐进式披露**：`AGENT.md` **正文**由 `ContextLoader`/`PromptBuilder` 注入 system prompt（跟 Bootstrap 文件 `AGENTS.md`/`SOUL.md`/`USER.md` 同一层，因为它就是这个 Agent）；目录里的**子指令 / 参考**用底座既有 `read_file` 按需读、**脚本**用 `shell` 按需跑——没有跨 Agent 的能力库、没有 `use_skill`、没有全局能力索引。**一个 Agent 目录永远不是一个可执行 Tool**，不进 `ToolRegistry`、不放在 `oryxos-tool` 模块里（详见 `docs/TechnicalSolution.md` §11）。
+加载走**一个 Agent 内部的渐进式披露**：`AGENT.md` **正文**由 `ContextLoader`/`PromptBuilder` 注入 system prompt（跟 Bootstrap 文件 `AGENTS.md`/`SOUL.md`/`USER.md` 同一层，因为它就是这个 Agent）；目录里的**参考**用底座既有 `read_file` 按需读、**脚本**用 `shell` 按需跑。**一个 Agent 目录永远不是一个可执行 Tool**，不进 `ToolRegistry`、不放在 `oryxos-tool` 模块里（详见 `docs/TechnicalSolution.md` §11）。
+
+> **修订（v1.2.0，第 32 节）：Skill 升级为全局共享能力库。** 原条款"没有跨 Agent 的能力库 / 没有 `use_skill` / 没有全局能力索引"**已废止**。现在 Skill 是**全局的**：存 `.oryxos/skills/<name>/SKILL.md`（frontmatter `name`/`description` + 正文=约束指令），由 `SkillService`/`SkillStore`/`SkillRegistry`（`oryxos-core`，与 Agent 那套同构）做 CRUD，`/api/v1/skills` 暴露。Agent 在 `AGENT.md` frontmatter 用 `skills: [名]` **按名引用**全局 Skill，`ContextLoader` 组装 system prompt 时把引用到的 Skill 正文**注入**（强约束产出，不靠模型自觉 `read_file`）；引用不存在的 Skill 记 WARN 跳过。生成 Agent 时作者模型会拿到 Skill 目录（名+描述）自动按需选，用户也可在前端显式勾选必启用的 Skill。**不变的边界**：Skill 仍不是可执行 Tool、不进 `ToolRegistry`；Skill 的加载/注入仍归 `oryxos-core` 的 `ContextLoader`（不进 `oryxos-tool`）。每个 Agent 目录里的 `skills/` 子目录不再是脚手架默认项——约束产出的规范优先用全局 Skill 库。
 
 ### 原则五：审计表 Day One 写入
 
@@ -123,7 +125,8 @@ OryxOS 启动后在当前目录创建 `.oryxos/` 工作区：
 
 ```
 .oryxos/
-├── agents/             # 每个子目录 = 一个 Agent（AGENT.md + 可选 skills/ scripts/ REFERENCE.md）
+├── agents/             # 每个子目录 = 一个 Agent（AGENT.md + 可选 scripts/ REFERENCE.md）
+├── skills/             # 全局 Skill 库：每个子目录 = 一个 Skill（SKILL.md），Agent 按名引用来约束产出（第 32 节）
 ├── memory/
 │   └── MEMORY.md       # 长期记忆（Agent 通过 save_memory 写入，不得手动修改）
 ├── sessions/           # 会话数据（已迁入 SQLite，此目录备用）

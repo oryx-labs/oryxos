@@ -72,6 +72,21 @@ CREATE TABLE IF NOT EXISTS task_executions (
 );
 CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions (task_id);
 
+-- agent_executions：Agent 维度的每次执行历史（第 32 节；手动触发 / 定时触发都记，含起止时间与状态）
+-- ended_at 为空表示"运行中"；成功失败都记，重启不丢，管理台按 Agent 回看。
+CREATE TABLE IF NOT EXISTS agent_executions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_name VARCHAR(255) NOT NULL,
+    source VARCHAR(32) NOT NULL,
+    session_id VARCHAR(512),
+    started_at TIMESTAMP NOT NULL,
+    ended_at TIMESTAMP,
+    success BOOLEAN,
+    error_message TEXT,
+    duration_ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_agent ON agent_executions (agent_name);
+
 -- memory_entries：长期记忆条目（SqliteMemoryStore 后端，22 节）
 -- scope=CORE 全量注入不截断；scope=ARCHIVAL 归档只带最近 N 条（查询 LIMIT，非删除）
 CREATE TABLE IF NOT EXISTS memory_entries (
@@ -115,27 +130,3 @@ CREATE TABLE IF NOT EXISTS sandbox_whitelist (
     created_at TIMESTAMP NOT NULL,
     UNIQUE (category, entry_value)
 );
-
--- web_users：管理台 Basic Auth 账号（012-web-auth）
--- 密码哈希存储（{bcrypt} 前缀 + hash），绝不存明文（宪法 VI 凭证不落地）
-CREATE TABLE IF NOT EXISTS web_users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username VARCHAR(64) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    enabled BOOLEAN NOT NULL DEFAULT 1,
-    created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_web_users_username ON web_users (username);
-
--- web_sessions：浏览器登录 session（012-web-auth US3）
--- session_id = UUID（cookie 值）；expires_at = created_at + session-ttl（默认 12h）
--- 惰性清：filter 查到过期行顺手 delete，无后台定时线程
-CREATE TABLE IF NOT EXISTS web_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id VARCHAR(64) NOT NULL UNIQUE,
-    username VARCHAR(64) NOT NULL,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_web_sessions_session ON web_sessions (session_id);

@@ -122,6 +122,7 @@ public class ProfileLoader {
         toNotifyChannels(asList(map.get("notify_channels"))),
         toSchedules(asList(map.get("schedules"))),
         asStringList(map.get("bootstrap")),
+        asStringList(map.get("skills")),
         toSettings(asMap(map.get("settings"))));
   }
 
