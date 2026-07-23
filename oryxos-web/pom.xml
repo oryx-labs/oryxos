@@ -25,6 +25,16 @@
             <groupId>io.oryxos</groupId>
             <artifactId>oryxos-core</artifactId>
         </dependency>
+        <!-- 012-web-auth: BasicAuthFilter / AuthStartupCheck 调 WebUserService（账号校验）；web→storage 单向，无循环 -->
+        <dependency>
+            <groupId>io.oryxos</groupId>
+            <artifactId>oryxos-storage</artifactId>
+        </dependency>
+        <!-- 012-web-auth fix: ProviderStartupCheck 调 ProvidersProperties.validate()（仅 serve/gateway 校验 api-key） -->
+        <dependency>
+            <groupId>io.oryxos</groupId>
+            <artifactId>oryxos-provider</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

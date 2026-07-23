@@ -131,11 +131,11 @@ public class OryxOsRuntime {
   ProviderRegistry providerRegistry(
       LlmProviderRepository repository, ProvidersProperties properties) {
     ProviderRegistry registry = new JpaProviderRegistry(repository);
-    properties.validate(); // config providers 缺失/非法仍启动即点名报错，不静默失败
+    // 012-web-auth fix: 不在此处做严格校验——user 命令（WebApplicationType.NONE）不依赖 LLM，
+    // 不应因 api-key 未配而阻断账号管理。严格校验由 ProviderStartupCheck 在 serve/gateway 做。
     for (ProvidersProperties.ProviderConfig c : properties.providers()) {
-      if (!registry.exists(c.name())) {
-        registry.save(new ProviderDef(c.name(), c.apiKey(), c.baseUrl(), null));
-      }
+      // 无条件 save（JpaProviderRegistry.save 本身是 upsert），确保 config 变更同步到 DB
+      registry.save(new ProviderDef(c.name(), c.apiKey(), c.baseUrl(), null));
     }
     return registry;
   }
