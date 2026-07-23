@@ -50,6 +50,10 @@ import io.oryxos.storage.ScheduledTaskRepository;
 import io.oryxos.storage.SessionRepository;
 import io.oryxos.storage.TaskExecutionRepository;
 import io.oryxos.storage.ToolInvocationRepository;
+import io.oryxos.storage.WebSessionRepository;
+import io.oryxos.storage.WebSessionService;
+import io.oryxos.storage.WebUserRepository;
+import io.oryxos.storage.WebUserService;
 import io.oryxos.tool.ToolRegistry;
 import io.oryxos.tool.builtin.FileTools;
 import io.oryxos.tool.builtin.HttpTools;
@@ -82,6 +86,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.client.RestClient;
 
 /**
@@ -359,6 +364,24 @@ public class OryxOsRuntime {
   @Bean
   SessionManager sessionManager(SessionRepository repository) {
     return new JpaSessionManager(repository);
+  }
+
+  /** 012-web-auth：管理台 Basic Auth 账号管理（密码哈希由 PasswordEncoderFactory 的 bean 提供）。 */
+  @Bean
+  WebUserService webUserService(WebUserRepository repository, PasswordEncoder passwordEncoder) {
+    return new WebUserService(repository, passwordEncoder);
+  }
+
+  /**
+   * 012-web-auth US3：浏览器登录 session 管理（create/findValid 惰性清过期/delete）。ttl 走 @Value 读字面量，避免 cli 引
+   * oryxos-web 的 WebAuthProperties 类。
+   */
+  @Bean
+  WebSessionService webSessionService(
+      WebSessionRepository repository,
+      @org.springframework.beans.factory.annotation.Value("${oryxos.web.auth.session-ttl:12h}")
+          java.time.Duration sessionTtl) {
+    return new WebSessionService(repository, sessionTtl);
   }
 
   @Bean

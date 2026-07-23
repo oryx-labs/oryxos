@@ -1,6 +1,42 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import logoUrl from './assets/logo.svg'
+import LoginView from './views/LoginView.vue'
+
+// —— 012-web-auth US3：登录守卫 —— 未登录先查 /api/v1/auth/me；登录页 LoginView 调 /auth/login
+const auth = reactive({ checking: true, username: null })
+async function checkAuth() {
+  auth.checking = true
+  try {
+    const res = await fetch('/api/v1/auth/me')
+    const body = await res.json()
+    if (res.status === 200 && body.code === 0) {
+      auth.username = body.data?.username || null
+      loadOverview()
+    } else {
+      auth.username = null
+    }
+  } catch (e) {
+    auth.username = null
+  } finally {
+    auth.checking = false
+  }
+}
+
+function onLogined(username) {
+  auth.username = username
+  loadOverview()
+}
+
+async function logout() {
+  try {
+    await fetch('/api/v1/auth/logout', { method: 'POST' })
+  } catch (e) {
+    /* 忽略，仍跳登录页 */
+  }
+  auth.username = null
+  active.value = 'overview'
+}
 
 // 顶层：概览 / Agent 列表 / 定时任务。「OS 运行时」下收纳 Provider/Tool/Sandbox/长期记忆/会话——
 // 这些都是底座本身的运行时状态，跟业务 Agent 管理分层展示（31 节：侧边栏重分组）。
@@ -30,33 +66,11 @@ const state = reactive({}) // key -> {loading, error, data}
 // 当前激活页（只渲染这一页，避免 v-show + v-for 的块补丁陷阱导致切不动）
 const current = computed(() => NAV.find((n) => n.key === active.value) ?? NAV[0])
 
-// 运行状态（原「运行状态」独立页，31 节并入概览展示）：应用名 + 已配置 Provider
-const runtimeInfo = ref({ loading: true, error: null, data: null })
-async function loadRuntimeInfo() {
-  runtimeInfo.value = { loading: true, error: null, data: null }
-  try {
-    const res = await fetch('/api/v1/info')
-    const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '加载失败')
-    runtimeInfo.value = { loading: false, error: null, data: body.data }
-  } catch (e) {
-    runtimeInfo.value = { loading: false, error: e.message, data: null }
-  }
-}
-loadRuntimeInfo()
-
-// 概览页数据：当前为静态预览，后续逐步接入实时端点（TODO 标注了各自的动态来源）
+// 概览页静态文案；统计卡和运行状态由 loadOverview 从实时端点加载。
 const overview = {
   tagline: '装在你自己基础设施上的分布式 AI Agent 操作系统 —— 统一底座运行多个业务 Agent',
   status: '运行中',
   version: 'v0.1.0 · 开发预览',
-  // TODO 动态化：agents←GET /profiles，tools←GET /tools，sessions←会话统计端点，providers←GET /info
-  stats: [
-    { label: 'Agent', value: '3', hint: '已配置的 Profile' },
-    { label: '内置 Tool', value: '14', hint: '文件 / Shell / HTTP / 记忆 …' },
-    { label: '活跃会话', value: '—', hint: '待接入实时统计' },
-    { label: 'Provider', value: '1', hint: 'deepseek 已连通' },
-  ],
   capabilities: [
     { name: '对接 LLM', desc: '显式 Provider 映射，多家协议统一' },
     { name: 'ReAct 循环', desc: '自实现推理–行动循环，完全可控' },
@@ -66,6 +80,62 @@ const overview = {
   ],
   stack: ['Java 21', 'Spring Boot 3.x', 'Spring AI Alibaba', 'SQLite', 'Picocli'],
 }
+
+const overviewState = ref({ loading: true, error: null, data: null })
+const overviewStats = computed(() => {
+  const data = overviewState.value.data
+  const fallback = overviewState.value.loading ? '…' : '—'
+  return [
+    { label: 'Agent', value: data?.agentCount ?? fallback, hint: '已配置的 Profile' },
+    { label: 'Tool', value: data?.toolCount ?? fallback, hint: '当前注册的 Tool' },
+    { label: '活跃会话', value: data?.activeSessionCount ?? fallback, hint: '状态为 active' },
+    { label: 'Provider', value: data?.providerCount ?? fallback, hint: '已配置的 Provider' },
+  ]
+})
+const overviewEmpty = computed(() => {
+  const data = overviewState.value.data
+  return data
+    && data.agentCount === 0
+    && data.toolCount === 0
+    && data.activeSessionCount === 0
+    && data.providerCount === 0
+})
+
+async function fetchOverviewData(path) {
+  const res = await fetch(path)
+  const body = await res.json()
+  if (!res.ok || body.code !== 0) throw new Error(body.message || '概览数据加载失败')
+  return body.data
+}
+
+async function loadOverview() {
+  overviewState.value = { loading: true, error: null, data: null }
+  try {
+    const [profiles, tools, activeSessions, info] = await Promise.all([
+      fetchOverviewData('/api/v1/profiles'),
+      fetchOverviewData('/api/v1/tools'),
+      fetchOverviewData('/api/v1/sessions?status=active'),
+      fetchOverviewData('/api/v1/info'),
+    ])
+    const providers = Array.isArray(info?.providers) ? info.providers : []
+    overviewState.value = {
+      loading: false,
+      error: null,
+      data: {
+        agentCount: Array.isArray(profiles) ? profiles.length : 0,
+        toolCount: Array.isArray(tools) ? tools.length : 0,
+        activeSessionCount: Array.isArray(activeSessions) ? activeSessions.length : 0,
+        providerCount: providers.length,
+        application: info?.application,
+        providers,
+      },
+    }
+  } catch (e) {
+    overviewState.value = { loading: false, error: e.message, data: null }
+  }
+}
+
+checkAuth()
 
 // 表格列定义（tools / providers / schedules / sessions）。放在 setup 里，模板直接可用。
 function cols(key) {
@@ -112,7 +182,7 @@ function refresh() {
   if (key === 'notify-channels') { loadNotifyChannels(); return }
   if (key === 'providers') { loadProviders(); return }
   if (key === 'whitelist') { loadWhitelist(); return }
-  if (key === 'overview') { loadRuntimeInfo(); return }
+  if (key === 'overview') { loadOverview(); return }
   if (NAV.find((n) => n.key === key)?.path) load(key)
 }
 
@@ -662,7 +732,12 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
 </script>
 
 <template>
-  <div class="layout">
+  <!-- 012-web-auth US3：未登录先显登录页；检查中显骨架屏（避免突兀的"加载中"文字） -->
+  <div v-if="auth.checking" class="boot-splash" aria-busy="true" aria-live="polite">
+    <div class="boot-spinner" aria-hidden="true"></div>
+  </div>
+  <LoginView v-else-if="!auth.username" @logined="onLogined" />
+  <div v-else class="layout">
     <aside class="nav">
       <div class="brand">
         <img :src="logoUrl" alt="OryxOS" class="logo" />
@@ -694,30 +769,45 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
         </button>
       </template>
 
-      <div class="readonly">管理台</div>
+      <div class="auth-foot">
+        <span class="mono">{{ auth.username }}</span>
+        <button class="btn" @click="logout">登出</button>
+      </div>
     </aside>
 
     <main class="content">
       <!-- 只渲染当前激活页；active 变 → current/整块重算并重渲染 -->
       <div :key="active">
-        <!-- 概览：静态预览数据（后续逐步动态化） -->
+        <!-- 概览：四个运行时端点并行加载统计数据 -->
         <template v-if="active === 'overview'">
           <div class="hero">
             <div class="hero-top">
               <h2 class="hero-title">OryxOS</h2>
               <span class="badge"><span class="pulse" />{{ overview.status }}</span>
               <span class="ver mono">{{ overview.version }}</span>
+              <button
+                class="btn overview-refresh"
+                :disabled="overviewState.loading"
+                @click="loadOverview"
+              >
+                {{ overviewState.loading ? '加载中…' : '刷新' }}
+              </button>
             </div>
             <p class="hero-sub">{{ overview.tagline }}</p>
           </div>
 
           <div class="cards">
-            <div v-for="s in overview.stats" :key="s.label" class="card">
+            <div v-for="s in overviewStats" :key="s.label" class="card">
               <div class="card-val">{{ s.value }}</div>
               <div class="card-label">{{ s.label }}</div>
               <div class="card-hint">{{ s.hint }}</div>
             </div>
           </div>
+          <p v-if="overviewState.loading" class="empty" role="status">正在加载概览数据…</p>
+          <p v-else-if="overviewState.error" class="error" role="alert">
+            概览数据加载失败：{{ overviewState.error }}
+          </p>
+          <p v-else-if="overviewEmpty" class="empty">（当前没有已配置的运行时资源）</p>
 
           <h3 class="sec">五大核心能力</h3>
           <div class="caps">
@@ -736,17 +826,17 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
           </div>
 
           <h3 class="sec">运行状态</h3>
-          <p v-if="runtimeInfo.loading" class="empty">加载中…</p>
-          <p v-else-if="runtimeInfo.error" class="error">出错：{{ runtimeInfo.error }}</p>
-          <div v-else-if="runtimeInfo.data">
-            <p>应用：<b>{{ runtimeInfo.data.application }}</b></p>
+          <p v-if="overviewState.loading" class="empty">加载中…</p>
+          <p v-else-if="overviewState.error" class="error">出错：{{ overviewState.error }}</p>
+          <div v-else-if="overviewState.data">
+            <p>应用：<b>{{ overviewState.data.application || '—' }}</b></p>
             <p>Provider：
-              <span v-for="p in runtimeInfo.data.providers" :key="p" class="tag">{{ p }}</span>
-              <span v-if="!runtimeInfo.data.providers?.length" class="empty">（无）</span>
+              <span v-for="p in overviewState.data.providers" :key="p" class="tag">{{ p }}</span>
+              <span v-if="!overviewState.data.providers.length" class="empty">（无）</span>
             </p>
           </div>
 
-          <p class="note mono">当前为静态预览数据，将逐步接入实时端点（Agent/Tool/会话/Provider）。</p>
+          <p class="note mono">统计数据来自 Profile / Tool / 活跃会话 / Info 实时端点。</p>
         </template>
 
         <template v-else>
@@ -1204,7 +1294,8 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
 .nav-group { display: flex; align-items: center; justify-content: space-between; }
 .chevron { color: var(--text-3); font-size: 11px; }
 .nav-sub { padding-left: 22px; font-size: 13px; }
-.readonly { margin-top: auto; color: var(--text-3); font-size: 12px; padding: 8px; }
+.auth-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-3); font-size: 12px; padding: 8px; }
+.auth-foot .mono { color: var(--text-2); }
 .content { flex: 1; padding: 24px 32px; overflow-x: auto; }
 h2 { font-weight: 600; margin: 0 0 16px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1241,6 +1332,7 @@ th { color: var(--text-2); font-weight: 500; }
 .hero { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 24px; }
 .hero-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .hero-title { font-size: 28px; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+.overview-refresh { margin-left: auto; margin-right: 0; }
 .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ok); background: rgba(34, 197, 94, 0.12); padding: 3px 10px; border-radius: 999px; }
 .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 0 rgba(34,197,94,0.6); animation: pulse 1.8s infinite; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); } 70% { box-shadow: 0 0 0 6px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
@@ -1295,4 +1387,23 @@ th { color: var(--text-2); font-weight: 500; }
 .chat-input { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 
 @media (max-width: 640px) { .layout { flex-direction: column; } .nav { width: auto; flex-direction: row; flex-wrap: wrap; } .readonly { display: none; } .ws { flex-direction: column; } .ws-tree { width: auto; } }
+
+/* 启动闪屏：黑底居中 spinner，与登录页/管理台同色调，避免突兀文字 */
+.boot-splash {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.boot-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: boot-spin 0.7s linear infinite;
+}
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .boot-spinner { animation: none; } }
 </style>

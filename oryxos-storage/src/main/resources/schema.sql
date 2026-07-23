@@ -115,3 +115,27 @@ CREATE TABLE IF NOT EXISTS sandbox_whitelist (
     created_at TIMESTAMP NOT NULL,
     UNIQUE (category, entry_value)
 );
+
+-- web_users：管理台 Basic Auth 账号（012-web-auth）
+-- 密码哈希存储（{bcrypt} 前缀 + hash），绝不存明文（宪法 VI 凭证不落地）
+CREATE TABLE IF NOT EXISTS web_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username VARCHAR(64) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_web_users_username ON web_users (username);
+
+-- web_sessions：浏览器登录 session（012-web-auth US3）
+-- session_id = UUID（cookie 值）；expires_at = created_at + session-ttl（默认 12h）
+-- 惰性清：filter 查到过期行顺手 delete，无后台定时线程
+CREATE TABLE IF NOT EXISTS web_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id VARCHAR(64) NOT NULL UNIQUE,
+    username VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_web_sessions_session ON web_sessions (session_id);
