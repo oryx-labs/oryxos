@@ -53,30 +53,33 @@ public class AuthApiController {
   /** 登录：验账密 → 建 session → 设 cookie。失败 401（"Invalid username or password"，不区分原因防枚举）。 */
   @PostMapping("/login")
   public ApiResponse<AuthMeView> login(
-      @RequestBody LoginRequest request, HttpServletResponse response) {
-    if (request == null
-        || request.username() == null
-        || request.password() == null
-        || request.username().isBlank()
-        || request.password().isBlank()) {
+      @RequestBody LoginRequest loginRequest,
+      HttpServletRequest request,
+      HttpServletResponse response) {
+    if (loginRequest == null
+        || loginRequest.username() == null
+        || loginRequest.password() == null
+        || loginRequest.username().isBlank()
+        || loginRequest.password().isBlank()) {
       response.setStatus(HttpStatus.BAD_REQUEST.value());
       return ApiResponse.error(
           HttpStatus.BAD_REQUEST.value(), "username and password are required");
     }
-    if (!userService.verify(request.username(), request.password())) {
+    if (!userService.verify(loginRequest.username(), loginRequest.password())) {
       response.setStatus(HttpStatus.UNAUTHORIZED.value());
       return ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Invalid username or password");
     }
-    WebSession session = sessionService.create(request.username());
-    response.addHeader(HttpHeaders.SET_COOKIE, buildCookie(session.getSessionId(), -1));
-    return ApiResponse.ok(new AuthMeView(request.username()));
+    WebSession session = sessionService.create(loginRequest.username());
+    response.addHeader(
+        HttpHeaders.SET_COOKIE, buildCookie(session.getSessionId(), -1, request.isSecure()));
+    return ApiResponse.ok(new AuthMeView(loginRequest.username()));
   }
 
   /** 登出：清当前 session + 清 cookie。幂等（无 session 也成功）。 */
   @PostMapping("/logout")
   public ApiResponse<Void> logout(HttpServletRequest request, HttpServletResponse response) {
     findSessionId(request).ifPresent(sessionService::delete);
-    response.addHeader(HttpHeaders.SET_COOKIE, buildCookie("", 0));
+    response.addHeader(HttpHeaders.SET_COOKIE, buildCookie("", 0, request.isSecure()));
     return ApiResponse.ok(null);
   }
 
@@ -109,12 +112,13 @@ public class AuthApiController {
         .findFirst();
   }
 
-  /** 构 Set-Cookie 头。maxAge=0 表示清 cookie。 */
-  private static String buildCookie(String sessionId, int maxAge) {
+  /** 构 Set-Cookie 头。maxAge=0 表示清 cookie；HTTPS 请求附加 Secure。 */
+  private static String buildCookie(String sessionId, int maxAge, boolean secure) {
     ResponseCookie cookie =
         ResponseCookie.from(SESSION_COOKIE, sessionId)
             .path("/")
             .httpOnly(true)
+            .secure(secure)
             .sameSite("Strict")
             .maxAge(maxAge)
             .build();
