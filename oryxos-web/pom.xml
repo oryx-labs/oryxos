@@ -25,9 +25,19 @@
             <groupId>io.oryxos</groupId>
             <artifactId>oryxos-core</artifactId>
         </dependency>
+        <!-- 012-web-auth: BasicAuthFilter / AuthStartupCheck 调 WebUserService（账号校验）；web→storage 单向，无循环 -->
+        <dependency>
+            <groupId>io.oryxos</groupId>
+            <artifactId>oryxos-storage</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- 012-web-auth: 声明 PasswordEncoder bean（DelegatingPasswordEncoder，{bcrypt} 前缀）；单 jar，非 starter-security 全套 -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
         </dependency>
         <!-- OpenAPI / Swagger UI -->
         <dependency>
