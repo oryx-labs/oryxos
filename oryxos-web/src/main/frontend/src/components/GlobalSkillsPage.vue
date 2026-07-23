@@ -57,7 +57,6 @@ async function upload() {
     if (fileInput.value) fileInput.value.value = ''
     success.value = `公共 Skill「${created.skill.name}」已安装。`
     await load()
-    await open(created.skill.directoryName)
   } catch (reason) {
     error.value = messageOf(reason, '公共 Skill 安装失败')
   } finally {

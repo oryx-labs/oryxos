@@ -1,6 +1,6 @@
 const API_ROOT = '/api/v1/agents'
 
-async function request(url, options) {
+export async function request(url, options) {
   const response = await fetch(url, options)
   let envelope
   try {

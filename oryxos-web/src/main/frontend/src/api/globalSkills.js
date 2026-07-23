@@ -1,18 +1,6 @@
-const API_ROOT = '/api/v1/skills'
+import { request } from './skills.js'
 
-async function request(url, options) {
-  const response = await fetch(url, options)
-  let envelope
-  try {
-    envelope = await response.json()
-  } catch {
-    throw new Error('服务返回了无法解析的响应')
-  }
-  if (!response.ok || envelope?.code !== 0) {
-    throw new Error(envelope?.message || '公共 Skill 请求失败')
-  }
-  return envelope.data
-}
+const API_ROOT = '/api/v1/skills'
 
 function memberUrl(skillName) {
   return `${API_ROOT}/${encodeURIComponent(skillName)}`

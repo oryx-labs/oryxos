@@ -267,7 +267,8 @@ class AgentLifecycleServiceTest {
             "deepseek",
             "deepseek",
             "deepseek-chat",
-            coordinator);
+            coordinator,
+            null);
     Map<String, String> files = new LinkedHashMap<>();
     files.put("AGENT.md", MD);
     files.put("skills/weather/.oryxos-origin.yml", "forged");
@@ -291,7 +292,8 @@ class AgentLifecycleServiceTest {
             "deepseek",
             "deepseek",
             "deepseek-chat",
-            coordinator);
+            coordinator,
+            null);
 
     assertThrows(
         IllegalArgumentException.class,
@@ -316,7 +318,8 @@ class AgentLifecycleServiceTest {
             "deepseek",
             "deepseek",
             "deepseek-chat",
-            coordinator);
+            coordinator,
+            null);
 
     coordinated.create("demo", "x");
     coordinated.update("demo", MD);

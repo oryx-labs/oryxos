@@ -171,7 +171,8 @@ class WorkspaceApiControllerTest {
             "mock",
             "mock",
             "mock",
-            realCoordinator) {
+            realCoordinator,
+            null) {
           @Override
           public Path writeManagedSkillFile(String name, String relativePath, String content) {
             writerEntered.countDown();

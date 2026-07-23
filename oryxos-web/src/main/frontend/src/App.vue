@@ -64,7 +64,6 @@ const runtimeKeys = new Set(RUNTIME_NAV.map((n) => n.key))
 const runtimeOpen = ref(false) // OS 运行时分组展开状态
 
 const active = ref('overview')
-const skillsPageVersion = ref(0)
 const state = reactive({}) // key -> {loading, error, data}
 // 当前激活页（只渲染这一页，避免 v-show + v-for 的块补丁陷阱导致切不动）
 const current = computed(() => NAV.find((n) => n.key === active.value) ?? NAV[0])
@@ -181,7 +180,6 @@ function select(key) {
 // 刷新当前页的列表：各页复用各自的加载函数（agents / notify-channels / 概览 / 其余按 path 的通用列表）
 function refresh() {
   const key = active.value
-  if (key === 'skills') { skillsPageVersion.value += 1; return }
   if (key === 'agents') { loadAgents(); return }
   if (key === 'notify-channels') { loadNotifyChannels(); return }
   if (key === 'providers') { loadProviders(); return }
@@ -849,7 +847,7 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
             <button v-if="active !== 'skills'" class="btn" @click="refresh()">刷新</button>
           </div>
 
-          <GlobalSkillsPage v-if="active === 'skills'" :key="skillsPageVersion" />
+          <GlobalSkillsPage v-if="active === 'skills'" />
 
           <!-- 知识库：占位空列表（待接入知识库端点） -->
           <table v-else-if="active === 'knowledge'">

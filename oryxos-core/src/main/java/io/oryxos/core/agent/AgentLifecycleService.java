@@ -137,30 +137,6 @@ public class AgentLifecycleService {
         null);
   }
 
-  /** 生产构造器：生命周期变更与请求期 Skill 读取共用同一 Agent 级协调器。 */
-  public AgentLifecycleService(
-      AgentLoader agentLoader,
-      ProfileRegistry profileRegistry,
-      AgentScheduler agentScheduler,
-      AgentStore agentStore,
-      ProviderService providerService,
-      String defaultProvider,
-      String authorProvider,
-      String authorModel,
-      AgentSkillCoordinator skillCoordinator) {
-    this(
-        agentLoader,
-        profileRegistry,
-        agentScheduler,
-        agentStore,
-        providerService,
-        defaultProvider,
-        authorProvider,
-        authorModel,
-        skillCoordinator,
-        null);
-  }
-
   /** Production constructor with public Skill association cleanup on Agent deletion. */
   public AgentLifecycleService(
       AgentLoader agentLoader,
