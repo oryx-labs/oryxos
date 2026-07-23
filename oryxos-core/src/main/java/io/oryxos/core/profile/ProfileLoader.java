@@ -38,10 +38,14 @@ public class ProfileLoader {
     this(profilesDir, knownProviders, System::getenv);
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification =
+          "31 节动态 provider：knownProviders 可为注册表实时视图，故存引用而非 Set.copyOf 拍照——运行时新增的 provider 才能立即对派生校验可见")
   public ProfileLoader(
       Path profilesDir, Set<String> knownProviders, UnaryOperator<String> envLookup) {
     this.profilesDir = profilesDir;
-    this.knownProviders = Set.copyOf(knownProviders);
+    this.knownProviders = knownProviders;
     this.envLookup = envLookup;
   }
 

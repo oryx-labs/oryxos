@@ -54,7 +54,10 @@ public class WorkspaceApiController {
     List<FileNode> roots = new ArrayList<>();
     roots.add(treeOf(oryxosRoot.resolve("agents")));
     roots.add(treeOf(oryxosRoot.resolve("archive")));
-    return ApiResponse.ok(FileNode.dir(".oryxos", "", roots));
+    // 根节点显示名取实际工作区目录名（自定义 oryxos.root 时不再写死 .oryxos）
+    Path rootName = oryxosRoot.getFileName();
+    return ApiResponse.ok(
+        FileNode.dir(rootName != null ? rootName.toString() : oryxosRoot.toString(), "", roots));
   }
 
   /** 读文件文本；防目录穿越：越界 → 400，不存在 → 404。 */

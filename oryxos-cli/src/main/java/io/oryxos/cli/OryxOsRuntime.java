@@ -16,9 +16,14 @@ import io.oryxos.core.agent.WorkspaceWatcher;
 import io.oryxos.core.auth.AdminAuthAuditStore;
 import io.oryxos.core.context.ContextLoader;
 import io.oryxos.core.memory.MemoryService;
+import io.oryxos.core.notify.NotifyChannelRegistry;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.LlmCallAuditor;
+import io.oryxos.core.provider.ProviderDef;
+import io.oryxos.core.provider.ProviderRegistry;
 import io.oryxos.core.provider.ProviderService;
+import io.oryxos.core.sandbox.SandboxWhitelist.Category;
+import io.oryxos.core.sandbox.SandboxWhitelistStore;
 import io.oryxos.core.session.SessionManager;
 import io.oryxos.memory.LongTermMemoryStore;
 import io.oryxos.memory.MarkdownMemoryStore;
@@ -33,11 +38,17 @@ import io.oryxos.provider.ToolSchemaAdapter;
 import io.oryxos.storage.AdminAuthEventRepository;
 import io.oryxos.storage.JpaAdminAuthAuditStore;
 import io.oryxos.storage.JpaLlmCallAuditor;
+import io.oryxos.storage.JpaNotifyChannelRegistry;
+import io.oryxos.storage.JpaProviderRegistry;
+import io.oryxos.storage.JpaSandboxWhitelistStore;
 import io.oryxos.storage.JpaScheduledTaskStore;
 import io.oryxos.storage.JpaSessionManager;
 import io.oryxos.storage.JpaToolInvocationAuditor;
 import io.oryxos.storage.LlmCallRepository;
+import io.oryxos.storage.LlmProviderRepository;
 import io.oryxos.storage.MemoryEntryRepository;
+import io.oryxos.storage.NotifyChannelRepository;
+import io.oryxos.storage.SandboxWhitelistRepository;
 import io.oryxos.storage.ScheduledTaskRepository;
 import io.oryxos.storage.SessionRepository;
 import io.oryxos.storage.TaskExecutionRepository;
@@ -64,8 +75,8 @@ import io.oryxos.tool.sandbox.ShellSandboxProperties;
 import io.oryxos.tool.sandbox.WhitelistSandbox;
 import io.oryxos.tool.web.DuckDuckGoSearchProvider;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
@@ -106,10 +117,18 @@ public class OryxOsRuntime {
     return Path.of(oryxosRootProp);
   }
 
+  /** 31 节：Provider 动态注册表（SQLite）。启动把 config 的 oryxos.providers 播种进 DB（库里没有才写），之后以 DB 为准。 */
   @Bean
-  Map<String, ChatModel> providerMap(ProvidersProperties properties) {
-    properties.validate(); // 缺失/非法配置启动即点名报错，不静默失败
-    return new ProviderChatModelFactory().build(properties);
+  ProviderRegistry providerRegistry(
+      LlmProviderRepository repository, ProvidersProperties properties) {
+    ProviderRegistry registry = new JpaProviderRegistry(repository);
+    properties.validate(); // config providers 缺失/非法仍启动即点名报错，不静默失败
+    for (ProvidersProperties.ProviderConfig c : properties.providers()) {
+      if (!registry.exists(c.name())) {
+        registry.save(new ProviderDef(c.name(), c.apiKey(), c.baseUrl(), null));
+      }
+    }
+    return registry;
   }
 
   @Bean
@@ -128,14 +147,42 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  ProviderService providerService(Map<String, ChatModel> providerMap, LlmCallAuditor auditor) {
-    return new SpringAiProviderServiceImpl(providerMap, new ToolSchemaAdapter(), auditor);
+  ProviderService providerService(ProviderRegistry providerRegistry, LlmCallAuditor auditor) {
+    // 动态解析（31 节）：按名从注册表取参数、经工厂即时建/缓存 ChatModel（宪法 III 显式映射，只是运行时可变）
+    ProviderChatModelFactory factory = new ProviderChatModelFactory();
+    return new SpringAiProviderServiceImpl(
+        providerRegistry,
+        def -> factory.buildOne(def.name(), def.apiKey(), def.baseUrl()),
+        new ToolSchemaAdapter(),
+        auditor);
   }
 
   @Bean
-  AgentLoader agentLoader(Map<String, ChatModel> providerMap, Map<String, OryxTool> tools) {
-    // 29 节：一个目录 = 一个 Agent——扫 .oryxos/agents/ 逐个 AGENT.md 派生 Profile
-    return new AgentLoader(oryxosRoot().resolve("agents"), providerMap.keySet(), tools.keySet());
+  AgentLoader agentLoader(ProviderRegistry providerRegistry, Map<String, OryxTool> tools) {
+    // 29 节：一个目录 = 一个 Agent——扫 .oryxos/agents/ 逐个 AGENT.md 派生 Profile。
+    // provider 名单用注册表实时视图：运行时新增 provider 后，新建/改的 Agent 立刻能引用它（不拍照）。
+    return new AgentLoader(
+        oryxosRoot().resolve("agents"), liveProviderNames(providerRegistry), tools.keySet());
+  }
+
+  /** provider 名的实时视图（backed by 注册表）：增删 provider 立即反映到 Agent 派生校验。 */
+  private static java.util.Set<String> liveProviderNames(ProviderRegistry registry) {
+    return new java.util.AbstractSet<>() {
+      @Override
+      public boolean contains(Object o) {
+        return (o instanceof String) && registry.exists((String) o);
+      }
+
+      @Override
+      public java.util.Iterator<String> iterator() {
+        return registry.list().stream().map(ProviderDef::name).iterator();
+      }
+
+      @Override
+      public int size() {
+        return registry.list().size();
+      }
+    };
   }
 
   @Bean
@@ -201,16 +248,35 @@ public class OryxOsRuntime {
     return new ContextLoader(oryxosRoot());
   }
 
+  /** 31 节：Sandbox 白名单持久化（SQLite）。运行时增删写穿落库、重启保留。 */
+  @Bean
+  SandboxWhitelistStore sandboxWhitelistStore(SandboxWhitelistRepository repository) {
+    return new JpaSandboxWhitelistStore(repository);
+  }
+
   @Bean
   WhitelistSandbox sandbox(
+      SandboxWhitelistStore whitelistStore,
       FileSandboxProperties fileProps,
       ShellSandboxProperties shellProps,
       HttpSandboxProperties httpProps) {
-    // 24 节：真正的白名单校验（宪法 VI 第一档）。三块白名单来自 application.yml，空列表 = deny-all。
-    // PermissiveSandbox 保留在 tool 模块留档（Demo 验证专用），生产装配不再引用。
+    // 24 节：真正的白名单校验（宪法 VI 第一档）。空列表 = deny-all。
     // 返回具体类型（而非 Sandbox 接口）：同一实例既是校验墙 Sandbox 又是可管理白名单 SandboxWhitelist，
     // 具体类型让 Spring 同时按两个接口装配（工具注 Sandbox，Web 管理端点注 SandboxWhitelist）。
-    return new WhitelistSandbox(fileProps, shellProps, httpProps);
+    // 31 节：从库恢复已落库的三类白名单；运行时增删由 WhitelistSandbox 写穿落库。
+    WhitelistSandbox whitelist = new WhitelistSandbox(whitelistStore);
+    // 启动播种：把 config/application.yml 的三类白名单插进来（经 add → 幂等 + 落库；库里已有的不重复）。
+    // 通过 add 而非直接写库，确保 FILE 的规范形（绝对路径）与 list/删除对齐。
+    nullToEmpty(fileProps.allowedPaths()).forEach(p -> whitelist.add(Category.FILE, p));
+    nullToEmpty(shellProps.allowedCommands()).forEach(c -> whitelist.add(Category.SHELL, c));
+    nullToEmpty(httpProps.allowedDomains()).forEach(d -> whitelist.add(Category.HTTP, d));
+    // 工作区根永远是 Agent 的家：随 oryxos.root 自动纳入文件白名单（幂等 + 落库）。
+    whitelist.add(Category.FILE, oryxosRootProp);
+    return whitelist;
+  }
+
+  private static List<String> nullToEmpty(List<String> list) {
+    return list == null ? List.of() : list;
   }
 
   @Bean
@@ -243,7 +309,11 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  ToolRegistry toolRegistry(Sandbox sandbox, RestClient restClient, MemoryService memoryService) {
+  ToolRegistry toolRegistry(
+      Sandbox sandbox,
+      RestClient restClient,
+      MemoryService memoryService,
+      NotifyChannelRegistry notifyChannelRegistry) {
     ToolRegistry registry = new ToolRegistry();
     // 内置工具走 @Tool 注解管道（schema 自动生成，宪法 II 第二件事）
     registry.registerAnnotated(new FileTools(sandbox)); // read/write/list/edit/grep/glob
@@ -260,7 +330,7 @@ public class OryxOsRuntime {
             "wecom", new WeComNotifyAdapter(restClient),
             "feishu", new FeishuNotifyAdapter(restClient),
             "dingtalk", new DingTalkNotifyAdapter(restClient));
-    registry.register(new NotifyTools(notifyAdapters, sandbox));
+    registry.register(new NotifyTools(notifyAdapters, sandbox, notifyChannelRegistry));
     // 记忆工具：save_memory / recall_memory（补齐 20 节预留的两工具面），只认门面对后端无感
     registry.registerAnnotated(new MemoryTools(memoryService));
     // MCP：失联的 server 只 WARN 跳过，不拖垮启动
@@ -300,9 +370,17 @@ public class OryxOsRuntime {
   }
 
   @Bean
+  NotifyChannelRegistry notifyChannelRegistry(NotifyChannelRepository repository) {
+    return new JpaNotifyChannelRegistry(repository);
+  }
+
+  @Bean
   AgentService agentService(
-      ProfileRegistry profileRegistry, ReActLoop reActLoop, SessionManager sessionManager) {
-    return new AgentService(profileRegistry, reActLoop, sessionManager);
+      ProfileRegistry profileRegistry,
+      ReActLoop reActLoop,
+      SessionManager sessionManager,
+      MemoryService memoryService) {
+    return new AgentService(profileRegistry, reActLoop, sessionManager, memoryService);
   }
 
   @Bean

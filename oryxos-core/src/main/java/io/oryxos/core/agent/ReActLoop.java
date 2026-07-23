@@ -46,7 +46,7 @@ public class ReActLoop {
         // 执行权只在 ToolExecutor（宪法 I/II）；失败结果同样回填，模型下一轮自行决定
         // 传 profile.name() 作为 Agent 名：记忆类工具据此落到本 Agent 专属 MEMORY.md（30 节）
         ToolResult result = toolExecutor.execute(session.sessionId(), profile.name(), call);
-        session.appendToolResult(call.name(), result);
+        session.appendToolResult(call, result);
       }
     }
     return MAX_ITERATIONS_REPLY;

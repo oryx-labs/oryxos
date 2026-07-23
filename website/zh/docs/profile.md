@@ -1,175 +1,214 @@
-# Profile 配置
+# Profile 配置（AGENT.md frontmatter）
 
-Profile 是定义一个 Agent 的配置文件，存放在 `.oryxos/profiles/` 目录下，每个 Agent 对应一个 YAML 文件。一份 Profile 决定了 Agent 的身份、使用哪个模型、能调用哪些工具、加载哪些技能，以及对话行为的上限。
+在 OryxOS 里，**一个目录 = 一个 Agent**。一个 Agent 就是 `.oryxos/agents/<name>/` 目录下由 `AGENT.md` 定义的实体。该文件由两部分组成：
+
+- **YAML frontmatter** —— 这个 Agent 的 *Profile*：它是谁、用哪个 Provider/模型、能调哪些工具、有哪些定时任务、以及对话行为上限。
+- **Markdown 正文** —— 这个 Agent 的任务指令，注入 system prompt。
+
+**不再有 `.oryxos/profiles/` 目录**。Profile 就是 frontmatter，不是单独的文件。可选的 `skills/*.md`、`scripts/`、`REFERENCE.md` 放在同一目录，由正文用 `read_file` / `shell` 按需加载——它们**不在** frontmatter 里声明。
+
+Agent 可以通过 `/api/v1/agents` 接口和 Web 管理台**动态**创建与编辑——在线写入/修改 `AGENT.md` 并重新注册，无需重启。
+
+---
 
 ## 完整示例
 
-```yaml
-# Agent 基本信息
-name: ops-agent
-description: 运维助手
+`.oryxos/agents/ops-agent/AGENT.md`：
 
-# Agent 身份：注入 system prompt
+```markdown
+---
+name: ops-agent
+description: 运维助手，负责部署和监控任务
+
 identity:
   agent_name: 运维小欧
-  prompt: 你是一个专业的运维助手，擅长处理 Linux 系统问题、分析日志和排查故障。回答简洁、准确，优先给出可执行的操作步骤。
+  prompt: |
+    你是一个专业的运维助手。
+    回答简洁，优先给可执行的 shell 命令，而不是长篇解释。
 
-# LLM Provider 配置
 provider:
-  name: deepseek          # 对应 application.yml 中 oryxos.providers 的 key
+  name: deepseek          # 对应已注册的 Provider 名称
   model: deepseek-chat
   temperature: 0.7
+  api_key: ${DEEPSEEK_API_KEY}
 
-# 可调用的内置 Tool
 tools:
   - read_file
   - shell
   - http_get
   - save_memory
   - recall_memory
+  - notify
 
-# 注入 system prompt 的技能文件（非可执行 Tool）
-skills:
-  - daily-pr-digest       # 对应 .oryxos/skills/daily-pr-digest.md
-
-# 通过 MCP 协议接入的外部 Tool server
 mcp_servers:
-  - github-mcp            # 对应 .oryxos/mcp_servers.yaml 中的配置项
+  - github-mcp
 
-# 接入渠道
 channels:
   - name: cli
 
-# Bootstrap 文件：启动时注入 system prompt
 bootstrap:
   - AGENTS.md
   - SOUL.md
   - USER.md
 
-# 行为参数
+schedules:
+  - id: morning-check
+    cron: "0 0 8 * * *"
+    zone: Asia/Shanghai
+    message: 执行早晨健康检查。
+
 settings:
-  max_iterations: 10      # ReAct Loop 最大迭代次数
-  max_history_turns: 20   # 注入上下文的最大对话轮数
+  max_iterations: 10
+  max_history_turns: 20
+---
+
+你是一个专业的运维助手。被触发时检查磁盘和内存占用，汇总异常项，并把汇总
+发到名为 `ops-lark` 的通知渠道。
 ```
 
-## 字段说明
+闭合的 `---` 之下是**正文**：它作为这个 Agent 的任务指令，与 bootstrap 文件一起注入 system prompt。
+
+---
+
+## frontmatter 字段
+
+### 顶层字段
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `name` | string | 是 | Profile 唯一标识，与文件名一致 |
-| `description` | string | 否 | 人类可读的 Agent 描述 |
-| `identity.agent_name` | string | 否 | Agent 的名字，展示在对话界面 |
-| `identity.prompt` | string | 是 | 注入 system prompt 的核心身份指令 |
-| `provider.name` | string | 是 | Provider 名称，对应 `application.yml` 中的配置 key |
-| `provider.model` | string | 是 | 使用的模型名称 |
-| `provider.temperature` | float | 否 | 采样温度，默认 `0.7` |
-| `tools` | list | 否 | 允许调用的内置 Tool 名称列表 |
-| `skills` | list | 否 | 注入 system prompt 的技能文件名列表 |
-| `mcp_servers` | list | 否 | 接入的 MCP server 名称列表 |
-| `channels` | list | 否 | 接入渠道配置 |
-| `bootstrap` | list | 否 | 启动时注入的 Bootstrap 文件列表 |
-| `settings.max_iterations` | int | 否 | ReAct Loop 最大迭代次数，默认 `10` |
-| `settings.max_history_turns` | int | 否 | 注入上下文的最大对话轮数，默认 `20` |
+| `name` | string | 是 | Agent 唯一标识，与目录名一致，用于 CLI（`--profile <name>`）和 API 路径（`/api/v1/agents/{name}`） |
+| `description` | string | 否 | 人类可读的描述，展示在管理台和 `oryxos profile list` |
+| `identity` | object | 是 | Agent 的名字和核心 prompt，见 [Identity](#identity) |
+| `provider` | object | 是 | LLM Provider 和模型选择，见 [Provider](#provider) |
+| `tools` | list | 否 | 该 Agent 可用的工具名列表，必须已在 `ToolRegistry` 注册，默认无工具 |
+| `mcp_servers` | list | 否 | 接入的 MCP server 名列表（来自 `mcp_servers.yaml`），其暴露的工具对该 Agent 可用 |
+| `channels` | list | 否 | 接入渠道，核心阶段支持 `cli` |
+| `bootstrap` | list | 否 | 按序注入 system prompt 的 Bootstrap 文件，从工作区根解析 |
+| `schedules` | list | 否 | 该 Agent 的定时触发任务，见 [Schedules](#schedules) |
+| `settings` | object | 否 | 行为参数，见 [Settings](#settings) |
+
+### Identity
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `identity.agent_name` | string | 是 | Agent 的展示名，出现在 CLI 提示符和审计记录里 |
+| `identity.prompt` | string | 是 | Agent 的核心 system prompt，最先注入——在 bootstrap 文件、正文和记忆之前 |
+
+### Provider
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `provider.name` | string | 是 | 映射到已注册 Provider 的 key，从 Provider 注册表（SQLite）动态解析，见 [Provider 配置](#provider-配置) |
+| `provider.model` | string | 是 | 传给 Provider API 的模型标识 |
+| `provider.temperature` | float | 否 | 采样温度，默认取 Provider 的配置默认值 |
+| `provider.api_key` | string | 否 | Provider 的 API Key，用环境变量占位符（`${DEEPSEEK_API_KEY}`），不得写死明文 |
+
+---
 
 ## Provider 配置
 
-`provider.name` 必须与 `application.yml` 中 `oryxos.providers` 下的 key 对应：
+`provider.name` 按名引用一个 Provider。OryxOS 维护显式的 `name → ChatModel` 映射（宪法三——绝不靠 Spring Bean 类型扫描），但该映射是**运行时可变**的：Provider 存于 SQLite 的 `providers` 表，按名动态解析。
+
+启动时从 `config/application.yml`（`oryxos.providers` 列表）播种 Provider，之后通过管理台或 `/api/v1/providers` 接口动态管理：
 
 ```yaml
-# application.yml
+# config/application.yml
 oryxos:
   providers:
-    deepseek:
+    - name: deepseek
       api-key: ${DEEPSEEK_API_KEY}
       base-url: https://api.deepseek.com
-      default-model: deepseek-chat
-    qwen:
-      api-key: ${QWEN_API_KEY}
-      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
-      default-model: qwen-max
+    - name: mock                     # 内置假模型——无需 key/url
 ```
 
-```yaml
-# Profile 中引用
-provider:
-  name: deepseek    # 必须与上面的 key 完全一致
-  model: deepseek-chat
+**API Key 规则：** 必须通过环境变量引用，不得写死明文。
+
+```bash
+export DEEPSEEK_API_KEY=sk-...
 ```
 
-**API Key 规则：** 必须通过环境变量引用（`${ENV_VAR_NAME}`），不得将明文 Key 写入任何配置文件或 Profile YAML。
+若 Profile 的 `provider.name` 在注册表中找不到对应 Provider，该 Agent 会以清晰的错误失败。
 
-多个 Profile 可以引用不同的 Provider，OryxOS 在运行时通过显式映射表路由，互不干扰。
+---
 
-## Tool 和 Skill
+## Tools
 
-### Tool
+`tools` 字段列出该 Agent 在 ReAct Loop 中可调用的内置工具和 MCP 工具。只有列表里的工具才会作为可调用函数传给 LLM。
 
-`tools` 字段列出该 Agent 可以调用的内置 Tool。未在列表中声明的 Tool 不会注册进该 Agent 的 ToolRegistry，LLM 看不到也无法调用。
+内置工具名：
 
-```yaml
-tools:
-  - read_file       # 读文件
-  - write_file      # 写文件
-  - list_dir        # 列目录
-  - shell           # 执行 shell 命令
-  - http_get        # HTTP GET
-  - http_post       # HTTP POST
-  - save_memory     # 写入长期记忆
-  - recall_memory   # 检索长期记忆
+| 名称 | 作用 |
+| --- | --- |
+| `read_file` | 读文件（路径白名单） |
+| `write_file` | 写文件（路径白名单） |
+| `list_dir` | 列目录（路径白名单） |
+| `shell` | 执行 shell 命令（命令白名单） |
+| `http_get` | HTTP GET（域名白名单） |
+| `http_post` | HTTP POST（域名白名单） |
+| `save_memory` | 向 `MEMORY.md` 追加记忆 |
+| `recall_memory` | 关键词检索 `MEMORY.md` |
+| `notify` | 向按名引用的通知渠道推送消息 |
+
+来自 `mcp_servers` 的 MCP 工具以 server 声明的名称暴露（如 `github_create_pr`）。运行 `oryxos tool list` 查看所有已注册名称。详见 [Tool 体系](/zh/docs/tool)，包括 `notify` 如何按名解析渠道。
+
+### 子指令与脚本（无 frontmatter 字段）
+
+可复用的指令和辅助脚本放在 **Agent 目录内**，不在 frontmatter 里：
+
+```text
+.oryxos/agents/ops-agent/
+├── AGENT.md            # frontmatter（Profile）+ 正文（任务指令）
+├── skills/
+│   └── deploy-runbook.md
+├── scripts/
+│   └── collect_metrics.py
+└── REFERENCE.md
 ```
 
-通过 MCP 接入的外部 Tool 在 `mcp_servers` 字段配置，详见 [Tool 体系](/zh/docs/tool)。
+正文指引 Agent 何时取用它们——`skills/*.md` 和 `REFERENCE.md` 用 `read_file`，`scripts/` 用 `shell`。这是**一个 Agent 内部**的渐进式披露：没有全局能力索引，也没有单独的 `skills` frontmatter 字段。
 
-### Skill
-
-`skills` 是注入 system prompt 的指令模板，**不是可执行的 Tool**。每个 Skill 对应 `.oryxos/skills/` 下的一个 Markdown 文件，由 ContextLoader 在构建 Prompt 时加载并拼入 system prompt。
-
-```yaml
-skills:
-  - daily-pr-digest    # 加载 .oryxos/skills/daily-pr-digest.md
-  - code-review-style  # 加载 .oryxos/skills/code-review-style.md
-```
-
-Skill 文件的内容是自然语言指令，例如：
-
-```markdown
-# Daily PR Digest
-
-每天早上 9 点，汇总昨天的 GitHub PR 活动：
-- 列出已合并的 PR（标题、作者、合并时间）
-- 列出新开的 PR（标题、作者）
-- 标注有冲突或超过 3 天未 review 的 PR
-输出格式使用 Markdown 表格。
-```
+---
 
 ## Bootstrap 文件
 
-Bootstrap 文件在每次对话开始时注入 system prompt，定义 Agent 的运行上下文。三个文件各有用途：
+Bootstrap 文件按列出的顺序注入 system prompt，提供跨所有 Agent 共享的工作区级上下文。
 
 | 文件 | 谁来写 | 用途 |
 | --- | --- | --- |
-| `AGENTS.md` | 项目维护者 | 项目级约定：Agent 的行为边界、禁止事项、协作规则 |
+| `AGENTS.md` | 项目维护者 | 项目级约定：Agent 行为边界、命名、协作规则 |
 | `SOUL.md` | 项目维护者 | Agent 人格定义：语气、风格、价值观 |
-| `USER.md` | 用户手写 | 用户个人偏好：输出格式、习惯用语、工作背景 |
+| `USER.md` | 仅用户手写 | 用户偏好与背景：Agent 只读，绝不写入 |
 
-OryxOS 只读 `USER.md`，不写入。用户的运行时记忆由 Agent 通过 `save_memory` Tool 写入 `MEMORY.md`，两者严格区分。
+从 OryxOS 视角，`USER.md` 严格只读。可被 Agent 写入的对应文件是 `MEMORY.md`，通过 `save_memory` 工具更新。与该 Agent 无关的文件可从列表中省略。
 
-不需要某个文件时，直接从 `bootstrap` 列表中删除即可：
+---
+
+## Schedules
+
+`schedules` 声明该 Agent 的定时触发任务。每条到点时以 Agent 正文作为任务触发一次。定时任务也可通过 `/api/v1/schedules` 接口和管理台列出、立即运行、启用/停用。
 
 ```yaml
-bootstrap:
-  - SOUL.md    # 只保留人格定义，省略项目约定和用户偏好
+schedules:
+  - id: morning-check
+    cron: "0 0 8 * * *"     # Spring cron：秒 分 时 日 月 周
+    zone: Asia/Shanghai
+    message: 执行早晨健康检查。
 ```
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 该 Agent 内此定时任务的唯一 id |
+| `cron` | string | Spring 6 段 cron 表达式 |
+| `zone` | string | IANA 时区（如 `Asia/Shanghai`） |
+| `message` | string | 定时触发时交给 Agent 的触发消息 |
+
+---
 
 ## Settings
 
 | 参数 | 默认值 | 说明 |
 | --- | --- | --- |
-| `max_iterations` | `10` | ReAct Loop 最大迭代次数。每调用一次 Tool 算一次迭代，达到上限后强制返回当前结果，防止无限循环。 |
-| `max_history_turns` | `20` | 注入上下文的最大对话轮数。超出部分从最旧的消息开始丢弃，控制 token 消耗。 |
+| `max_iterations` | `10` | 每条用户消息的 ReAct Loop 最大迭代次数，防止无限工具循环。达到上限后强制返回当前部分结果。 |
+| `max_history_turns` | `20` | 注入 Prompt 的最近对话轮数。超出部分从最旧的消息开始丢弃，控制 context window。一轮 = 一条用户消息 + 一条助手回复。 |
 
-```yaml
-settings:
-  max_iterations: 5     # 简单问答场景可以调低，减少延迟
-  max_history_turns: 50 # 长文档分析场景可以调高，保留更多上下文
-```
+省略 `settings` 时，两个值都取默认。

@@ -32,7 +32,7 @@
 26. 首页的左上角的logo 要小一点，现在太大了
 27. 再一点点 现在有点小
 28. 新的提示词也放到docs/prompt/01.md 中
-29. 理解一下这个文件：/Users/oker/robustmq/scripts/package.sh的功能
+29. 理解一下这个文件：robustmq/scripts/package.sh的功能
 30. 这个项目也需要这个文件，把文件传到远程。但是需要注意target 下的文件不需要传到远程
 31. 是的，你执行一下这个脚本
 32. 理解一下website的布局，你全部重新设计一下首页风格，要有特点的。可以全部重新设计。你给我设计一个有特点的的，你自由发挥。你主要理解一下文档：docs/what.md。重写readme.md。重新画架构图。重新设计website主页。其他你自己来，不用问我。
@@ -96,7 +96,7 @@
 83. 架构图直接用这个：website/public/images/architecture.svg 就好了，不用重复画？
 84. 也可以画一个新的website/public/images/docs-agent-lifecycle.svg 这种风格的架构图。也就是白底彩色的
 85. docs/TechnicalSolution.md 用website/public/images/docs-architecture-light.svg 这个架构图
-86. 把/Users/oker/Desktop/doc/ 下16～25的md挪到docs/class。后面16 开始的md 都在这里维护，因为进入开发阶段了
+86. 把Desktop/doc/ 下16～25的md挪到docs/class。后面16 开始的md 都在这里维护，因为进入开发阶段了
 87. 你基于：docs/TechnicalSolution.md review 一下当前16～25的文档，看是否有需要完善和丰富的。先讨论下，你知道16～25 这些文档的目的吧。这些文档是用来跟人讲的，教学的文档，跟人讲清楚。意思就是课纲。也是用来给后续spec kit 执行的大纲
 88. 注意21和23 这两节有点像docs/TechnicalSolution.md。也就是作memory和sandbox这两个模块的评审。内容风格要跟docs/TechnicalSolution.md类似，就是技术评审。
 89. 可以，然后输出中文
@@ -270,3 +270,64 @@
 239. ① 增加编辑文件的能力 ② 增加"编辑 agent"tab：一句描述 → 大模型（经 provider）按 agent 格式规范返回每个文件内容 ③ tab 增加这个 agent 专属记忆——要改动 memory 能力（现在的 memory 是全局的、不跟着 agent 走）
 240. 可以用 sub agent 并行执行、加快速度
 241. ① 把这次的修改回写到第30节课件 ② 把新增的提示词写入 docs/prompt/prompt.md
+
+## 第九轮（切 class-31 + 课件搬出仓库 + Provider/飞书连通性验证 + codex 中转代理接入 + 全流程真链路联调：对话→记忆→飞书通知）
+
+242. 切换到远程的 class-31 分支
+244. 测 deepseek 模型能否连通：随机字符串当 token，核心看网络通不通、能否返回 token 错误
+245. 确认：给一个对的 deepseek token 就能用了吧
+246. 测和飞书发消息的通道是否通，看需要我提供什么信息
+247. 给这个飞书 webhook 地址发一条消息试试（提供真实自定义机器人 webhook）
+248. 照 deepseek 的方式，测 GPT(OpenAI) 接口是否连通
+249. config/application.yml 里加上 codex 配置，api-key 留空我来填
+250. 读配置里 codex 的 api-key 连 GPT 看能不能通（命中"敏感数据发往非批准目标"红线被 guardrail 拦下，改为给脚本让用户自己跑）
+251. 那我怎么测试？你写一段代码我跑
+252. 把 codex 的 base-url 配成中转代理 https://ai.soulecho.cc（Responses API），这是 codex
+253. 测试脚本参数换个模型，让 bash scripts/test-codex-key.sh 能跑通过（默认 gpt-5.5）
+254. 用第27节课的思路跑一遍全流程（真起服务、走 codex/gpt-5.5，对话→ReAct→工具→记忆→会话→审计）
+255. 核心记忆的时间戳加上时分秒
+256. 加一个功能：让 Agent 给 Lark 发条消息、打通全流程；加一步——通知后再调 save_memory 留痕
+257. 没收到通知，再跑一次、看 notify 返回（定位到 type:webhook 用错适配器、payload 格式不对；改 type:feishu 修复，未动代码）
+258. 把这些没记录到 docs/prompt/prompt.md 的提示词补进去
+
+## 第十轮（notify 渠道全局注册表 CRUD + Agent notify 改自然语言按名引用 + 三个 Demo Agent 按新定义 + Provider 探路 + 修复 ReAct 多工具循环 + 管理台迭代 + 每次触发自动记归档记忆）
+
+259. 理解第31节文档；AGENT.md 不应内联 tools/notify_channels——tools 走全局工具列表、notify 出口改成一个全局"notify 渠道"注册表（有 CRUD）；先做 notify 的 CRUD 接口 + 管理页，再改 AGENT.md 定义
+260. （clarify）notify 渠道存 SQLite 新表；AGENT.md 干脆不要 notify_channels 字段，用自然语言说"发到哪个 notify channel"
+261. 完成第一个 agent（天气）开发，放进 .oryxos/agents/，按新定义
+262. 继续开发剩下两个 agent（科技日报 / GitHub 日报），按第31节文档
+263. 运行这个 agent，看消息能否通知到 Lark
+264. codex 可以了，跑一下两个（科技日报 / GitHub 日报）agent
+265. qoder 的服务能支持吗？
+266. provider（怎么把它接成一个 provider）
+267. 检索 qoder 的文档
+268. 改用 deepseek 的配置，读 config/application.yml
+269. （批准）正式修 ReAct 多工具循环——对话历史改结构化消息透传（保留 tool_call/tool_result 配对）
+270. 启动服务、启动 manager
+271. Agent 列表加 description 列；provider/model 不用都显示、留 provider 即可（加上 agent 描述）
+272. 每个 agent 加"立即触发"按钮
+273. 立即触发后会话和记忆都空、但 Lark 收到了（定位：invoke 用错 session，改走 console 固定会话，与会话 tab 同一条）
+274. 每个列表加刷新按钮
+275. 每次触发都应记录到记忆；记忆用两个 table 展示（核心 / 归档）；会话要有自己的滚动框、不跟大页面滚
+276. 把新增的这些 prompt 记录到 docs/prompt/prompt.md
+
+## 第十一轮（Provider 动态 CRUD 落库 + 管理台/配置打磨 + 可配置工作区根）
+
+277. Provider 支持动态 CRUD、存 SQLite；（clarify）api-key 存库明文回显 + 启动把 config 的 oryxos.providers 播种进 DB（库里没有才写，之后以 DB 为准），运行时按名动态建/缓存 ChatModel
+278. 查一下用户级的记忆看都记了什么（被打断）
+279. manager 中所有的新增 / 编辑都改成弹出框（modal）形式
+280. 侧边栏加"Skill 列表 / 知识库"两个占位空列表（暂无真实数据），放在"定时任务"下方、"OS 运行时"上方
+281. 梳理 config/application.yml，把该有的默认配置都放上（端口、数据目录等）——只铺运行期默认，框架内部管道仍从 jar 继承
+282. 允许配置 Agent 存放目录——可自定义 .oryxos 的路径与名字（轻命令走 ORYXOS_ROOT / -Doryxos.root，serve 走 oryxos.root；根自动纳入文件白名单）
+283. 继续处理 application.yml 的问题；（选）理顺打包内 application.yml 与外部 config/application.yml 的分歧（对齐 python/python3 等列表、加"列表整体替换不合并"提醒）
+284. config/application.yml.example 也同步成与 application.yml 一致、只是把真实 token 置空（随仓库提交的无密钥模板）
+
+## 第十二轮（贴近实现的文档大更新 + Agent Harness OS 重定位 + Sandbox 白名单持久化 CRUD + 发行版打包 make release + GitHub Release 工作流）
+
+285. 根据最新实现更新 README、首页、doc，尽量全、贴近实现（并行 subagent 全量重写；纠偏 API 端点、统一 {code,message,data} envelope、去掉 .oryxos/profiles 等陈旧说法）
+286. Sandbox 白名单数据也写入 SQLite、管理台支持 CRUD（区分 FILE/SHELL/HTTP 三类）、启动时从配置文件初始化插入（WhitelistSandbox 改 store-backed：启动从库恢复、运行时增删写穿落库）
+287. 加入 Harness 概念（README 与 what），Agent OS 改为 Agent Harness OS，从这个定义重新设计 README / doc / 首页（Model → Harness → OS 三层）
+288. 开发 make 脚本：make release 打成 .tar.gz，含 bin / config / libs 三目录；bin/oryx-server 支持 start / stop（先整理需求再实现）
+289. 执行 make release → 解压 → bin/oryx-server start，验证 server 与 manager 正常、日志正常打印（本沙箱禁 nohup，用等价后台方式跑通验证）
+290. 加 GitHub release workflow：PR 标题以 release: 开头且合入 main 触发，自动创建 Release 并上传 tar.gz、版本号从 pom 读；（clarify）合入 main 时触发、版本改为 0.1.0-RELEASE
+291. 把新增的提示词放入 docs/prompt/prompt.md

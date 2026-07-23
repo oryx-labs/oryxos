@@ -52,22 +52,21 @@ public class PromptBuilder {
   }
 
   public ProviderRequest build(Session session, Profile profile) {
-    StringBuilder content = new StringBuilder();
-    // ① system：每次重新经 ContextLoader 读文件（无缓存铁律在 ContextLoader 内保证）
-    content.append(contextLoader.load(profile));
+    // ①+② systemPrompt：不随对话变的部分——ContextLoader 供给 + 日期时间行 + 长期记忆
+    StringBuilder system = new StringBuilder();
+    // 每次重新经 ContextLoader 读文件（无缓存铁律在 ContextLoader 内保证）
+    system.append(contextLoader.load(profile));
     // 模型自己不知道今天几号——定时场景里的"今天"全靠这一行
-    content.append("当前日期时间：").append(DATE_TIME.format(ZonedDateTime.now(clock))).append('\n');
-    // ② 长期记忆：经门面注入（核心区全量 + 归档区截断后 + 会话历史）；未装配 Memory 时该段留空
+    system.append("当前日期时间：").append(DATE_TIME.format(ZonedDateTime.now(clock))).append('\n');
+    // 长期记忆：经门面注入（核心区全量 + 归档区截断后）；未装配 Memory 时该段留空
     if (memoryService != null) {
-      content.append(memoryService.buildContext(session)).append('\n');
+      system.append(memoryService.buildContext(session)).append('\n');
     }
-    // ③ 会话历史：只留最近 N 轮（坑二——不截断，转几轮 context 就撑爆了）
-    content.append("对话历史：\n");
-    for (Message message : recentTurns(session, profile.settings().maxHistoryTurns())) {
-      content.append(message.role()).append(": ").append(message.content()).append('\n');
-    }
+    // ③ 会话历史：结构化透传（不再拍平成文本），保留 assistant tool_calls / tool tool_call_id 配对——
+    //    多步 ReAct 里模型才能看出工具已调过、继续下一步（31 节修复）；仍只留最近 N 轮（坑二）
+    List<Message> history = recentTurns(session, profile.settings().maxHistoryTurns());
     // ④ 工具列表经 availableTools 传递，Provider 侧翻译成 Function Calling 格式
-    return new ProviderRequest(content.toString(), resolveTools(profile));
+    return new ProviderRequest(system.toString(), history, resolveTools(profile));
   }
 
   /** 截断以轮为界整体保留/丢弃：一轮 = 一条 user 消息及其后到下一条 user 消息前的全部消息。 */

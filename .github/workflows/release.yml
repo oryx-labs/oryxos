@@ -1,0 +1,82 @@
+name: Release
+
+# 触发：以 "release:" 开头命名的 PR 被合入 main 时，自动切版本。
+# 版本号从 pom.xml 读（<artifactId>oryxos</artifactId> 之后的 <version>），
+# 打发行版 tar.gz（make release）并创建 GitHub Release 上传产物。
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+# 创建 Release + tag 需要写 contents 权限
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build & publish release
+    # 仅当 release: 开头的 PR 真正被 merge（而非 close 未合）才发版
+    if: >-
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.title, 'release:')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main (含已合入代码)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Resolve version from pom.xml
+        id: ver
+        run: |
+          RAW=$(awk '/<artifactId>oryxos<\/artifactId>/{f=1} f&&/<version>/{gsub(/.*<version>|<\/version>.*/,"");gsub(/[[:space:]]/,"");print;exit}' pom.xml)
+          if [ -z "$RAW" ]; then echo "::error::无法从 pom.xml 解析版本号"; exit 1; fi
+          # 剥离开发用 -SNAPSHOT 后缀；-RELEASE 等正式标签原样保留
+          VERSION="${RAW%-SNAPSHOT}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "解析到版本：$VERSION（tag v$VERSION）"
+
+      - name: Build release tarball (make release)
+        run: make release
+
+      - name: Verify artifact exists
+        run: |
+          TARBALL="dist/oryxos-${{ steps.ver.outputs.version }}.tar.gz"
+          test -f "$TARBALL" || { echo "::error::未找到 $TARBALL"; exit 1; }
+          ls -la "$TARBALL"
+
+      - name: Create GitHub Release & upload tarball
+        # 不受信输入（PR 标题等）一律走 env + 引号引用，绝不内插进 run 命令，防命令注入
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          TAG: ${{ steps.ver.outputs.tag }}
+          TARGET_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          TARBALL="dist/oryxos-${VERSION}.tar.gz"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，覆盖上传产物。"
+            gh release upload "$TAG" "$TARBALL" --clobber
+          else
+            gh release create "$TAG" "$TARBALL" \
+              --target "$TARGET_SHA" \
+              --title "OryxOS ${VERSION}" \
+              --notes "Automated release from PR #${PR_NUMBER} — ${PR_TITLE}" \
+              --generate-notes
+          fi
+          echo "已发布 $TAG，产物：$(basename "$TARBALL")"

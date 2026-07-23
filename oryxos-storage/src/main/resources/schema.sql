@@ -95,3 +95,36 @@ CREATE TABLE IF NOT EXISTS admin_auth_events (
 );
 CREATE INDEX IF NOT EXISTS idx_admin_auth_events_created_at ON admin_auth_events (created_at);
 CREATE INDEX IF NOT EXISTS idx_admin_auth_events_event_type ON admin_auth_events (event_type);
+-- notify_channels：全局通知渠道注册表（31 节）——name → type + url + 描述；管理台可 CRUD、Agent 按名字引用
+-- （notify 工具的 channel 参数）。新表，CREATE TABLE IF NOT EXISTS，非 ALTER，无迁移风险。
+CREATE TABLE IF NOT EXISTS notify_channels (
+    name VARCHAR(128) PRIMARY KEY,
+    type VARCHAR(32) NOT NULL,
+    url TEXT NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+-- providers：LLM Provider 动态注册表（31 节）——name → api_key + base_url + 描述；管理台可 CRUD、运行时按名动态建 ChatModel。
+-- 启动时把 config/application.yml 的 oryxos.providers 播种进来（库里没有才写），之后以本表为准。
+-- 注意：api_key 明文落库（本地 gitignored 库）——这是"可动态管理"对宪法"凭证走环境变量"的核心阶段让步。
+CREATE TABLE IF NOT EXISTS providers (
+    name VARCHAR(128) PRIMARY KEY,
+    api_key TEXT,
+    base_url TEXT,
+    description TEXT,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+-- sandbox_whitelist：Sandbox 白名单持久化（宪法 VI 第一档）——三类 category（FILE/SHELL/HTTP）→ entry_value。
+-- 启动时把 config 的 file.allowed_paths / shell.allowed_commands / http.allowed_domains 播种进来（幂等，库里没有才写），
+-- 之后管理台 / API 的增删即刻落库，重启保留。entry_value 存"入内存的规范形"（FILE 为归一后的绝对路径）以便与 list/删除对齐。
+CREATE TABLE IF NOT EXISTS sandbox_whitelist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category VARCHAR(16) NOT NULL,
+    entry_value TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    UNIQUE (category, entry_value)
+);

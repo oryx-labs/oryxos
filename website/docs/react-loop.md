@@ -14,7 +14,7 @@ Seven steps, repeated up to `max_iterations` times (default: 10):
 4. **Call LLM** — `ProviderService` sends the prompt to the configured provider
 5. **Inspect response** — check whether the model returned a tool call or a final answer
 6. **No tool call** → return the response to the caller. Loop ends.
-7. **Tool call** → `ToolExecutor` runs the tool, appends the result to history, goes back to step 3
+7. **Tool call** → `ToolExecutor` runs the tool, threads the result back as a structured tool message, goes back to step 3
 
 ```
 User message
@@ -36,12 +36,14 @@ User message
 
 | # | Part | Source | Owner |
 | --- | --- | --- | --- |
-| 1 | System prompt — Profile identity + Bootstrap files (`AGENTS.md`, `SOUL.md`, `USER.md`) + `SKILL.md` | Filesystem | `ContextLoader` |
-| 2 | Long-term memory — full text of `MEMORY.md` (truncated at 4 000 chars) | `.oryxos/memory/MEMORY.md` | `MemoryService` |
-| 3 | Conversation history — last `max_history_turns` turns | SQLite `sessions.messages_json` | `SessionManager` |
-| 4 | Available tools — JSON Schema for each tool the Profile exposes | `ToolRegistry` | `ToolRegistry` |
+| 1 | System prompt — the Agent's `AGENT.md` body + Bootstrap files (`AGENTS.md`, `SOUL.md`, `USER.md`) | Filesystem | `ContextLoader` |
+| 2 | Long-term memory — full text of the Agent's `MEMORY.md` (truncated at 4 000 chars) | `.oryxos/agents/<name>/MEMORY.md` (falls back to `.oryxos/memory/MEMORY.md`) | `MemoryService` |
+| 3 | Conversation history — last `max_history_turns` turns, as structured messages (including prior assistant tool calls and tool results with their ids) | SQLite `sessions.messages_json` | `SessionManager` |
+| 4 | Available tools — JSON Schema for each tool the Agent exposes | `ToolRegistry` | `ToolRegistry` |
 
-The prompt is rebuilt on every iteration. If a tool result changes what the model should do next, the rebuilt prompt captures it.
+Sub-instructions (`skills/*.md`) and scripts (`scripts/`) inside the Agent directory are **not** pre-injected — the body directs the model to read them on demand via `read_file` / `shell`.
+
+The prompt is rebuilt on every iteration. Tool calls and their results are carried through the provider as structured `tool_call` / `tool_result` messages — assistant tool calls and tool responses matched by id — rather than being flattened into plain text. If a tool result changes what the model should do next, the rebuilt prompt captures it.
 
 ## ToolExecutor
 
@@ -52,13 +54,13 @@ The prompt is rebuilt on every iteration. If a tool result changes what the mode
 3. **Validate** — `SandboxChecker` checks the call against the configured whitelists
 4. **Execute** — built-in tools run in-process; MCP tools are forwarded over JSON-RPC
 5. **Audit** — write a row to `tool_invocations` (success, duration, input, result)
-6. **Return** — `ToolResult` is serialized and appended to conversation history as an assistant/tool message
+6. **Return** — `ToolResult` is appended to conversation history as a structured tool-result message carrying the originating tool-call id, so the next LLM call sees it as a proper tool response rather than free text
 
 If the tool fails and `ToolResult.retryable` is `true`, the error message is still appended to history so the model can try a different approach on the next iteration.
 
 ## Key constraints
 
-**`max_iterations`** — set per-Profile in YAML (default `10`). Prevents runaway loops. When the limit is hit the loop stops and returns whatever the last LLM response was.
+**`max_iterations`** — set per-Agent in the `AGENT.md` frontmatter `settings` (default `10`). Prevents runaway loops. When the limit is hit the loop stops and returns whatever the last LLM response was.
 
 ```yaml
 settings:

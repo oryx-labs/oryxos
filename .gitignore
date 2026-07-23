@@ -34,6 +34,8 @@ target/
 
 # VitePress build output and cache
 website/.vitepress/dist/
+dist/
+bin/*.pid
 website/.vitepress/cache/
 website/node_modules/
 

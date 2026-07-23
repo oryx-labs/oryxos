@@ -63,7 +63,8 @@ class SessionRepositoryTest {
     var session = manager.getOrCreate("cli", "wang", "default");
     session.appendUser("今天天气怎么样");
     session.appendAssistant(new ProviderResponse("我查一下", List.of(), null));
-    session.appendToolResult("http_get", ToolResult.ok("晴，28°C"));
+    session.appendToolResult(
+        new io.oryxos.core.provider.ToolCallRequest("http_get", "{}"), ToolResult.ok("晴，28°C"));
     manager.save(session);
 
     var reloaded = manager.getOrCreate("cli", "wang", "default");
