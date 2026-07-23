@@ -45,7 +45,7 @@ class AuthApiControllerTest {
   }
 
   @Test
-  @DisplayName("login_对账密_200+Set-Cookie(HttpOnly+SameSite=Strict+Path=/)")
+  @DisplayName("login_HTTP对账密_200+Set-Cookie(HttpOnly+SameSite=Strict+Path=/且无Secure)")
   void login_correctCredentials_setsCookie() throws Exception {
     when(userService.verify("admin", "s3cret-pw")).thenReturn(true);
     WebSession session = newSession("admin", "sid-123");
@@ -66,7 +66,28 @@ class AuthApiControllerTest {
         .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("HttpOnly")))
         .andExpect(
             header().string("Set-Cookie", org.hamcrest.Matchers.containsString("SameSite=Strict")))
-        .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Path=/")));
+        .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Path=/")))
+        .andExpect(
+            header()
+                .string(
+                    "Set-Cookie",
+                    org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("Secure"))));
+  }
+
+  @Test
+  @DisplayName("login_HTTPS对账密_Set-Cookie包含Secure")
+  void login_https_setsSecureCookie() throws Exception {
+    when(userService.verify("admin", "s3cret-pw")).thenReturn(true);
+    WebSession session = newSession("admin", "sid-123");
+    when(sessionService.create("admin")).thenReturn(session);
+
+    mvc.perform(
+            post("/api/v1/auth/login")
+                .secure(true)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"admin\",\"password\":\"s3cret-pw\"}"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Secure")));
   }
 
   @Test
@@ -96,14 +117,15 @@ class AuthApiControllerTest {
   }
 
   @Test
-  @DisplayName("logout_有cookie_清session+清cookie")
+  @DisplayName("logout_HTTPS有cookie_清session+清Cookie且保留Secure")
   void logout_withCookie_clearsSession() throws Exception {
     mvc.perform(
             post("/api/v1/auth/logout")
+                .secure(true)
                 .cookie(new jakarta.servlet.http.Cookie("oryxos_session", "sid-123")))
         .andExpect(status().isOk())
-        .andExpect(
-            header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Max-Age=0")));
+        .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Max-Age=0")))
+        .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Secure")));
     verify(sessionService).delete("sid-123");
   }
 
