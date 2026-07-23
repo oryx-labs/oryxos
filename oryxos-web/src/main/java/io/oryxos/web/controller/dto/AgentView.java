@@ -10,10 +10,12 @@ public record AgentView(
     String provider,
     String model,
     List<String> tools,
+    List<String> skills,
     List<ScheduleView> schedules) {
 
   public AgentView {
     tools = tools == null ? List.of() : List.copyOf(tools);
+    skills = skills == null ? List.of() : List.copyOf(skills);
     schedules = schedules == null ? List.of() : List.copyOf(schedules);
   }
 
@@ -29,6 +31,7 @@ public record AgentView(
         pr == null ? null : pr.name(),
         pr == null ? null : pr.model(),
         p.tools(),
+        p.skills(),
         scheds);
   }
 

@@ -1,6 +1,9 @@
 package io.oryxos.web.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -42,7 +45,8 @@ class WorkspaceApiControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.children[0].name").value("agents"))
         .andExpect(jsonPath("$.data.children[0].children[0].name").value("demo"))
-        .andExpect(jsonPath("$.data.children[1].name").value("archive"));
+        .andExpect(jsonPath("$.data.children[1].name").value("output"))
+        .andExpect(jsonPath("$.data.children[2].name").value("archive"));
   }
 
   @Test
@@ -59,5 +63,35 @@ class WorkspaceApiControllerTest {
     mvc.perform(get("/api/v1/workspace/file").param("path", "agents/demo/AGENT.md"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data").value("---\nname: demo\n---\n正文内容"));
+  }
+
+  @Test
+  @DisplayName("download 正常文件：附件头 + 原始字节")
+  void download_validPath_returnsAttachment() throws Exception {
+    Path report = oryxosRoot.resolve("agents").resolve("demo").resolve("output");
+    Files.createDirectories(report);
+    Files.writeString(report.resolve("report.md"), "# 研报\n今日无异常");
+    mvc.perform(get("/api/v1/workspace/download").param("path", "agents/demo/output/report.md"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Content-Disposition", containsString("attachment")))
+        .andExpect(header().string("Content-Disposition", containsString("report.md")))
+        .andExpect(
+            content().bytes("# 研报\n今日无异常".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+  }
+
+  @Test
+  @DisplayName("download 目录穿越 → 400")
+  void download_pathTraversal_returns400() throws Exception {
+    mvc.perform(get("/api/v1/workspace/download").param("path", "../../etc/passwd"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+  }
+
+  @Test
+  @DisplayName("download 文件不存在 → 404")
+  void download_missingFile_returns404() throws Exception {
+    mvc.perform(get("/api/v1/workspace/download").param("path", "agents/demo/output/nope.md"))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value(404));
   }
 }

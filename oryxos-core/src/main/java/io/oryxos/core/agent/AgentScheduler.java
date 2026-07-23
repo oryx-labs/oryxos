@@ -53,6 +53,9 @@ public class AgentScheduler {
   /** 28 节：任务状态 + 执行历史落 SQLite（重启不丢），并支持启用/停用。 */
   private final ScheduledTaskStore taskStore;
 
+  /** 32 节：定时触发也记进 Agent 维度执行历史（可空——旧调用方/测试不带）。 */
+  private final AgentExecutionStore agentExecutionStore;
+
   /** 任务 id → 锁：防同一任务重叠执行。进程内锁，核心阶段单实例足够（非分布式锁）。 */
   private final ConcurrentMap<String, Lock> taskLocks = new ConcurrentHashMap<>();
 
@@ -65,11 +68,23 @@ public class AgentScheduler {
       AgentService agentService,
       SessionManager sessionManager,
       ScheduledTaskStore taskStore) {
+    this(taskScheduler, profileRegistry, agentService, sessionManager, taskStore, null);
+  }
+
+  /** 32 节：注入 {@link AgentExecutionStore}，定时触发也记 Agent 维度执行历史。 */
+  public AgentScheduler(
+      TaskScheduler taskScheduler,
+      ProfileRegistry profileRegistry,
+      AgentService agentService,
+      SessionManager sessionManager,
+      ScheduledTaskStore taskStore,
+      AgentExecutionStore agentExecutionStore) {
     this.taskScheduler = taskScheduler;
     this.profileRegistry = profileRegistry;
     this.agentService = agentService;
     this.sessionManager = sessionManager;
     this.taskStore = taskStore;
+    this.agentExecutionStore = agentExecutionStore;
   }
 
   /** 启动时扫一遍所有 Agent 的 schedules，逐个 Profile 注册（配置驱动，坑一）。 */
@@ -169,6 +184,15 @@ public class AgentScheduler {
     String sessionId = null;
     boolean success = false;
     String error = null;
+    // 32 节：Agent 维度执行记录（定时来源）；store 为空（旧装配/测试）则不记
+    long agentExecId = -1;
+    if (agentExecutionStore != null) {
+      try {
+        agentExecId = agentExecutionStore.start(profile.name(), "schedule", startedAt);
+      } catch (RuntimeException re) {
+        LOG.warn("Agent 执行记录落库失败（start）：{}", re.getMessage());
+      }
+    }
     try {
       // channel/user 固定为 scheduler：同一 Profile 历次触发复用同一 Session，历史靠 max_history_turns 截断兜底。
       // session_id 仍由 SessionManager 内部按三元组拼（本类不碰 session_id 生成）。
@@ -195,6 +219,13 @@ public class AgentScheduler {
             nextExecution(sc));
       } catch (RuntimeException re) {
         LOG.warn("定时任务 {} 执行记录落库失败：{}", sc.id(), re.getMessage());
+      }
+      if (agentExecutionStore != null && agentExecId >= 0) {
+        try {
+          agentExecutionStore.finish(agentExecId, sessionId, success, error, Instant.now());
+        } catch (RuntimeException re) {
+          LOG.warn("Agent 执行记录落库失败（finish）：{}", re.getMessage());
+        }
       }
     }
   }

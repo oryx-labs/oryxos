@@ -19,6 +19,7 @@ public record Profile(
     List<NotifyChannel> notifyChannels,
     List<ScheduleConfig> schedules,
     List<String> bootstrap,
+    List<String> skills,
     Settings settings) {
 
   public Profile {
@@ -28,7 +29,39 @@ public record Profile(
     notifyChannels = notifyChannels == null ? List.of() : List.copyOf(notifyChannels);
     schedules = schedules == null ? List.of() : List.copyOf(schedules);
     bootstrap = bootstrap == null ? List.of() : List.copyOf(bootstrap);
+    skills = skills == null ? List.of() : List.copyOf(skills);
     settings = settings == null ? Settings.defaults() : settings;
+  }
+
+  /**
+   * 兼容旧 11 参构造（第 32 节前无 skills 字段）：现有调用点无需改动，skills 缺省为空——引用全局 Skill 库是可选能力。 新代码请用规范 12 参构造显式传
+   * skills。
+   */
+  public Profile(
+      String name,
+      String description,
+      Identity identity,
+      ProviderRef provider,
+      List<String> tools,
+      List<String> mcpServers,
+      List<String> channels,
+      List<NotifyChannel> notifyChannels,
+      List<ScheduleConfig> schedules,
+      List<String> bootstrap,
+      Settings settings) {
+    this(
+        name,
+        description,
+        identity,
+        provider,
+        tools,
+        mcpServers,
+        channels,
+        notifyChannels,
+        schedules,
+        bootstrap,
+        List.of(),
+        settings);
   }
 
   /** 人格设定。 */

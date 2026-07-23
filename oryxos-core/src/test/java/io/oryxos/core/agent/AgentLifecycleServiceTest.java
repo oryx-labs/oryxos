@@ -1,7 +1,9 @@
 package io.oryxos.core.agent;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -51,7 +53,9 @@ class AgentLifecycleServiceTest {
             mock(io.oryxos.core.provider.ProviderService.class),
             "deepseek",
             "deepseek",
-            "deepseek-chat");
+            "deepseek-chat",
+            java.util.Map.of(),
+            mock(io.oryxos.core.notify.NotifyChannelRegistry.class));
   }
 
   private static Profile profile(String name, ScheduleConfig... schedules) {
@@ -154,5 +158,34 @@ class AgentLifecycleServiceTest {
     InOrder o = inOrder(agentScheduler);
     o.verify(agentScheduler).unregisterProfile(old); // 先注销旧句柄
     o.verify(agentScheduler).registerProfile(updated); // 再注册新的
+  }
+
+  @Test
+  @DisplayName("ensureRequiredSkills：模型漏写也补齐勾选的 Skill；模型选的保留去重；已全含或空则不动")
+  void ensureRequiredSkills_mergesReliably() {
+    String noSkills = "---\nname: a\nprovider:\n  name: deepseek\n  model: m\n---\n正文内容";
+    String out = AgentLifecycleService.ensureRequiredSkills(noSkills, List.of("report-format"));
+    assertTrue(out.contains("skills:"), "无 skills 块时补出一个");
+    assertTrue(out.contains("- report-format"));
+    assertTrue(out.contains("name: a"), "其余 frontmatter 保留");
+    assertTrue(out.contains("正文内容"), "正文保留");
+
+    String withSkills =
+        "---\nname: a\nprovider:\n  name: deepseek\n  model: m\nskills:\n  - web-research\n---\n正文";
+    String out2 = AgentLifecycleService.ensureRequiredSkills(withSkills, List.of("report-format"));
+    Object parsed = AgentMarkdown.split(out2).frontmatter().get("skills");
+    assertTrue(parsed instanceof List, "skills 仍是合法列表");
+    assertTrue(
+        ((List<?>) parsed).containsAll(List.of("web-research", "report-format")), "模型选的保留 + 勾选的补上");
+    assertEquals(out2.indexOf("web-research"), out2.lastIndexOf("web-research"), "不重复写入已有项");
+
+    assertEquals(
+        withSkills,
+        AgentLifecycleService.ensureRequiredSkills(withSkills, List.of("web-research")),
+        "勾选的已全部在场 → 原样不动");
+    assertEquals(
+        noSkills,
+        AgentLifecycleService.ensureRequiredSkills(noSkills, List.of()),
+        "未勾选任何 Skill → 原样不动");
   }
 }

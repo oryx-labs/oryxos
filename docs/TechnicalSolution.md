@@ -682,7 +682,9 @@ mvn clean package
 - **底座 = 系统基础能力**：Provider、ReAct、内置 Tool（`read_file`/`shell`/`http_get`/`notify`/`save_memory`…）、Memory、Sandbox、定时、Web（第 1~10 章）。所有 Agent 共享。
 - **Agent = 一个目录** `.oryxos/agents/<name>/`：`AGENT.md`（frontmatter = 这个 Agent 自己的 profile：`name`/`description`/`provider`/`model`/`tools`/`notify_channels`/`schedules`；正文 = 任务指令）+ 可选 `skills/*.md`（子指令）、`scripts/`（脚本）、`REFERENCE.md`（参考）。一个自足的业务 Agent，**自带一切、不再另写 Profile YAML**（`.oryxos/profiles/` 取消）。
 
-**借 Anthropic Agent Skills 的形态、但定义的是 Agent。** Anthropic 把这种目录叫一个 Skill（Claude 这个大 Agent 的一项可加载能力）；我们借的是目录的**形态**，不是命名——在 OryxOS，**一个目录 = 一个 Agent**，"skill"只是 Agent 目录里的一个可选组成（子指令），**不做跨 Agent 的共享能力库、没有 `use_skill`、没有全局索引**。每个 Agent 独立自足，只调用底座的系统基础能力。
+**借 Anthropic Agent Skills 的形态、但定义的是 Agent。** Anthropic 把这种目录叫一个 Skill（Claude 这个大 Agent 的一项可加载能力）；我们借的是目录的**形态**，不是命名——在 OryxOS，**一个目录 = 一个 Agent**。每个 Agent 独立自足，只调用底座的系统基础能力。
+
+> **修订（v1.2.0，第 32 节）：Skill 升级为全局共享能力库。** 上一段"skill 只是 Agent 目录里的子指令、不做跨 Agent 的共享能力库、没有 `use_skill`、没有全局索引"**已废止**。现在 Skill 是全局的：存 `.oryxos/skills/<name>/SKILL.md`，由 `SkillService`/`SkillStore`/`SkillRegistry`（`oryxos-core`，与 Agent 那套同构）做 CRUD，`/api/v1/skills` 暴露。Agent 在 `AGENT.md` frontmatter 用 `skills: [名]` 按名引用，`ContextLoader` 组装 system prompt 时把引用到的 Skill 正文**注入**来强约束产出。边界不变：Skill 不是可执行 Tool、不进 `ToolRegistry`，加载/注入归 `oryxos-core` 的 `ContextLoader`。详见 `CLAUDE.md` 原则四修订。
 
 **派生 Profile**：底座（第 1~10 章的一切）都吃 `Profile`，所以 `AgentLoader.deriveProfile(agentDir)` 把 `AGENT.md` 的 frontmatter 映射成一个 `Profile`，让 Agent 目录**零改动复用整台底座**。
 

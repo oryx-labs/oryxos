@@ -66,7 +66,8 @@ class AgentApiControllerTest {
                     agentService,
                     sessionManager,
                     registry,
-                    mock(io.oryxos.core.memory.MemoryService.class)))
+                    mock(io.oryxos.core.memory.MemoryService.class),
+                    mock(io.oryxos.core.agent.AgentExecutionService.class)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
