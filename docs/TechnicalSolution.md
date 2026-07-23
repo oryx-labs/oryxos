@@ -441,6 +441,16 @@ Skill 是所属 Agent 的子资源，统一根路径为 `/api/v1/agents/{agentNa
 
 状态为 `enabled`、`disabled`、`invalid`。404 表示 Agent/Skill 不存在，409 表示同名冲突，400 表示格式、安全或状态校验失败，413 表示压缩/解压预算超限；所有错误沿用统一信封并隐藏绝对路径和堆栈。管理台在 Agent 详情提供 Skill 页签，覆盖导入、启停和删除，并明确显示“Skill 等同代码，只导入已审查来源”。
 
+#### 7.2.2 公共 Skill 管理与 Agent 关联
+
+公共 Skill 的唯一副本位于 `.oryxos/skills/<skillName>/`，统一根路径为 `/api/v1/skills`：
+
+1. `GET/POST /api/v1/skills`（列表 / multipart ZIP 安装）
+2. `GET/PUT/DELETE /api/v1/skills/{skillName}`（查看含正文的详情 / 校验后更新 `SKILL.md` / 归档删除）
+3. `PUT/DELETE /api/v1/skills/{skillName}/agents/{agentName}`（关联 / 解除关联）
+
+关联关系原子持久化在 `.oryxos/skill-associations.txt`。Agent 的顶层请求快照合并私有 Skill 与已关联公共 Skill；公共包仍不是 Tool，不能通过关联修改 Agent 显式声明的 Tool 权限。公共 Skill 只保存一份，编辑后从所有关联 Agent 的下一次顶层请求生效；仍有关联时拒绝删除，避免静默破坏 Agent。
+
 ### 7.3 扩展阶段补齐的端点
 
 **`Agent` 目录的上传/查看/更新/删除**（业务方通过 API 而不是手动把目录丢进 `.oryxos/agents/` 来创建新 Agent，含一句话生成 `AGENT.md`，这才是"纯 API 定义一个新 Agent"的完整闭环）；Memory 的 append/clear/search；Tool describe 和调用历史；LLM call 历史和 token 统计；**`AgentScheduler` 的调度管理**（增删查改某个 Agent frontmatter 的 `schedules`，不用改文件重启进程）；Webhook 触发；SSE 流式响应；Prometheus metrics；OpenAPI spec。
@@ -484,8 +494,11 @@ Skill 是所属 Agent 的子资源，统一根路径为 `/api/v1/agents/{agentNa
 ```
 .oryxos/
 ├── agents/            # 每个子目录 = 一个 Agent（AGENT.md + 可选私有 skills/<name>/SKILL.md）
+├── skills/            # 公共 Skill 唯一副本，可关联给多个 Agent
+├── skill-associations.txt # 公共 Skill → Agent 关联
 ├── archive/
-│   └── .skills/       # 删除后的 Skill 归档；不参与运行时发现
+│   ├── .skills/       # 删除后的私有 Skill 归档；不参与运行时发现
+│   └── .global-skills/ # 删除后的公共 Skill 归档
 ├── memory/
 │   └── MEMORY.md      # 长期记忆
 ├── mcp_servers.yaml   # MCP 配置
@@ -687,7 +700,7 @@ mvn clean package
 
 ## 11. 定义一个 Agent：一个目录 + Web Service
 
-前面十章是**底座**——让任意 Agent 都能可靠运行的引擎、能力、支撑设施，本身不是某个具体的业务 Agent。这一章讲底座之上怎么真正“定义出一个业务 Agent”，以及 Agent 内部如何按开放 Agent Skills 目录规范组织私有能力。外层 `.oryxos/agents/<name>/` 定义一个 **Agent**；内层 `skills/<skill>/` 才定义一个归属于该 Agent 的 **Skill**。
+前面十章是**底座**——让任意 Agent 都能可靠运行的引擎、能力、支撑设施，本身不是某个具体的业务 Agent。这一章讲底座之上怎么真正“定义出一个业务 Agent”，以及如何按开放 Agent Skills 目录规范组织私有能力和可复用的公共能力。外层 `.oryxos/agents/<name>/` 定义一个 **Agent**；Agent 内的 `skills/<skill>/` 是私有 Skill，工作区 `.oryxos/skills/<skill>/` 是可关联给多个 Agent 的公共 Skill。
 
 ### 11.1 术语：一个目录 = 一个 Agent
 
@@ -696,11 +709,11 @@ mvn clean package
 - **底座 = 系统基础能力**：Provider、ReAct、内置 Tool（`read_file`/`shell`/`http_get`/`notify`/`save_memory`…）、Memory、Sandbox、定时、Web（第 1~10 章）。所有 Agent 共享。
 - **Agent = 一个目录** `.oryxos/agents/<name>/`：`AGENT.md`（frontmatter = 这个 Agent 自己的 profile：`name`/`description`/`provider`/`model`/`tools`/`notify_channels`/`schedules`；正文 = 任务指令）+ 可选私有 `skills/<skill>/SKILL.md` 包、Agent 级 `scripts/` 等资源。一个自足的业务 Agent，**自带一切、不再另写 Profile YAML**（`.oryxos/profiles/` 取消）。
 
-**Skill 只属于一个 Agent。** 标准受管形态只认 `.oryxos/agents/<agent>/skills/<skill>/SKILL.md`；不做跨 Agent 共享库、全局 Skill 索引或 `use_skill` Tool。旧版 `skills/*.md`、`skills/SKILL.md` 以及没有 `SKILL.md`/OryxOS marker 的普通子目录保持 legacy/unmanaged：不自动迁移、不进入 L1、不由 Skill 管理 API 改写或删除，但仍可由 `AGENT.md` 显式指引 `read_file`。
+**Skill 有私有和公共两种作用域。** 私有受管形态为 `.oryxos/agents/<agent>/skills/<skill>/SKILL.md`；公共受管形态为 `.oryxos/skills/<skill>/SKILL.md`，通过显式关联复用到多个 Agent。两者都不是可执行 Tool，也不引入 `use_skill` Tool；同名私有 Skill 与公共关联冲突时拒绝关联。旧版 `skills/*.md`、`skills/SKILL.md` 以及没有 `SKILL.md`/OryxOS marker 的普通子目录保持 legacy/unmanaged：不自动迁移、不进入 L1、不由 Skill 管理 API 改写或删除，但仍可由 `AGENT.md` 显式指引 `read_file`。
 
 **派生 Profile**：底座（第 1~10 章的一切）都吃 `Profile`，所以 `AgentLoader.deriveProfile(agentDir)` 把 `AGENT.md` 的 frontmatter 映射成一个 `Profile`，让 Agent 目录**零改动复用整台底座**。
 
-**渐进式披露（L1/L2/L3）**：每次顶层请求只把已启用 Skill 的 `name`、`description` 和可交给 `read_file` 的入口作为 L1 放入 system context；模型判断命中后才读取 L2 `SKILL.md` 正文；正文确实需要时，才继续读取 reference/assets 或运行 L3 script。一次请求只建一次快照并持有该 Agent 的读租约到 ReAct 与会话保存结束，所以管理变更不会让同一轮前后看到不同文件。
+**渐进式披露（L1/L2/L3）**：每次顶层请求把该 Agent 已启用的私有 Skill 与已关联的有效公共 Skill 合并，只把 `name`、`description` 和可交给 `read_file` 的入口作为 L1 放入 system context；模型判断命中后才读取 L2 `SKILL.md` 正文；正文确实需要时，才继续读取 reference/assets 或运行 L3 script。一次请求只建一次快照并持有该 Agent 的读租约到 ReAct 与会话保存结束，所以管理变更不会让同一轮前后看到不同文件。
 
 > **底线不变（宪法原则四）**：`AGENT.md` 正文由 `ContextLoader` 注入 system prompt（与 Bootstrap 文件同层）；Agent/Skill 目录都不是可执行 Tool。`allowed-tools` 只作说明，不修改 Profile 的显式 Tool 列表；L2/L3 仍经底座既有 `read_file`/`shell`、`ToolExecutor`、沙箱与审计，不自动扩权。
 

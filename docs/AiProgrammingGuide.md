@@ -292,7 +292,7 @@ US-3 实施完成后跑 `/speckit.analyze`。
 
 ### 4.4 US-4：Plugin Tool 体系（核心能力四）
 
-**核心目标**：让业务方扩展 OryxOS 的能力，并让一个 Agent 通过私有 Skill 渐进加载任务知识。Plugin Tool 三档接入：
+**核心目标**：让业务方扩展 OryxOS 的能力，并让一个 Agent 通过私有 Skill 或显式关联的公共 Skill 渐进加载任务知识。Plugin Tool 三档接入：
 1. 零代码 Agent 私有 SKILL.md + 已显式配置的内置 Tool / MCP（主推）
 2. 轻代码自写 MCP server
 3. 重代码 Java `@Tool` 注解
@@ -310,7 +310,7 @@ US-3 实施完成后跑 `/speckit.analyze`。
 |----------|---------|
 | 内置 Tool 补齐类 | `read_file`、`write_file`、`list_dir`，Shell Tool 带白名单，`SandboxChecker` 完整实现 |
 | MCP Client 类 | `mcp_servers.yaml` 解析、`McpClientService` 启动时连接、`tools/list` 拉工具、`McpToolAdapter` 包装成 `OryxTool` |
-| `AGENT.md` / Skill 上下文类 | `ContextLoader` 全量加载 `AGENT.md` 正文，只把已启用私有 Skill 的 L1 元数据拼入 system prompt；这部分归 core 不归 tool |
+| `AGENT.md` / Skill 上下文类 | `ContextLoader` 全量加载 `AGENT.md` 正文，只把已启用私有 Skill 与已关联公共 Skill 的 L1 元数据拼入 system prompt；这部分归 core 不归 tool |
 | Skill 渐进披露类 | 顶层请求冻结一次 `SkillSnapshot`；命中后用既有 `read_file` 读取 L2 `SKILL.md`，再按需读取/运行 L3 |
 | Skill 管理类 | 安全 ZIP 导入、三态扫描、启停 marker、归档式删除、REST/管理台与 Agent 级读写租约 |
 | Agent 定义类 | `AgentLoader.deriveProfile` 从 `AGENT.md` frontmatter 派生 `Profile`（含 `tools` / `mcp_servers` 等字段） |
@@ -322,10 +322,10 @@ US-3 实施完成后跑 `/speckit.analyze`。
   - stdio MCP Client 建议拆几个子 task：连接管理、`tools/list`、`tool/call`、错误恢复
 - **`SandboxChecker` 完整版**（从 US-2 的简化版扩展到完整版：文件路径白名单 + Shell 命令白名单 + HTTP 域名白名单，建议拆 3 个子 task）
 - **Skill 包与并发边界**：
-  - 标准受管路径只认 `.oryxos/agents/<agent>/skills/<skill>/SKILL.md`；旧 `skills/*.md` 保持 legacy/unmanaged
+  - 私有受管路径为 `.oryxos/agents/<agent>/skills/<skill>/SKILL.md`，公共受管路径为 `.oryxos/skills/<skill>/SKILL.md`；旧 `skills/*.md` 保持 legacy/unmanaged
   - L1 只含 name/description/entry，严禁为建目录全文读取正文；同一请求持有读租约并复用 snapshot
   - 导入执行“同盘 staging → 完整校验 → 原子发布”，启停/删除拿同一 Agent 写租约，从下一次请求生效
-  - 不新增 `use_skill`、全局索引或 Tool 执行旁路；`allowed-tools` 只展示，不修改 `AGENT.md` 的显式 Tool 列表
+  - 公共 Skill 必须显式关联 Agent；不新增 `use_skill` 或 Tool 执行旁路；`allowed-tools` 只展示，不修改 `AGENT.md` 的显式 Tool 列表
 
 #### Agent 私有 Skill 标准脚手架
 

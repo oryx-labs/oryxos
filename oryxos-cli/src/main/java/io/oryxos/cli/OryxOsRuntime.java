@@ -28,6 +28,8 @@ import io.oryxos.core.session.SessionManager;
 import io.oryxos.core.skill.AgentSkillCatalog;
 import io.oryxos.core.skill.AgentSkillCoordinator;
 import io.oryxos.core.skill.AgentSkillLockRegistry;
+import io.oryxos.core.skill.GlobalSkillManagementService;
+import io.oryxos.core.skill.SkillAssociationStore;
 import io.oryxos.core.skill.SkillContentValidator;
 import io.oryxos.core.skill.SkillLimits;
 import io.oryxos.core.skill.SkillManagementService;
@@ -213,6 +215,7 @@ public class OryxOsRuntime {
       ProviderService providerService,
       ProvidersProperties providers,
       AgentSkillCoordinator skillCoordinator,
+      SkillAssociationStore skillAssociations,
       @Value("${oryxos.author.provider:}") String authorProvider,
       @Value("${oryxos.author.model:}") String authorModel) {
     String defaultProvider =
@@ -229,7 +232,8 @@ public class OryxOsRuntime {
         defaultProvider,
         genProvider,
         authorModel,
-        skillCoordinator);
+        skillCoordinator,
+        skillAssociations);
   }
 
   /** 30 节 WorkspaceWatcher 专用守护线程执行器（跟 25 节调度线程池同类，不手工 new Thread）。 */
@@ -282,9 +286,15 @@ public class OryxOsRuntime {
   AgentSkillCatalog agentSkillCatalog(
       SkillMetadataReader metadataReader,
       SkillContentValidator contentValidator,
-      SkillLimits limits) {
+      SkillLimits limits,
+      SkillAssociationStore associations) {
     return new AgentSkillCatalog(
-        oryxosRoot().resolve("agents"), metadataReader, contentValidator, limits);
+        oryxosRoot().resolve("agents"), metadataReader, contentValidator, limits, associations);
+  }
+
+  @Bean
+  SkillAssociationStore skillAssociationStore() {
+    return new SkillAssociationStore(oryxosRoot());
   }
 
   @Bean
@@ -322,6 +332,28 @@ public class OryxOsRuntime {
             oryxosRoot().resolve("agents"), profileRegistry, catalog, importer, lockRegistry);
     service.cleanupArchiveOrphans(limits.stagingTtl());
     return service;
+  }
+
+  @Bean
+  GlobalSkillManagementService globalSkillManagementService(
+      ProfileRegistry profileRegistry,
+      AgentSkillCatalog catalog,
+      SkillPackageImporter importer,
+      SkillMetadataReader metadataReader,
+      SkillContentValidator contentValidator,
+      SkillLimits limits,
+      SkillAssociationStore associations,
+      AgentSkillLockRegistry lockRegistry) {
+    return new GlobalSkillManagementService(
+        oryxosRoot(),
+        profileRegistry,
+        catalog,
+        importer,
+        metadataReader,
+        contentValidator,
+        limits,
+        associations,
+        lockRegistry);
   }
 
   @Bean

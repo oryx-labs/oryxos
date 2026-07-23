@@ -2,6 +2,7 @@
 import { ref, reactive, computed } from 'vue'
 import logoUrl from './assets/logo.svg'
 import AgentSkillsTab from './components/AgentSkillsTab.vue'
+import GlobalSkillsPage from './components/GlobalSkillsPage.vue'
 import LoginView from './views/LoginView.vue'
 
 // —— 012-web-auth US3：登录守卫 —— 未登录先查 /api/v1/auth/me；登录页 LoginView 调 /auth/login
@@ -45,7 +46,7 @@ const TOP_NAV = [
   { key: 'overview', label: '概览' },
   { key: 'agents', label: 'Agent 列表' },
   { key: 'schedules', label: '定时任务', path: '/api/v1/schedules' },
-  // Skill 列表 / 知识库：占位页，暂无 path（不拉数据）、渲染空列表，后续接入端点
+  // 知识库仍为占位页；公共 Skill 由独立组件管理。
   { key: 'skills', label: 'Skill 列表' },
   { key: 'knowledge', label: '知识库' },
 ]
@@ -63,6 +64,7 @@ const runtimeKeys = new Set(RUNTIME_NAV.map((n) => n.key))
 const runtimeOpen = ref(false) // OS 运行时分组展开状态
 
 const active = ref('overview')
+const skillsPageVersion = ref(0)
 const state = reactive({}) // key -> {loading, error, data}
 // 当前激活页（只渲染这一页，避免 v-show + v-for 的块补丁陷阱导致切不动）
 const current = computed(() => NAV.find((n) => n.key === active.value) ?? NAV[0])
@@ -179,6 +181,7 @@ function select(key) {
 // 刷新当前页的列表：各页复用各自的加载函数（agents / notify-channels / 概览 / 其余按 path 的通用列表）
 function refresh() {
   const key = active.value
+  if (key === 'skills') { skillsPageVersion.value += 1; return }
   if (key === 'agents') { loadAgents(); return }
   if (key === 'notify-channels') { loadNotifyChannels(); return }
   if (key === 'providers') { loadProviders(); return }
@@ -843,14 +846,10 @@ const detailRows = computed(() => (agentDetail.value?.node ? flatten(agentDetail
         <template v-else>
           <div class="page-head">
             <h2>{{ current.label }}</h2>
-            <button class="btn" @click="refresh()">刷新</button>
+            <button v-if="active !== 'skills'" class="btn" @click="refresh()">刷新</button>
           </div>
 
-          <!-- Skill 列表：占位空列表（待接入 Skill 端点） -->
-          <table v-if="active === 'skills'">
-            <thead><tr><th>名称</th><th>描述</th></tr></thead>
-            <tbody><tr><td colspan="2" class="empty">（暂无 Skill · 待接入 Skill 端点）</td></tr></tbody>
-          </table>
+          <GlobalSkillsPage v-if="active === 'skills'" :key="skillsPageVersion" />
 
           <!-- 知识库：占位空列表（待接入知识库端点） -->
           <table v-else-if="active === 'knowledge'">

@@ -5,6 +5,7 @@ import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.provider.ProviderService;
 import io.oryxos.core.skill.AgentSkillCoordinator;
+import io.oryxos.core.skill.SkillAssociationStore;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
@@ -14,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Agent 生命周期编排（第 30 节）：三条录入（API create / WorkspaceWatcher 事件 / 启动扫描）都汇到同一段 {@link
@@ -27,6 +30,8 @@ import java.util.function.Supplier;
     value = "EI_EXPOSE_REP2",
     justification = "协作者均为 Spring 注入的共享单例，构造注入共享同一引用正是意图（无法也不应防御性拷贝）。")
 public class AgentLifecycleService {
+
+  private static final Logger LOG = LoggerFactory.getLogger(AgentLifecycleService.class);
 
   private static final String AGENT_MD_TEMPLATE =
       """
@@ -108,6 +113,7 @@ public class AgentLifecycleService {
   private final String authorProvider;
   private final String authorModel;
   private final AgentSkillCoordinator skillCoordinator;
+  private final SkillAssociationStore skillAssociations;
 
   public AgentLifecycleService(
       AgentLoader agentLoader,
@@ -127,6 +133,7 @@ public class AgentLifecycleService {
         defaultProvider,
         authorProvider,
         authorModel,
+        null,
         null);
   }
 
@@ -141,6 +148,31 @@ public class AgentLifecycleService {
       String authorProvider,
       String authorModel,
       AgentSkillCoordinator skillCoordinator) {
+    this(
+        agentLoader,
+        profileRegistry,
+        agentScheduler,
+        agentStore,
+        providerService,
+        defaultProvider,
+        authorProvider,
+        authorModel,
+        skillCoordinator,
+        null);
+  }
+
+  /** Production constructor with public Skill association cleanup on Agent deletion. */
+  public AgentLifecycleService(
+      AgentLoader agentLoader,
+      ProfileRegistry profileRegistry,
+      AgentScheduler agentScheduler,
+      AgentStore agentStore,
+      ProviderService providerService,
+      String defaultProvider,
+      String authorProvider,
+      String authorModel,
+      AgentSkillCoordinator skillCoordinator,
+      SkillAssociationStore skillAssociations) {
     this.agentLoader = agentLoader;
     this.profileRegistry = profileRegistry;
     this.agentScheduler = agentScheduler;
@@ -150,6 +182,7 @@ public class AgentLifecycleService {
     this.authorProvider = authorProvider;
     this.authorModel = authorModel;
     this.skillCoordinator = skillCoordinator;
+    this.skillAssociations = skillAssociations;
   }
 
   /**
@@ -337,8 +370,19 @@ public class AgentLifecycleService {
       return; // 幂等；404 由 web 层在调用前判定
     }
     agentStore.archive(name);
+    cleanupSkillAssociations(name);
     agentScheduler.unregisterProfile(profile);
     profileRegistry.remove(name);
+  }
+
+  private void cleanupSkillAssociations(String name) {
+    if (skillAssociations != null) {
+      try {
+        skillAssociations.removeAgent(name);
+      } catch (RuntimeException error) {
+        LOG.warn("Agent removed but public Skill associations could not be cleaned");
+      }
+    }
   }
 
   /**
@@ -377,6 +421,7 @@ public class AgentLifecycleService {
     if (profile == null) {
       return;
     }
+    cleanupSkillAssociations(name);
     agentScheduler.unregisterProfile(profile);
     profileRegistry.remove(name);
   }

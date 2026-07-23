@@ -24,6 +24,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** Fresh, bounded filesystem catalog for the managed Skills owned by one Agent. */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification =
+        "The association store is an intentional shared workspace collaborator injected by Spring.")
 public class AgentSkillCatalog {
 
   private static final String CURRENT_DIRECTORY = ".";
@@ -45,16 +49,27 @@ public class AgentSkillCatalog {
   private final SkillMetadataReader metadataReader;
   private final SkillContentValidator contentValidator;
   private final SkillLimits limits;
+  private final SkillAssociationStore associations;
 
   public AgentSkillCatalog(
       Path agentsDir,
       SkillMetadataReader metadataReader,
       SkillContentValidator contentValidator,
       SkillLimits limits) {
+    this(agentsDir, metadataReader, contentValidator, limits, null);
+  }
+
+  public AgentSkillCatalog(
+      Path agentsDir,
+      SkillMetadataReader metadataReader,
+      SkillContentValidator contentValidator,
+      SkillLimits limits,
+      SkillAssociationStore associations) {
     this.agentsDir = Objects.requireNonNull(agentsDir, "agentsDir").toAbsolutePath().normalize();
     this.metadataReader = Objects.requireNonNull(metadataReader, "metadataReader");
     this.contentValidator = Objects.requireNonNull(contentValidator, "contentValidator");
     this.limits = Objects.requireNonNull(limits, "limits");
+    this.associations = associations;
   }
 
   /** Scans every direct managed candidate and derives its current status and L1 inclusion. */
@@ -78,10 +93,35 @@ public class AgentSkillCatalog {
                         + safeLogValue(safeDirectoryName)));
   }
 
+  /** Lists the workspace-wide public Skill library. */
+  public List<SkillDescriptor> listGlobal() {
+    return applyBudget("global", scanGlobal()).descriptors();
+  }
+
+  /** Returns one public Skill from a fresh filesystem scan. */
+  public SkillDescriptor getGlobal(String directoryName) {
+    String safeDirectoryName = requireDirectoryName(directoryName);
+    return listGlobal().stream()
+        .filter(descriptor -> descriptor.directoryName().equals(safeDirectoryName))
+        .findFirst()
+        .orElseThrow(
+            () -> new NoSuchElementException("Public Skill does not exist: " + safeDirectoryName));
+  }
+
   /** Freezes only enabled, budget-included L1 metadata for one top-level request. */
   public SkillSnapshot snapshot(String agentName) {
     AgentName name = AgentName.parse(agentName);
-    BudgetedCatalog catalog = applyBudget(name.value(), scan(name));
+    List<SkillDescriptor> merged = new ArrayList<>(scan(name));
+    if (associations != null) {
+      Set<String> assigned = associations.skillsFor(name.value());
+      Set<String> localNames =
+          merged.stream().map(SkillDescriptor::directoryName).collect(Collectors.toSet());
+      scanGlobal().stream()
+          .filter(descriptor -> assigned.contains(descriptor.directoryName()))
+          .filter(descriptor -> !localNames.contains(descriptor.directoryName()))
+          .forEach(merged::add);
+    }
+    BudgetedCatalog catalog = applyBudget(name.value(), merged);
     List<SkillMetadata> included =
         catalog.descriptors().stream()
             .filter(SkillDescriptor::catalogIncluded)
@@ -187,6 +227,24 @@ public class AgentSkillCatalog {
       return List.of();
     }
     return scanCandidates(agentName, agentDir, skillsDir);
+  }
+
+  private List<SkillDescriptor> scanGlobal() {
+    Path oryxosRoot = Objects.requireNonNull(agentsDir.getParent(), "agentsDir parent");
+    Path skillsDir = oryxosRoot.resolve(SKILLS_DIRECTORY).normalize();
+    if (!Files.exists(skillsDir, NOFOLLOW)) {
+      return List.of();
+    }
+    if (Files.isSymbolicLink(skillsDir)
+        || !Files.isDirectory(skillsDir, LinkOption.NOFOLLOW_LINKS)) {
+      throw new IllegalStateException("Public Skill root is not a real directory");
+    }
+    Path rootReal = requireRealDirectory(oryxosRoot, "Workspace root cannot be inspected");
+    Path skillsReal = requireRealDirectory(skillsDir, "Public Skill root cannot be inspected");
+    if (!rootReal.equals(skillsReal.getParent())) {
+      throw new IllegalStateException("Public Skill root is outside the workspace");
+    }
+    return scanCandidates(AgentName.parse("global"), oryxosRoot, skillsDir);
   }
 
   private Path requireAgentDirectory(AgentName agentName, Path agentsReal) {

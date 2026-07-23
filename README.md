@@ -43,8 +43,8 @@ An Agent is a directory: `.oryxos/agents/<name>/AGENT.md` — YAML frontmatter (
 **⚡ Dynamic Agent Management**
 Create an agent via REST, generate a draft `AGENT.md` from one sentence with an LLM, or just drop a directory into the workspace — a `WorkspaceWatcher` picks it up and the agent goes live with no restart.
 
-**🧩 Agent-private Skills**
-Standard `skills/<name>/SKILL.md` packages expose only metadata at L1, then load instructions and resources on demand through existing, explicitly granted tools. The REST API and Web Manager support trusted ZIP import, enable/disable, validation status, and archived deletion.
+**🧩 Private & Shared Skills**
+Agent-private and workspace-wide public `SKILL.md` packages expose only metadata at L1, then load instructions and resources on demand through existing, explicitly granted tools. The REST API and Web Manager support trusted ZIP install, content editing, Agent association, validation, and archived deletion.
 
 **☕ Java Native**
 Built on Java 21 with virtual threads and a self-implemented ReAct loop (Spring AI is used only for protocol translation and `@Tool` schema generation). Single executable JAR, single binary deployment — no Python runtime.
@@ -159,7 +159,7 @@ The workspace defaults to `.oryxos/` but is configurable — set `ORYXOS_ROOT` (
 | `http://localhost:8080/admin/` | **Web Manager** — Vue 3 console |
 | `http://localhost:8080/swagger-ui` | OpenAPI docs |
 
-The Web Manager is a Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **agent management** (create, one-sentence LLM generation, file editor, per-agent session, memory, and private Skill management), **provider and notify-channel CRUD**, **scheduled tasks**, **sessions, tools, sandbox whitelist**, and a **workspace file browser**. The Skill tab supports trusted ZIP import, enable/disable, validation details, and archived deletion. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process.
+The Web Manager is a Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **agent management** (create, one-sentence LLM generation, file editor, per-agent session, memory, and private Skill management), **public Skill CRUD and Agent association**, **provider and notify-channel CRUD**, **scheduled tasks**, **sessions, tools, sandbox whitelist**, and a **workspace file browser**. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process.
 
 <p align="center">
   <img src="website/public/images/manager.jpg" alt="OryxOS Web Manager console" width="100%"/>
@@ -214,7 +214,7 @@ You are a professional DevOps assistant. When triggered, ... (task instructions)
 
 Drop this directory into the workspace and the `WorkspaceWatcher` registers the agent live — no restart. Agents can also be created via `POST /api/v1/agents` or drafted from one sentence via the admin console.
 
-### Private Skills
+### Private and Public Skills
 
 Each Agent is one self-contained directory. `AGENT.md` contains Profile frontmatter plus the Agent's always-loaded instructions; standard private Skills live at `skills/<skill-name>/SKILL.md`:
 
@@ -253,7 +253,7 @@ The Skill directory name and frontmatter `name` must match. Loading is progressi
 2. **L2** — after the model selects a relevant Skill, it uses the existing `read_file` tool to read that `SKILL.md`.
 3. **L3** — references/assets are read and scripts are run only when the L2 instructions require them, using existing `read_file`/`shell` paths.
 
-There is no global Skill library, global index, or `use_skill` tool. `allowed-tools` is descriptive metadata and never grants permissions; the Agent must explicitly declare each tool in `AGENT.md`, and execution still passes through `ToolExecutor`, sandbox checks, and audit persistence. Legacy flat files such as `skills/old-guide.md` remain unmanaged: they are not migrated, added to L1, disabled, or deleted by the Skill API, but `AGENT.md` may still reference them explicitly.
+Public Skills live once under `.oryxos/skills/<skill-name>/SKILL.md` and can be explicitly associated with multiple Agents from the REST API or Web Manager. Each request merges an Agent's private Skills with its associated public Skills. There is still no `use_skill` tool: `allowed-tools` is descriptive metadata and association never grants permissions; the Agent must explicitly declare each tool in `AGENT.md`, and execution still passes through `ToolExecutor`, sandbox checks, and audit persistence. Legacy flat files such as `skills/old-guide.md` remain unmanaged.
 
 Managed Skills have `enabled`, `disabled`, or `invalid` status. A valid local ZIP import is an explicit administrator trust action and is enabled for the next request. Disable persists across restart without deleting files; re-enable performs full validation. Delete atomically moves the complete package under `.oryxos/archive/.skills/` instead of physically erasing it; archived Skills are not discoverable and restore is not yet exposed. These changes affect the next top-level request and do not rewrite old Session history or Tool/LLM audit records.
 
@@ -280,6 +280,9 @@ All endpoints are prefixed with `/api/v1` and every response is wrapped in a uni
 | `GET` `POST` | `/workspace/tree`, `/workspace/file` | Workspace file browser (read tree / read / write file) |
 | `GET` `POST` | `/agents/{name}/skills` | List private Skills / import one local Skill ZIP as multipart `file` |
 | `GET` `PUT` `DELETE` | `/agents/{name}/skills/{skillName}` | Safe metadata / enable-disable / archived deletion |
+| `GET` `POST` | `/skills` | List public Skills / install one trusted ZIP as multipart `file` |
+| `GET` `PUT` `DELETE` | `/skills/{skillName}` | View / edit `SKILL.md` / archived deletion |
+| `PUT` `DELETE` | `/skills/{skillName}/agents/{agentName}` | Associate / dissociate a public Skill |
 | `GET` | `/profiles` | List derived profiles (one per agent) |
 | `GET` | `/memory` | Read long-term memory |
 | `GET` | `/tools` | List available tools |
