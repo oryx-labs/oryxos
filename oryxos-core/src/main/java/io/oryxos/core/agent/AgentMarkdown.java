@@ -1,6 +1,6 @@
 package io.oryxos.core.agent;
 
-import java.util.Arrays;
+import io.oryxos.core.context.MarkdownFrontmatter;
 import java.util.Map;
 import org.yaml.snakeyaml.Yaml;
 
@@ -13,8 +13,6 @@ import org.yaml.snakeyaml.Yaml;
  */
 public final class AgentMarkdown {
 
-  private static final String FENCE = "---";
-
   private AgentMarkdown() {}
 
   /** 拆分结果：frontmatter 不可变、缺省为空 Map；body 为去掉围栏后的正文。 */
@@ -26,28 +24,11 @@ public final class AgentMarkdown {
   }
 
   public static Parsed split(String content) {
-    if (content == null || content.isEmpty()) {
-      return new Parsed(Map.of(), "");
+    MarkdownFrontmatter.Split split = MarkdownFrontmatter.split(content);
+    if (!split.hasFrontmatter()) {
+      return new Parsed(Map.of(), split.body());
     }
-    String normalized = content.replace("\r\n", "\n").replace('\r', '\n');
-    String[] lines = normalized.split("\n", -1);
-    if (lines.length == 0 || !FENCE.equals(lines[0].strip())) {
-      return new Parsed(Map.of(), content.strip());
-    }
-    int close = -1;
-    for (int i = 1; i < lines.length; i++) {
-      if (FENCE.equals(lines[i].strip())) {
-        close = i;
-        break;
-      }
-    }
-    if (close < 0) {
-      // 只有开头围栏、没有闭合——按无 frontmatter 处理（不猜测半截 YAML）
-      return new Parsed(Map.of(), content.strip());
-    }
-    String frontmatterText = String.join("\n", Arrays.copyOfRange(lines, 1, close));
-    String body = String.join("\n", Arrays.copyOfRange(lines, close + 1, lines.length)).strip();
-    return new Parsed(parseYaml(frontmatterText), body);
+    return new Parsed(parseYaml(split.yaml()), split.body());
   }
 
   private static Map<String, Object> parseYaml(String text) {

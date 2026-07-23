@@ -30,6 +30,7 @@ public class GithubFolderFetcher {
 
   private static final int MAX_FILES = 100;
   private static final int MAX_TOTAL_BYTES = 5 * 1024 * 1024;
+  private static final String PATH_SEPARATOR = "/";
 
   private final Function<URI, String> httpGet;
 
@@ -42,7 +43,7 @@ public class GithubFolderFetcher {
 
     /** 目录末段作为 Skill 名的推断值（如 {@code skills/brainstorming} → {@code brainstorming}）。 */
     public String fallbackName() {
-      String[] segs = path.split("/");
+      String[] segs = path.split(PATH_SEPARATOR);
       return segs.length == 0 ? repo : segs[segs.length - 1];
     }
   }
@@ -85,7 +86,9 @@ public class GithubFolderFetcher {
       String type = entry.path("type").asText("");
       String path = entry.path("path").asText("");
       String relative =
-          path.startsWith(target.path() + "/") ? path.substring(target.path().length() + 1) : path;
+          path.startsWith(target.path() + PATH_SEPARATOR)
+              ? path.substring(target.path().length() + 1)
+              : path;
       if ("dir".equals(type)) {
         fetchDir(target, path, out, totalBytes);
         continue;
@@ -112,7 +115,7 @@ public class GithubFolderFetcher {
   private static String encodePath(String path) {
     // Contents API 的 path 段允许 '/'，逐段做 URL 编码后再拼回去
     StringBuilder sb = new StringBuilder();
-    for (String seg : path.split("/")) {
+    for (String seg : path.split(PATH_SEPARATOR)) {
       if (!sb.isEmpty()) {
         sb.append('/');
       }

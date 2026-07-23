@@ -7,6 +7,7 @@ import io.oryxos.core.provider.ProviderResponse;
 import io.oryxos.core.provider.ProviderService;
 import io.oryxos.core.provider.ToolCallRequest;
 import io.oryxos.core.session.Session;
+import io.oryxos.core.skill.SkillSnapshot;
 
 /**
  * ReAct 主循环——Agent 的大脑（宪法 I：自实现，不用框架 Agent 封装）。
@@ -31,10 +32,15 @@ public class ReActLoop {
   }
 
   public String run(Session session, String userMessage, Profile profile) {
+    return run(session, userMessage, profile, SkillSnapshot.empty(profile.name()));
+  }
+
+  /** 执行完整 ReAct。{@code skills} 由顶层请求创建并在所有轮次原样复用，循环内不得重扫目录。 */
+  public String run(Session session, String userMessage, Profile profile, SkillSnapshot skills) {
     session.appendUser(userMessage);
     // 最大轮数兜底（坑一）：模型可能反复要调工具永不收敛，转够强制退出
     for (int i = 0; i < profile.settings().maxIterations(); i++) {
-      ProviderRequest prompt = promptBuilder.build(session, profile);
+      ProviderRequest prompt = promptBuilder.build(session, profile, skills);
       // sessionId 随调用传递：llm_calls 审计按 session 关联
       ProviderResponse response = providerService.chat(session.sessionId(), profile, prompt);
       // 先累积再判停（坑三）：每一轮都留痕，事后可审计、下一轮接得上
@@ -45,7 +51,8 @@ public class ReActLoop {
       for (ToolCallRequest call : response.toolCalls()) {
         // 执行权只在 ToolExecutor（宪法 I/II）；失败结果同样回填，模型下一轮自行决定
         // 传 profile.name() 作为 Agent 名：记忆类工具据此落到本 Agent 专属 MEMORY.md（30 节）
-        ToolResult result = toolExecutor.execute(session.sessionId(), profile.name(), call);
+        ToolResult result =
+            toolExecutor.execute(session.sessionId(), profile.name(), profile.tools(), call);
         session.appendToolResult(call, result);
       }
     }

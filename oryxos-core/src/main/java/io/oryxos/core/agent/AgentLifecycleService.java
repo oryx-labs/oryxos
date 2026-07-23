@@ -8,6 +8,7 @@ import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.provider.ProviderService;
+import io.oryxos.core.skill.AgentSkillCoordinator;
 import io.oryxos.core.skill.Skill;
 import io.oryxos.core.skill.SkillRegistry;
 import java.io.IOException;
@@ -20,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -34,6 +36,10 @@ import java.util.stream.Collectors;
     value = "EI_EXPOSE_REP2",
     justification = "协作者均为 Spring 注入的共享单例，构造注入共享同一引用正是意图（无法也不应防御性拷贝）。")
 public class AgentLifecycleService {
+
+  private static final String FRONTMATTER_FENCE = "---";
+  private static final String SPACE = " ";
+  private static final String TAB = "\t";
 
   private static final String AGENT_MD_TEMPLATE =
       """
@@ -76,7 +82,12 @@ public class AgentLifecycleService {
 
   private static final String SKILL_TEMPLATE =
       """
-      # 示例子指令
+      ---
+      name: example
+      description: 演示按需加载的 Agent 私有 Skill
+      ---
+
+      # 示例 Skill
       把较长的规范 / 清单 / 格式要求放这里。Agent 正文指到时，用底座的 read_file 把它读进上下文——平时不占常驻 prompt。
       """;
 
@@ -175,6 +186,7 @@ public class AgentLifecycleService {
   private final String defaultProvider;
   private final String authorProvider;
   private final String authorModel;
+  private final AgentSkillCoordinator skillCoordinator;
   // 生成 Agent 时注入提示词的真实运行时能力：工具清单（启动固定）+ notify 渠道注册表（运行时可变，按需查）
   private final Map<String, OryxTool> tools;
   private final NotifyChannelRegistry notifyChannels;
@@ -182,6 +194,31 @@ public class AgentLifecycleService {
   private final McpServerAdmin mcpServerAdmin;
   // 32 节：生成时把全局 Skill 库目录喂给作者模型，让它按需把 Skill 加进 frontmatter 的 skills（可空——旧调用方不带）
   private final SkillRegistry skillRegistry;
+
+  public AgentLifecycleService(
+      AgentLoader agentLoader,
+      ProfileRegistry profileRegistry,
+      AgentScheduler agentScheduler,
+      AgentStore agentStore,
+      ProviderService providerService,
+      String defaultProvider,
+      String authorProvider,
+      String authorModel) {
+    this(
+        agentLoader,
+        profileRegistry,
+        agentScheduler,
+        agentStore,
+        providerService,
+        defaultProvider,
+        authorProvider,
+        authorModel,
+        null,
+        null,
+        null,
+        null,
+        null);
+  }
 
   public AgentLifecycleService(
       AgentLoader agentLoader,
@@ -205,10 +242,39 @@ public class AgentLifecycleService {
         authorModel,
         tools,
         notifyChannels,
+        null,
+        null,
         null);
   }
 
   /** 31 节：注入 {@link McpServerAdmin}，生成提示词里补上真实的"可用 MCP Server"清单。 */
+  public AgentLifecycleService(
+      AgentLoader agentLoader,
+      ProfileRegistry profileRegistry,
+      AgentScheduler agentScheduler,
+      AgentStore agentStore,
+      ProviderService providerService,
+      String defaultProvider,
+      String authorProvider,
+      String authorModel,
+      AgentSkillCoordinator skillCoordinator,
+      SkillRegistry skillRegistry) {
+    this(
+        agentLoader,
+        profileRegistry,
+        agentScheduler,
+        agentStore,
+        providerService,
+        defaultProvider,
+        authorProvider,
+        authorModel,
+        null,
+        null,
+        null,
+        skillRegistry,
+        skillCoordinator);
+  }
+
   public AgentLifecycleService(
       AgentLoader agentLoader,
       ProfileRegistry profileRegistry,
@@ -233,6 +299,7 @@ public class AgentLifecycleService {
         tools,
         notifyChannels,
         mcpServerAdmin,
+        null,
         null);
   }
 
@@ -250,6 +317,36 @@ public class AgentLifecycleService {
       NotifyChannelRegistry notifyChannels,
       McpServerAdmin mcpServerAdmin,
       SkillRegistry skillRegistry) {
+    this(
+        agentLoader,
+        profileRegistry,
+        agentScheduler,
+        agentStore,
+        providerService,
+        defaultProvider,
+        authorProvider,
+        authorModel,
+        tools,
+        notifyChannels,
+        mcpServerAdmin,
+        skillRegistry,
+        null);
+  }
+
+  public AgentLifecycleService(
+      AgentLoader agentLoader,
+      ProfileRegistry profileRegistry,
+      AgentScheduler agentScheduler,
+      AgentStore agentStore,
+      ProviderService providerService,
+      String defaultProvider,
+      String authorProvider,
+      String authorModel,
+      Map<String, OryxTool> tools,
+      NotifyChannelRegistry notifyChannels,
+      McpServerAdmin mcpServerAdmin,
+      SkillRegistry skillRegistry,
+      AgentSkillCoordinator skillCoordinator) {
     this.agentLoader = agentLoader;
     this.profileRegistry = profileRegistry;
     this.agentScheduler = agentScheduler;
@@ -258,6 +355,7 @@ public class AgentLifecycleService {
     this.defaultProvider = defaultProvider;
     this.authorProvider = authorProvider;
     this.authorModel = authorModel;
+    this.skillCoordinator = skillCoordinator;
     this.tools = tools;
     this.notifyChannels = notifyChannels;
     this.mcpServerAdmin = mcpServerAdmin;
@@ -269,10 +367,15 @@ public class AgentLifecycleService {
    * 冲突第一步就拒；中途失败回滚已写目录，不留半个 Agent。
    */
   public Profile create(String name, String description) {
-    if (profileRegistry.exists(name)) {
+    AgentName agentName = AgentName.parse(name);
+    return mutate(agentName, () -> createLocked(agentName.value(), description));
+  }
+
+  private Profile createLocked(String name, String description) {
+    if (profileRegistry.existsIdentity(name) || agentStore.agentIdentityExists(name)) {
       throw new IllegalArgumentException("Agent 已存在: " + name);
     }
-    Path agentDir = agentStore.writeAll(name, scaffold(name, description));
+    Path agentDir = agentStore.createAll(name, scaffold(name, description));
     try {
       return register(agentDir);
     } catch (RuntimeException e) {
@@ -293,7 +396,7 @@ public class AgentLifecycleService {
             .replace("{description}", desc)
             .replace("{provider}", provider));
     files.put("scripts/example.py", SCRIPT_TEMPLATE);
-    files.put("skills/example.md", SKILL_TEMPLATE);
+    files.put("skills/example/SKILL.md", SKILL_TEMPLATE);
     files.put("REFERENCE.md", REFERENCE_TEMPLATE);
     files.put("output/README.md", OUTPUT_README_TEMPLATE); // 建出产出目录（writeAll 建不了空目录，用占位说明落地）
     return files;
@@ -322,16 +425,62 @@ public class AgentLifecycleService {
     return profileRegistry.all();
   }
 
+  /**
+   * Adds or removes one global Skill reference in AGENT.md and re-registers the Agent immediately.
+   */
+  public Profile setSkillAssociation(String name, String skillName, boolean associated) {
+    AgentName agentName = AgentName.parse(name);
+    if (skillName == null || skillName.isBlank()) {
+      throw new IllegalArgumentException("Skill 名为空");
+    }
+    if (associated) {
+      requireKnownSkill(skillName);
+    }
+    return mutate(
+        agentName,
+        () -> {
+          Profile current =
+              profileRegistry
+                  .get(agentName.value())
+                  .orElseThrow(
+                      () ->
+                          new java.util.NoSuchElementException("Agent 不存在: " + agentName.value()));
+          List<String> next = new ArrayList<>(current.skills());
+          boolean changed =
+              associated ? addOnce(next, skillName) : next.removeIf(skillName::equals);
+          if (!changed) {
+            return current;
+          }
+          String markdown = agentStore.readAgentMarkdown(agentName.value());
+          return updateLocked(agentName.value(), rewriteSkills(markdown, next));
+        });
+  }
+
+  private static boolean addOnce(List<String> skills, String skillName) {
+    if (skills.contains(skillName)) {
+      return false;
+    }
+    skills.add(skillName);
+    return true;
+  }
+
+  private void requireKnownSkill(String skillName) {
+    if (skillRegistry == null || !skillRegistry.exists(skillName)) {
+      throw new IllegalArgumentException("Skill 不存在: " + skillName);
+    }
+  }
+
   /** 更新：覆写 AGENT.md；先注销旧定时、再注册新的（旧 cron 不会跟新 cron 一起跑）。 */
   public Profile update(String name, String agentMarkdown) {
+    AgentName agentName = AgentName.parse(name);
+    return mutate(agentName, () -> updateLocked(agentName.value(), agentMarkdown));
+  }
+
+  private Profile updateLocked(String name, String agentMarkdown) {
+    // 先校验再原子替换：坏定义不得覆盖仍可运行的旧 AGENT.md。
+    Profile updated = agentLoader.parse(agentMarkdown, name);
     Profile old = profileRegistry.get(name).orElse(null);
-    Path agentDir = agentStore.write(name, agentMarkdown);
-    Profile updated;
-    try {
-      updated = agentLoader.deriveProfile(agentDir);
-    } catch (IOException e) {
-      throw new UncheckedIOException("读取 Agent 目录失败: " + agentDir.getFileName(), e);
-    }
+    agentStore.write(name, agentMarkdown);
     if (old != null) {
       agentScheduler.unregisterProfile(old);
     }
@@ -441,15 +590,19 @@ public class AgentLifecycleService {
         merged.add(s);
       }
     }
+    return rewriteSkills(agentMarkdown, merged);
+  }
+
+  private static String rewriteSkills(String agentMarkdown, List<String> skills) {
     // 定位 frontmatter 围栏（合法定义必有；找不到则不动，交由后续校验报错）
     String normalized = agentMarkdown.replace("\r\n", "\n").replace('\r', '\n');
     String[] lines = normalized.split("\n", -1);
-    if (lines.length == 0 || !"---".equals(lines[0].strip())) {
+    if (lines.length == 0 || !FRONTMATTER_FENCE.equals(lines[0].strip())) {
       return agentMarkdown;
     }
     int close = -1;
     for (int i = 1; i < lines.length; i++) {
-      if ("---".equals(lines[i].strip())) {
+      if (FRONTMATTER_FENCE.equals(lines[i].strip())) {
         close = i;
         break;
       }
@@ -467,7 +620,7 @@ public class AgentLifecycleService {
               && line.strip().matches("skills\\s*:.*");
       if (topLevelSkills) {
         i++;
-        while (i < close && (lines[i].startsWith(" ") || lines[i].startsWith("\t"))) { // 跳过其列表项/缩进块
+        while (i < close && isIndented(lines[i])) { // 跳过其列表项/缩进块
           i++;
         }
         i--; // 抵消 for 的 i++
@@ -475,15 +628,17 @@ public class AgentLifecycleService {
       }
       kept.add(line);
     }
-    StringBuilder out = new StringBuilder("---\n");
+    StringBuilder out = new StringBuilder(FRONTMATTER_FENCE).append('\n');
     for (String line : kept) {
       out.append(line).append('\n');
     }
-    out.append("skills:\n");
-    for (String s : merged) {
-      out.append("  - ").append(s).append('\n');
+    if (!skills.isEmpty()) {
+      out.append("skills:\n");
+      for (String skill : skills) {
+        out.append("  - ").append(skill).append('\n');
+      }
     }
-    out.append("---\n");
+    out.append(FRONTMATTER_FENCE).append('\n');
     for (int i = close + 1; i < lines.length; i++) {
       out.append(lines[i]);
       if (i < lines.length - 1) {
@@ -491,6 +646,10 @@ public class AgentLifecycleService {
       }
     }
     return out.toString();
+  }
+
+  private static boolean isIndented(String line) {
+    return line.startsWith(SPACE) || line.startsWith(TAB);
   }
 
   private static List<String> skillsFromFrontmatter(Map<String, Object> frontmatter) {
@@ -512,19 +671,19 @@ public class AgentLifecycleService {
    * 变更先注销旧句柄再注册新的，同 {@link #update}）。用于「生成/编辑 Agent」的保存与文件浏览器的多文件保存。
    */
   public Profile saveFiles(String name, Map<String, String> files) {
+    AgentName agentName = AgentName.parse(name);
+    AgentStore.validateNoReservedSkillPaths(files == null ? null : files.keySet());
+    return mutate(agentName, () -> saveFilesLocked(agentName.value(), files));
+  }
+
+  private Profile saveFilesLocked(String name, Map<String, String> files) {
     String agentMarkdown = files == null ? null : files.get("AGENT.md");
     if (agentMarkdown == null || agentMarkdown.isBlank()) {
       throw new IllegalArgumentException("缺少 AGENT.md 内容");
     }
-    agentLoader.parse(agentMarkdown, name); // 先校验再落盘：非法定义不写进目录
+    Profile updated = agentLoader.parse(agentMarkdown, name); // 先校验再落盘：非法定义不写进目录
     Profile old = profileRegistry.get(name).orElse(null);
-    Path agentDir = agentStore.writeAll(name, files);
-    Profile updated;
-    try {
-      updated = agentLoader.deriveProfile(agentDir);
-    } catch (IOException e) {
-      throw new UncheckedIOException("读取 Agent 目录失败: " + agentDir.getFileName(), e);
-    }
+    agentStore.writeAll(name, files);
     if (old != null) {
       agentScheduler.unregisterProfile(old);
     }
@@ -546,6 +705,8 @@ public class AgentLifecycleService {
     int lastFence = body.lastIndexOf(CODE_FENCE);
     return (lastFence < 0 ? body : body.substring(0, lastFence)).strip();
   }
+
+  /** 删除：先原子归档目录，成功后再注销定时并移出注册表；归档失败时运行状态保持完整。 */
 
   /** 把注册表里真实的工具（name + 一行描述）铺给作者模型，杜绝编造清单外的工具名。 */
   private String describeTools() {
@@ -654,15 +815,53 @@ public class AgentLifecycleService {
     return files;
   }
 
-  /** 删除：先注销定时 → 再移出注册表 → 再把整个目录归档（不物理删）。顺序不能反（窗口期 cron 触发空指针）。 */
   public void delete(String name) {
+    AgentName agentName = AgentName.parse(name);
+    mutate(
+        agentName,
+        () -> {
+          deleteLocked(agentName.value());
+          return null;
+        });
+  }
+
+  private void deleteLocked(String name) {
     Profile profile = profileRegistry.get(name).orElse(null);
     if (profile == null) {
       return; // 幂等；404 由 web 层在调用前判定
     }
+    agentStore.archive(name);
     agentScheduler.unregisterProfile(profile);
     profileRegistry.remove(name);
-    agentStore.archive(name);
+  }
+
+  /**
+   * Workspace 文件 API 的受管 Skill 写入口。相对路径必须直接位于 {@code skills/<skill>/...}，实际写入由 AgentStore 同目录临时文件 +
+   * ATOMIC_MOVE 提交。
+   */
+  public Path writeManagedSkillFile(String name, String relativePath, String content) {
+    AgentName agentName = AgentName.parse(name);
+    String rawPath = relativePath == null ? "" : relativePath;
+    Path rawRelative = Path.of(rawPath);
+    boolean hasDotSegment = false;
+    for (Path segment : rawRelative) {
+      if (".".equals(segment.toString()) || "..".equals(segment.toString())) {
+        hasDotSegment = true;
+        break;
+      }
+    }
+    Path relative = rawRelative.normalize();
+    if (relative.isAbsolute()
+        || relative.getNameCount() < 3
+        || !"skills".equals(relative.getName(0).toString())
+        || rawPath.indexOf('\\') >= 0
+        || rawPath.indexOf('\0') >= 0
+        || hasDotSegment) {
+      throw new IllegalArgumentException("非法受管 Skill 文件路径");
+    }
+    AgentStore.validateNoReservedSkillPaths(List.of(relative.toString()));
+    return mutate(
+        agentName, () -> agentStore.writeFile(agentName.value(), relative.toString(), content));
   }
 
   /** WorkspaceWatcher 收到删除事件用：目录已被手工删，只注销 + 移索引，不归档。 */
@@ -674,5 +873,12 @@ public class AgentLifecycleService {
     }
     agentScheduler.unregisterProfile(profile);
     profileRegistry.remove(name);
+  }
+
+  private <T> T mutate(AgentName agentName, Supplier<T> operation) {
+    if (skillCoordinator == null) {
+      return operation.get();
+    }
+    return skillCoordinator.mutate(agentName.value(), operation::get);
   }
 }

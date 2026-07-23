@@ -38,7 +38,7 @@ public class FileTools {
   @Tool(name = "read_file", description = "读取指定路径的文本文件内容")
   public String readFile(@ToolParam(description = "要读取的文件路径") String path) {
     sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
-    Path file = Path.of(path);
+    Path file = normalizedPath(path);
     if (!Files.isRegularFile(file)) {
       throw new IllegalArgumentException("文件不存在或不是普通文件: " + path);
     }
@@ -55,7 +55,7 @@ public class FileTools {
       @ToolParam(description = "要写入的内容") String content) {
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     try {
-      Path file = Path.of(path);
+      Path file = normalizedPath(path);
       Path parent = file.getParent();
       if (parent != null) {
         Files.createDirectories(parent);
@@ -70,7 +70,7 @@ public class FileTools {
   @Tool(name = "list_dir", description = "列出指定目录下的文件和子目录名")
   public String listDir(@ToolParam(description = "要列出的目录路径") String path) {
     sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
-    Path dir = Path.of(path);
+    Path dir = normalizedPath(path);
     if (!Files.isDirectory(dir)) {
       throw new IllegalArgumentException("目录不存在: " + path);
     }
@@ -90,7 +90,7 @@ public class FileTools {
       @ToolParam(description = "要被替换的原文本（必须在文件中唯一出现）") String oldString,
       @ToolParam(description = "替换后的新文本") String newString) {
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
-    Path file = Path.of(path);
+    Path file = normalizedPath(path);
     if (!Files.isRegularFile(file)) {
       throw new IllegalArgumentException("文件不存在或不是普通文件: " + path);
     }
@@ -116,14 +116,18 @@ public class FileTools {
       @ToolParam(description = "要搜索的正则表达式") String pattern,
       @ToolParam(description = "搜索根路径（文件或目录）") String path) {
     sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
-    Path root = Path.of(path);
+    Path root = normalizedPath(path);
     if (!Files.exists(root)) {
       throw new IllegalArgumentException("路径不存在: " + path);
     }
     Pattern regex = Pattern.compile(pattern);
     List<String> matches = new ArrayList<>();
     try (Stream<Path> files = Files.walk(root)) {
-      for (Path file : (Iterable<Path>) files.filter(Files::isRegularFile)::iterator) {
+      for (Path file : (Iterable<Path>) files::iterator) {
+        enforceReadablePath(file);
+        if (!Files.isRegularFile(file)) {
+          continue;
+        }
         if (matches.size() >= MAX_MATCHES) {
           matches.add("...（已达 " + MAX_MATCHES + " 条上限，结果截断）");
           break;
@@ -141,7 +145,7 @@ public class FileTools {
       @ToolParam(description = "glob 通配模式，如 **/*.yaml") String pattern,
       @ToolParam(description = "查找根目录") String path) {
     sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
-    Path root = Path.of(path);
+    Path root = normalizedPath(path);
     if (!Files.isDirectory(root)) {
       throw new IllegalArgumentException("目录不存在: " + path);
     }
@@ -149,6 +153,7 @@ public class FileTools {
     List<String> hits = new ArrayList<>();
     try (Stream<Path> files = Files.walk(root)) {
       files
+          .peek(this::enforceReadablePath)
           .filter(Files::isRegularFile)
           .filter(p -> matcher.matches(root.relativize(p)))
           .limit(MAX_MATCHES)
@@ -251,5 +256,13 @@ public class FileTools {
     } catch (IOException e) {
       throw new UncheckedIOException("复制文件失败: " + from, e);
     }
+  }
+
+  private void enforceReadablePath(Path file) {
+    sandbox.enforce(new SandboxAction(ActionType.FILE_READ, file.toString()));
+  }
+
+  private Path normalizedPath(String path) {
+    return Path.of(path).toAbsolutePath().normalize();
   }
 }

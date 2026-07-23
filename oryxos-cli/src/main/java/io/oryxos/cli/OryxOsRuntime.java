@@ -1,6 +1,7 @@
 package io.oryxos.cli;
 
 import io.oryxos.channel.cli.CliChannel;
+import io.oryxos.cli.config.SkillProperties;
 import io.oryxos.core.OryxTool;
 import io.oryxos.core.agent.AgentExecutionService;
 import io.oryxos.core.agent.AgentExecutionStore;
@@ -26,7 +27,15 @@ import io.oryxos.core.provider.ProviderService;
 import io.oryxos.core.sandbox.SandboxWhitelist.Category;
 import io.oryxos.core.sandbox.SandboxWhitelistStore;
 import io.oryxos.core.session.SessionManager;
+import io.oryxos.core.skill.AgentSkillCatalog;
+import io.oryxos.core.skill.AgentSkillCoordinator;
+import io.oryxos.core.skill.AgentSkillLockRegistry;
+import io.oryxos.core.skill.SkillContentValidator;
+import io.oryxos.core.skill.SkillLimits;
 import io.oryxos.core.skill.SkillLoader;
+import io.oryxos.core.skill.SkillManagementService;
+import io.oryxos.core.skill.SkillMetadataReader;
+import io.oryxos.core.skill.SkillPackageImporter;
 import io.oryxos.core.skill.SkillRegistry;
 import io.oryxos.core.skill.SkillService;
 import io.oryxos.core.skill.SkillStore;
@@ -112,7 +121,8 @@ import org.springframework.web.client.RestClient;
   ProvidersProperties.class,
   FileSandboxProperties.class,
   ShellSandboxProperties.class,
-  HttpSandboxProperties.class
+  HttpSandboxProperties.class,
+  SkillProperties.class
 })
 public class OryxOsRuntime {
 
@@ -196,8 +206,8 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  AgentStore agentStore() {
-    return new AgentStore(oryxosRoot());
+  AgentStore agentStore(AgentSkillCoordinator skillCoordinator) {
+    return new AgentStore(oryxosRoot(), skillCoordinator);
   }
 
   /** 30 节：Agent 生命周期编排。创建脚手架的 AGENT.md 模板里 provider 缺省取 oryxos.providers 第一个（保证可注册）。 */
@@ -209,6 +219,7 @@ public class OryxOsRuntime {
       AgentStore agentStore,
       ProviderService providerService,
       ProvidersProperties providers,
+      AgentSkillCoordinator skillCoordinator,
       Map<String, OryxTool> tools,
       NotifyChannelRegistry notifyChannelRegistry,
       io.oryxos.core.mcp.McpServerAdmin mcpServerAdmin,
@@ -234,7 +245,8 @@ public class OryxOsRuntime {
         tools,
         notifyChannelRegistry,
         mcpServerAdmin,
-        skillRegistry);
+        skillRegistry,
+        skillCoordinator);
   }
 
   /** 30 节 WorkspaceWatcher 专用守护线程执行器（跟 25 节调度线程池同类，不手工 new Thread）。 */
@@ -292,6 +304,67 @@ public class OryxOsRuntime {
   @Bean
   SandboxWhitelistStore sandboxWhitelistStore(SandboxWhitelistRepository repository) {
     return new JpaSandboxWhitelistStore(repository);
+  }
+
+  @Bean
+  SkillLimits skillLimits(SkillProperties properties) {
+    return properties.toLimits();
+  }
+
+  @Bean
+  SkillMetadataReader skillMetadataReader() {
+    return new SkillMetadataReader();
+  }
+
+  @Bean
+  SkillContentValidator skillContentValidator() {
+    return new SkillContentValidator();
+  }
+
+  @Bean
+  AgentSkillCatalog agentSkillCatalog(
+      SkillMetadataReader metadataReader,
+      SkillContentValidator contentValidator,
+      SkillLimits limits) {
+    return new AgentSkillCatalog(
+        oryxosRoot().resolve("agents"), metadataReader, contentValidator, limits);
+  }
+
+  @Bean
+  AgentSkillLockRegistry agentSkillLockRegistry() {
+    return new AgentSkillLockRegistry();
+  }
+
+  @Bean
+  AgentSkillCoordinator agentSkillCoordinator(
+      ProfileRegistry profileRegistry,
+      AgentSkillCatalog catalog,
+      AgentSkillLockRegistry lockRegistry) {
+    return new AgentSkillCoordinator(
+        oryxosRoot().resolve("agents"), profileRegistry, catalog, lockRegistry);
+  }
+
+  /**
+   * ZIP preparation stays in the workspace filesystem; startup removes abandoned staging events
+   * older than the configured TTL before the importer accepts new work.
+   */
+  @Bean(initMethod = "cleanupOrphans")
+  SkillPackageImporter skillPackageImporter(SkillLimits limits) {
+    return new SkillPackageImporter(oryxosRoot(), limits);
+  }
+
+  @Bean
+  SkillManagementService skillManagementService(
+      ProfileRegistry profileRegistry,
+      AgentSkillCatalog catalog,
+      SkillPackageImporter importer,
+      AgentSkillLockRegistry lockRegistry,
+      SkillLimits limits) {
+    SkillManagementService service =
+        new SkillManagementService(
+            oryxosRoot().resolve("agents"), profileRegistry, catalog, importer, lockRegistry);
+    service.cleanupArchiveOrphans(limits.stagingTtl());
+    return service;
   }
 
   @Bean
@@ -448,8 +521,10 @@ public class OryxOsRuntime {
       ProfileRegistry profileRegistry,
       ReActLoop reActLoop,
       SessionManager sessionManager,
-      MemoryService memoryService) {
-    return new AgentService(profileRegistry, reActLoop, sessionManager, memoryService);
+      MemoryService memoryService,
+      AgentSkillCoordinator skillCoordinator) {
+    return new AgentService(
+        profileRegistry, reActLoop, sessionManager, memoryService, skillCoordinator);
   }
 
   @Bean
@@ -504,6 +579,7 @@ public class OryxOsRuntime {
 
   /** 32 节：异步触发的后台执行器——虚拟线程（宪法 VII：虚拟线程处理并发，非 Reactor/WebFlux）。 */
   @Bean(destroyMethod = "shutdown")
+  @SuppressWarnings("PMD.ThreadPoolCreationRule") // JDK 21 虚拟线程执行器，不是手工配置的平台线程池
   ExecutorService agentExecutionExecutor() {
     return Executors.newVirtualThreadPerTaskExecutor();
   }

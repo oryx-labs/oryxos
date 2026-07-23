@@ -1,6 +1,7 @@
 package io.oryxos.tool.builtin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -14,10 +15,13 @@ import io.oryxos.tool.sandbox.Sandbox;
 import io.oryxos.tool.sandbox.SandboxViolationException;
 import io.oryxos.tool.sandbox.ShellSandboxProperties;
 import io.oryxos.tool.sandbox.WhitelistSandbox;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /** 课件《第20节》验收 harness：ShellToolsTest——正常能跑通 + 越界会被拦 + 超时兜底。 */
 class ShellToolsTest {
@@ -73,5 +77,42 @@ class ShellToolsTest {
     assertThrows(
         SandboxViolationException.class,
         () -> new ShellTools(whitelist).shell("rm -rf /tmp/oryxos-should-never-run"));
+  }
+
+  @Test
+  @DisplayName("首命令虽在白名单_分号追加命令仍在进程启动前拦截")
+  void allowedFirstTokenCannotAppendSecondCommand(@TempDir Path temp) {
+    Sandbox whitelist = shellWhitelist("echo");
+    Path marker = temp.resolve("should-not-exist");
+
+    assertThrows(
+        SandboxViolationException.class,
+        () -> new ShellTools(whitelist).shell("echo ok; touch " + marker));
+    assertFalse(Files.exists(marker));
+  }
+
+  @Test
+  @DisplayName("bash 本身在白名单_bash-c 仍不能执行嵌套命令")
+  void whitelistedBashCannotUseCommandMode(@TempDir Path temp) {
+    Sandbox whitelist = shellWhitelist("bash");
+    Path marker = temp.resolve("should-not-exist");
+
+    assertThrows(
+        SandboxViolationException.class,
+        () -> new ShellTools(whitelist).shell("bash -c 'touch " + marker + "'"));
+    assertFalse(Files.exists(marker));
+  }
+
+  @Test
+  @DisplayName("真实白名单下简单单命令仍可执行")
+  void simpleWhitelistedCommandStillRuns() {
+    assertEquals("oryx", new ShellTools(shellWhitelist("echo")).shell("echo -n oryx"));
+  }
+
+  private Sandbox shellWhitelist(String command) {
+    return new WhitelistSandbox(
+        new FileSandboxProperties(List.of()),
+        new ShellSandboxProperties(List.of(command)),
+        new HttpSandboxProperties(List.of()));
   }
 }

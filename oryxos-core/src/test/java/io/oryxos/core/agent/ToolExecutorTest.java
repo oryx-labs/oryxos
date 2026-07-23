@@ -17,6 +17,7 @@ import static org.mockito.Mockito.when;
 import io.oryxos.core.OryxTool;
 import io.oryxos.core.ToolResult;
 import io.oryxos.core.provider.ToolCallRequest;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,7 +45,10 @@ class ToolExecutorTest {
 
     ToolResult result =
         executor.execute(
-            "s-1", "agent-x", new ToolCallRequest("http_get", "{\"url\":\"https://wttr.in\"}"));
+            "s-1",
+            "agent-x",
+            List.of("http_get"),
+            new ToolCallRequest("http_get", "{\"url\":\"https://wttr.in\"}"));
 
     assertTrue(result.success());
     assertEquals("晴，28°C", result.content());
@@ -66,7 +70,9 @@ class ToolExecutorTest {
 
     ToolResult result =
         assertDoesNotThrow(
-            () -> executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "{}")));
+            () ->
+                executor.execute(
+                    "s-1", "agent-x", List.of("http_get"), new ToolCallRequest("http_get", "{}")));
 
     // 异常不上抛（循环不中断），但也绝不静默：失败结果带原因 + 审计留痕
     assertFalse(result.success());
@@ -87,7 +93,9 @@ class ToolExecutorTest {
   void toolReturnedFailureIsAuditedAsFailure() {
     when(httpGet.execute(any())).thenReturn(ToolResult.error("域名不在白名单", false));
 
-    ToolResult result = executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "{}"));
+    ToolResult result =
+        executor.execute(
+            "s-1", "agent-x", List.of("http_get"), new ToolCallRequest("http_get", "{}"));
 
     assertFalse(result.success());
     verify(auditor)
@@ -105,7 +113,8 @@ class ToolExecutorTest {
   @DisplayName("未注册的工具名：失败结果 + success=false 审计（不抛异常）")
   void unknownToolNameFailsAndAudits() {
     ToolResult result =
-        executor.execute("s-1", "agent-x", new ToolCallRequest("no_such_tool", "{}"));
+        executor.execute(
+            "s-1", "agent-x", List.of("no_such_tool"), new ToolCallRequest("no_such_tool", "{}"));
 
     assertFalse(result.success());
     assertTrue(result.errorMessage().contains("no_such_tool"), "报错点名未知工具");
@@ -124,11 +133,33 @@ class ToolExecutorTest {
   @DisplayName("入参不是合法 JSON：失败结果 + 审计留痕")
   void malformedArgumentsJsonFailsAndAudits() {
     ToolResult result =
-        executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "not-json{{{"));
+        executor.execute(
+            "s-1", "agent-x", List.of("http_get"), new ToolCallRequest("http_get", "not-json{{{"));
 
     assertFalse(result.success());
     verify(auditor)
         .record(
             eq("s-1"), eq("http_get"), anyString(), isNull(), eq(false), anyString(), anyLong());
+  }
+
+  @Test
+  @DisplayName("全局已注册但 Profile 未授权的工具拒绝执行并写失败审计")
+  void registeredButUnauthorizedToolFailsAndAuditsWithoutExecution() {
+    ToolResult result =
+        executor.execute(
+            "s-1", "agent-x", List.of("read_file"), new ToolCallRequest("http_get", "{}"));
+
+    assertFalse(result.success());
+    assertTrue(result.errorMessage().contains("未获当前 Agent 授权"));
+    verify(httpGet, org.mockito.Mockito.never()).execute(any());
+    verify(auditor)
+        .record(
+            eq("s-1"),
+            eq("http_get"),
+            anyString(),
+            isNull(),
+            eq(false),
+            contains("未获当前 Agent 授权"),
+            anyLong());
   }
 }

@@ -41,7 +41,7 @@ public class AgentExecutionService {
             ok = true;
           } catch (RuntimeException e) {
             error = e.getMessage();
-            LOG.error("Agent {} 后台执行失败", sanitize(agentName), e);
+            LOG.error("Agent 后台执行失败", e);
           } finally {
             safeFinish(id, sessionId, ok, error);
           }

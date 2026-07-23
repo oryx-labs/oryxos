@@ -2,10 +2,15 @@ package io.oryxos.tool.sandbox;
 
 import io.oryxos.core.sandbox.SandboxWhitelist;
 import io.oryxos.core.sandbox.SandboxWhitelistStore;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -34,6 +39,17 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
 
   /** 域名白名单里的通配前缀；命中后转成"以 . 之后部分结尾"的点号边界匹配。 */
   private static final String WILDCARD_PREFIX = "*.";
+
+  /** bash 会解释为控制语法或展开语法的字符；白名单只允许单条简单命令。 */
+  private static final String FORBIDDEN_SHELL_CHARACTERS = ";|&<>`$";
+
+  private static final String SHELL_COMMAND_LONG_OPTION = "--command";
+  private static final String INTERNAL_DOMAIN_SUFFIX = ".internal";
+
+  private static final Set<String> SHELL_INTERPRETERS = Set.of("sh", "bash", "dash", "ksh", "zsh");
+  private static final Set<String> SHELL_EXECUTION_WRAPPERS =
+      Set.of("command", "env", "nice", "nohup", "sudo", "timeout", "xargs");
+  private static final Set<String> INTERNAL_HOSTS = Set.of("localhost", "metadata.google.internal");
 
   // 具体类型 CopyOnWriteArrayList（而非 List 接口）：需要 addIfAbsent 的原子"不存在才加"语义
   private final CopyOnWriteArrayList<Path> allowedRoots = new CopyOnWriteArrayList<>();
@@ -115,8 +131,24 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   private void checkFilePath(String rawPath) {
-    Path target = Path.of(rawPath).normalize().toAbsolutePath();
-    boolean allowed = allowedRoots.stream().anyMatch(target::startsWith);
+    if (rawPath == null) {
+      throw new SandboxViolationException("文件路径非法");
+    }
+    Path target;
+    try {
+      target = Path.of(rawPath).toAbsolutePath();
+    } catch (InvalidPathException e) {
+      throw new SandboxViolationException("文件路径非法");
+    }
+    rejectParentTraversal(target);
+    Path normalizedTarget = target.normalize();
+    Path resolvedTarget = resolveForContainment(normalizedTarget, rawPath);
+    boolean allowed =
+        allowedRoots.stream()
+            .anyMatch(
+                root ->
+                    normalizedTarget.startsWith(root)
+                        && resolvedTarget.startsWith(resolveForContainment(root, rawPath)));
     if (!allowed) {
       throw new SandboxViolationException(
           "路径不在白名单内: "
@@ -128,11 +160,130 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   private void checkShellCommand(String command) {
-    String firstToken = command.trim().split("\\s+")[0];
+    List<String> tokens = parseSimpleCommand(command);
+    String firstToken = tokens.get(0);
     if (!allowedCommands.contains(firstToken)) {
       throw new SandboxViolationException(
           "命令不在白名单内: " + firstToken + "。这是安全策略，请勿反复重试；确需该命令，请在管理台「SandBox 列表」把它加入 shell 白名单。");
     }
+    String executable = executableName(firstToken);
+    if (SHELL_EXECUTION_WRAPPERS.contains(executable)) {
+      throw new SandboxViolationException("不允许通过命令包装器执行其他程序: " + executable);
+    }
+    rejectShellInterpreterCommandMode(tokens);
+  }
+
+  private void rejectParentTraversal(Path target) {
+    for (Path part : target) {
+      if ("..".equals(part.toString())) {
+        throw new SandboxViolationException("文件路径不允许父目录跳转");
+      }
+    }
+  }
+
+  /** 将已存在的最长前缀解析到真实路径，再拼回尚不存在的尾部。这样既覆盖读路径，也覆盖待创建文件的写路径；任一已存在父目录是 symlink 时都会按实际目标做白名单边界判断。 */
+  private Path resolveForContainment(Path path, String rawPath) {
+    Path existing = path;
+    List<Path> missingParts = new ArrayList<>();
+    while (!Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
+      Path name = existing.getFileName();
+      Path parent = existing.getParent();
+      if (name == null || parent == null) {
+        throw new SandboxViolationException("文件路径无法解析: " + rawPath);
+      }
+      missingParts.add(name);
+      existing = parent;
+    }
+    try {
+      Path resolved = existing.toRealPath();
+      for (int i = missingParts.size() - 1; i >= 0; i--) {
+        resolved = resolved.resolve(missingParts.get(i));
+      }
+      return resolved.normalize();
+    } catch (IOException | SecurityException e) {
+      throw new SandboxViolationException("文件路径无法安全解析: " + rawPath);
+    }
+  }
+
+  private List<String> parseSimpleCommand(String command) {
+    if (command == null || command.isBlank()) {
+      throw new SandboxViolationException("命令不能为空");
+    }
+    for (int i = 0; i < command.length(); i++) {
+      char current = command.charAt(i);
+      if (Character.isISOControl(current) || FORBIDDEN_SHELL_CHARACTERS.indexOf(current) >= 0) {
+        throw new SandboxViolationException("命令包含不允许的 shell 控制语法");
+      }
+    }
+
+    List<String> tokens = new ArrayList<>();
+    StringBuilder token = new StringBuilder();
+    char quote = 0;
+    boolean escaped = false;
+    for (int i = 0; i < command.length(); i++) {
+      char current = command.charAt(i);
+      if (escaped) {
+        token.append(current);
+        escaped = false;
+      } else if (current == '\\' && quote != '\'') {
+        escaped = true;
+      } else if (quote != 0) {
+        if (current == quote) {
+          quote = 0;
+        } else {
+          token.append(current);
+        }
+      } else if (current == '\'' || current == '"') {
+        quote = current;
+      } else if (Character.isWhitespace(current)) {
+        addToken(tokens, token);
+      } else {
+        token.append(current);
+      }
+    }
+    if (escaped || quote != 0) {
+      throw new SandboxViolationException("命令包含未闭合的引用或转义");
+    }
+    addToken(tokens, token);
+    if (tokens.isEmpty()) {
+      throw new SandboxViolationException("命令不能为空");
+    }
+    return tokens;
+  }
+
+  private void addToken(List<String> tokens, StringBuilder token) {
+    if (!token.isEmpty()) {
+      tokens.add(token.toString());
+      token.setLength(0);
+    }
+  }
+
+  private void rejectShellInterpreterCommandMode(List<String> tokens) {
+    for (int i = 0; i < tokens.size(); i++) {
+      String token = tokens.get(i);
+      String executable = executableName(token);
+      if (!SHELL_INTERPRETERS.contains(executable)) {
+        continue;
+      }
+      for (int j = i + 1; j < tokens.size(); j++) {
+        String option = tokens.get(j);
+        if (isCommandModeOption(option)) {
+          throw new SandboxViolationException("不允许通过 shell 解释器命令模式执行");
+        }
+      }
+    }
+  }
+
+  private boolean isCommandModeOption(String option) {
+    if (SHELL_COMMAND_LONG_OPTION.equals(option)) {
+      return true;
+    }
+    return option.startsWith("-") && !option.startsWith("--") && option.substring(1).contains("c");
+  }
+
+  private static String executableName(String token) {
+    int slash = token.lastIndexOf('/');
+    return slash >= 0 ? token.substring(slash + 1) : token;
   }
 
   /** HTTP 读（GET 类）：默认放行，只挡内网/回环/云元数据等 SSRF 目标。无主机的伪目标（如 web_search）放行。 */
@@ -174,7 +325,7 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   /** SSRF 兜底：拒绝主机解析到回环/任意本地/链路本地(含云元数据 169.254.169.254)/站点内网/组播/CGNAT，及 localhost、*.internal。 */
   private static void assertNotInternalHost(String host) {
     String h = host.toLowerCase(Locale.ROOT);
-    if (h.equals("localhost") || h.equals("metadata.google.internal") || h.endsWith(".internal")) {
+    if (INTERNAL_HOSTS.contains(h) || h.endsWith(INTERNAL_DOMAIN_SUFFIX)) {
       throw new SandboxViolationException("拒绝访问内网 / 元数据主机（SSRF 防护）: " + host + "。这是安全策略，请勿重试。");
     }
     // IPv6 字面量 getHost() 带方括号（如 [fd00::1]），解析前剥掉，ULA/回环等判断才生效

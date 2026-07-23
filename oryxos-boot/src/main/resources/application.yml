@@ -14,6 +14,11 @@ spring:
   threads:
     virtual:
       enabled: true
+  servlet:
+    multipart:
+      # HTTP entry guard; core SkillLimits remains the authoritative archive/extraction boundary.
+      max-file-size: 10MB
+      max-request-size: 11MB
   datasource:
     url: jdbc:sqlite:oryxos.db
     driver-class-name: org.sqlite.JDBC
@@ -37,7 +42,7 @@ file:
   allowed_paths:
     - .oryxos          # Agent 工作区（Profile/记忆/技能/日志）
 shell:
-  allowed_commands:    # 只放最小只读命令集；写/删类命令默认不在内
+  allowed_commands:    # 只放最小只读命令集；仅允许单条简单命令，复合语法/命令包装器一律拒绝
     - ls
     - cat
     - echo
@@ -70,6 +75,23 @@ oryxos:
   author:
     provider: deepseek
     model: deepseek-chat
+  skills:
+    staging-ttl: 24h
+    package-limits:
+      max-archive-size: 10MB
+      max-expanded-size: 25MB
+      max-file-size: 5MB
+      max-skill-markdown-size: 256KB
+      max-frontmatter-size: 64KB
+      max-yaml-nesting-depth: 8
+      max-entries: 128
+      max-depth: 8
+      max-path-chars: 512
+      max-expansion-ratio: 100
+    catalog:
+      max-skills-per-agent: 64
+      max-candidates-per-agent: 1024
+      max-l1-chars: 12000
 
 # Observability: Actuator + Micrometer/Prometheus
 management:

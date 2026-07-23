@@ -200,4 +200,61 @@ class FileToolsTest {
     assertThrows(SandboxViolationException.class, () -> guarded.glob("*", dir.toString()));
     assertEquals("original", Files.readString(file), "校验不过，文件不该被编辑");
   }
+
+  @Test
+  @DisplayName("文件链接越界_read/edit/write 均拦截且外部文件不变")
+  void escapingFileSymlinkCannotBeReadOrMutated() throws IOException {
+    Path allowed = Files.createDirectory(dir.resolve("allowed-file-link"));
+    Path outside = Files.writeString(dir.resolve("outside-secret.txt"), "secret");
+    Path link = Files.createSymbolicLink(allowed.resolve("linked.txt"), outside);
+    FileTools guarded = new FileTools(whitelistFor(allowed));
+
+    assertThrows(SandboxViolationException.class, () -> guarded.readFile(link.toString()));
+    assertThrows(
+        SandboxViolationException.class,
+        () -> guarded.editFile(link.toString(), "secret", "changed"));
+    assertThrows(
+        SandboxViolationException.class, () -> guarded.writeFile(link.toString(), "changed"));
+    assertEquals("secret", Files.readString(outside));
+  }
+
+  @Test
+  @DisplayName("目录链接越界_list/read/write/grep/glob 均拦截且外部无副作用")
+  void escapingDirectorySymlinkCannotBeTraversed() throws IOException {
+    Path allowed = Files.createDirectory(dir.resolve("allowed-dir-link"));
+    Path outside = Files.createDirectory(dir.resolve("outside-dir"));
+    Files.writeString(outside.resolve("secret.txt"), "needle");
+    Path link = Files.createSymbolicLink(allowed.resolve("linked-dir"), outside);
+    FileTools guarded = new FileTools(whitelistFor(allowed));
+
+    assertThrows(SandboxViolationException.class, () -> guarded.listDir(link.toString()));
+    assertThrows(
+        SandboxViolationException.class,
+        () -> guarded.readFile(link.resolve("secret.txt").toString()));
+    assertThrows(
+        SandboxViolationException.class,
+        () -> guarded.writeFile(link.resolve("created.txt").toString(), "pwned"));
+    assertThrows(SandboxViolationException.class, () -> guarded.grep("needle", link.toString()));
+    assertThrows(SandboxViolationException.class, () -> guarded.glob("*", link.toString()));
+    assertFalse(Files.exists(outside.resolve("created.txt")));
+  }
+
+  @Test
+  @DisplayName("搜索根内的文件链接越界_grep 与 glob 在跟随前逐项拦截")
+  void searchRejectsEscapingFileSymlinkInsideAllowedRoot() throws IOException {
+    Path allowed = Files.createDirectory(dir.resolve("allowed-search"));
+    Path outside = Files.writeString(dir.resolve("outside-search.txt"), "needle-secret");
+    Files.createSymbolicLink(allowed.resolve("linked.txt"), outside);
+    FileTools guarded = new FileTools(whitelistFor(allowed));
+
+    assertThrows(SandboxViolationException.class, () -> guarded.grep("needle", allowed.toString()));
+    assertThrows(SandboxViolationException.class, () -> guarded.glob("*", allowed.toString()));
+  }
+
+  private Sandbox whitelistFor(Path allowed) {
+    return new WhitelistSandbox(
+        new FileSandboxProperties(List.of(allowed.toString())),
+        new ShellSandboxProperties(List.of()),
+        new HttpSandboxProperties(List.of()));
+  }
 }

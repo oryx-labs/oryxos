@@ -13,6 +13,9 @@ import java.util.Optional;
  * 层解耦：{@link #get} 返回 {@link Optional}，404 由 web 决定；非法入参抛 {@link IllegalArgumentException}（web 映射
  * 400）。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "SkillStore and SkillRegistry are intentionally shared runtime collaborators.")
 public class SkillService {
 
   /** 内置 Skill 名（供测试与外部引用）。 */

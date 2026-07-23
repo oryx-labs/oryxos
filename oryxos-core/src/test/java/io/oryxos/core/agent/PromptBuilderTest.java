@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.same;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.oryxos.core.OryxTool;
@@ -12,6 +14,7 @@ import io.oryxos.core.context.ContextLoader;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.session.Session;
+import io.oryxos.core.skill.SkillSnapshot;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -34,7 +37,7 @@ class PromptBuilderTest {
   @BeforeEach
   void setUp() {
     contextLoader = mock(ContextLoader.class);
-    when(contextLoader.load(any())).thenReturn("system-context");
+    when(contextLoader.load(any(), any())).thenReturn("system-context");
     httpGetTool = mock(OryxTool.class);
     when(httpGetTool.getName()).thenReturn("http_get");
     builder = new PromptBuilder(contextLoader, Map.of("http_get", httpGetTool), FIXED_CLOCK);
@@ -137,5 +140,16 @@ class PromptBuilderTest {
   private static boolean hasMsg(ProviderRequest request, String sub) {
     return request.messages().stream()
         .anyMatch(m -> m.content() != null && m.content().contains(sub));
+  }
+
+  @Test
+  @DisplayName("显式 SkillSnapshot 原样透传给 ContextLoader，不在 Builder 内重扫")
+  void explicitSkillSnapshotIsPassedThroughUnchanged() {
+    Profile profile = profile(20, List.of());
+    SkillSnapshot snapshot = SkillSnapshot.empty(profile.name());
+
+    builder.build(sessionWithTurns(1), profile, snapshot);
+
+    verify(contextLoader).load(same(profile), same(snapshot));
   }
 }

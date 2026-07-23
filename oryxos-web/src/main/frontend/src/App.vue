@@ -3,6 +3,7 @@ import { ref, reactive, computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
+import AgentSkillsTab from './components/AgentSkillsTab.vue'
 
 // 顶层：概览 / Agent 列表 / 定时任务。「OS 运行时」下收纳 Provider/Tool/Sandbox/长期记忆/会话——
 // 这些都是底座本身的运行时状态，跟业务 Agent 管理分层展示（31 节：侧边栏重分组）。
@@ -107,7 +108,7 @@ function select(key) {
   if (key === 'providers') { cancelPv(); loadProviders() }
   if (key === 'whitelist') { cancelWl(); loadWhitelist() }
   if (key === 'mcp') { cancelMcp(); loadMcp(); loadMcpCatalog() }
-  if (key === 'skills') { cancelSkill(); closeSkillDetail(); loadSkills() }
+  if (key === 'skills') { cancelSkill(); closeSkillDetail(); loadSkills(); loadAgents() }
 }
 
 // 刷新当前页的列表：各页复用各自的加载函数（agents / notify-channels / 概览 / 其余按 path 的通用列表）
@@ -118,7 +119,7 @@ function refresh() {
   if (key === 'providers') { loadProviders(); return }
   if (key === 'whitelist') { loadWhitelist(); return }
   if (key === 'mcp') { loadMcp(); return }
-  if (key === 'skills') { loadSkills(); return }
+  if (key === 'skills') { loadSkills(); loadAgents(); return }
   if (key === 'overview') { loadRuntimeInfo(); return }
   if (NAV.find((n) => n.key === key)?.path) load(key)
 }
@@ -192,8 +193,11 @@ async function importSkill() {
 }
 // —— Skill 详情：点「详情」→ 拉工作区树里的 skills/<name> 子树，复用同一套文件浏览器（openFile/fileView + md 预览）——
 const skillDetail = ref(null) // { name, description, body, loading, error, node }
+const skillAgentBusy = ref(null)
+const skillAgentError = ref(null)
 async function openSkillDetail(row) {
   skillDetail.value = { name: row.name, description: row.description || '', body: row.body || '', loading: true, error: null, node: null }
+  skillAgentError.value = null
   fileView.value = null // 从「未选中」开始，避免跨视图串台预览
   try {
     const res = await fetch('/api/v1/workspace/tree')
@@ -207,6 +211,25 @@ async function openSkillDetail(row) {
   }
 }
 function closeSkillDetail() { skillDetail.value = null; fileView.value = null }
+async function toggleSkillAgent(agent) {
+  if (!skillDetail.value || skillAgentBusy.value) return
+  const skillName = skillDetail.value.name
+  const associated = !(agent.skills || []).includes(skillName)
+  skillAgentBusy.value = agent.name
+  skillAgentError.value = null
+  try {
+    const res = await fetch(`/api/v1/skills/${encodeURIComponent(skillName)}/agents/${encodeURIComponent(agent.name)}`, {
+      method: associated ? 'PUT' : 'DELETE',
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '关联更新失败')
+    agents.value = { ...agents.value, data: agents.value.data.map((item) => item.name === agent.name ? body.data : item) }
+  } catch (e) {
+    skillAgentError.value = e.message
+  } finally {
+    skillAgentBusy.value = null
+  }
+}
 // 该 Skill 目录的文件行（扁平带缩进，复用 Agent 工作区同一个 flatten）
 const skillDetailRows = computed(() => (skillDetail.value?.node ? flatten(skillDetail.value.node, 0, []) : []))
 // 回退：旧后端 tree 无 skills 节点时，直接渲染 SKILL.md 正文（body）
@@ -705,7 +728,7 @@ async function deleteWhitelist(category, value) {
   } catch (e) { wl.value = { ...wl.value, error: e.message } }
 }
 
-// —— Agent 详情：Tab 切换（基本信息 / 文件 / 会话 / 记忆）——
+// —— Agent 详情：Tab 切换（基本信息 / 生成 / 工作区 / 输出 / 私有 Skill / 会话 / 执行历史 / 记忆）——
 const agentDetail = ref(null) // { name, agent, tab, loading, error, node }
 const fileView = ref(null) // { path, loading, error, content, saving, saved }
 // .md 文件视图切换：'preview'（渲染，默认）/ 'source'（原文，可编辑）。共享一个 ref——
@@ -1058,7 +1081,7 @@ const outputRows = computed(() =>
         <template v-else>
           <div class="page-head">
             <h2>{{ current.label }}</h2>
-            <button class="btn" @click="refresh()">刷新</button>
+            <button v-if="active !== 'skills'" class="btn" @click="refresh()">刷新</button>
           </div>
 
           <!-- Skill 列表（第 32 节）：全局 Skill 库 CRUD。Agent 按名引用、运行时注入正文约束产出 -->
@@ -1134,6 +1157,23 @@ const outputRows = computed(() =>
               <button class="btn back" @click="closeSkillDetail">← 返回 Skill 列表</button>
               <div class="sess-meta"><span>Skill</span><span class="mono">{{ skillDetail.name }}</span></div>
               <p class="empty">{{ skillDetail.description || '—' }}</p>
+              <div class="skill-associations">
+                <h3 class="sec">关联 Agent</h3>
+                <p v-if="agents.loading" class="empty">Agent 列表加载中…</p>
+                <p v-else-if="agents.error" class="error">出错：{{ agents.error }}</p>
+                <p v-else-if="!agents.data.length" class="empty">暂无 Agent，请先创建 Agent。</p>
+                <div v-else class="skill-picker">
+                  <label v-for="agent in agents.data" :key="agent.name" class="skill-opt">
+                    <input type="checkbox"
+                           :checked="(agent.skills || []).includes(skillDetail.name)"
+                           :disabled="!!skillAgentBusy"
+                           @change="toggleSkillAgent(agent)" />
+                    <span class="mono">{{ agent.name }}</span>
+                    <span v-if="skillAgentBusy === agent.name" class="empty">保存中…</span>
+                  </label>
+                </div>
+                <p v-if="skillAgentError" class="error">{{ skillAgentError }}</p>
+              </div>
               <p v-if="skillDetail.loading" class="empty">加载中…</p>
               <p v-else-if="skillDetail.error" class="error">出错：{{ skillDetail.error }}</p>
               <!-- 有真实目录子树 → 文件浏览器 -->
@@ -1269,8 +1309,10 @@ const outputRows = computed(() =>
               <div class="sess-meta"><span>Agent</span><span class="mono">{{ agentDetail.name }}</span></div>
               <div class="tabs">
                 <button :class="['tab', { on: agentDetail.tab === 'info' }]" @click="detailTab('info')">基本信息</button>
+                <button :class="['tab', { on: agentDetail.tab === 'generate' }]" @click="detailTab('generate')">生成</button>
                 <button :class="['tab', { on: agentDetail.tab === 'files' }]" @click="detailTab('files')">工作区</button>
                 <button :class="['tab', { on: agentDetail.tab === 'output' }]" @click="detailTab('output')">输出</button>
+                <button :class="['tab', { on: agentDetail.tab === 'skills' }]" @click="detailTab('skills')">Skill</button>
                 <button :class="['tab', { on: agentDetail.tab === 'chat' }]" @click="detailTab('chat')">会话</button>
                 <button :class="['tab', { on: agentDetail.tab === 'executions' }]" @click="detailTab('executions')">执行历史</button>
                 <button :class="['tab', { on: agentDetail.tab === 'memory' }]" @click="detailTab('memory')">记忆</button>
@@ -1367,7 +1409,14 @@ const outputRows = computed(() =>
                 </div>
               </div>
 
-              <!-- Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
+              <!-- Tab 4：Skill —— Agent 私有 Skill 的导入、启停与归档删除 -->
+              <AgentSkillsTab
+                v-else-if="agentDetail.tab === 'skills'"
+                :key="agentDetail.name"
+                :agent-name="agentDetail.name"
+              />
+
+              <!-- Tab 5：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
               <div v-else-if="agentDetail.tab === 'chat'">
                 <div class="sess-meta"><span class="mono">{{ chat.sessionId || '（会话尚未创建）' }}</span></div>
                 <p v-if="chat.loading" class="empty">加载中…</p>
@@ -1433,7 +1482,7 @@ const outputRows = computed(() =>
                 </table>
               </div>
 
-              <!-- Tab 5：记忆 —— 这个 Agent 自己的长期记忆（只读） -->
+              <!-- 记忆 —— 这个 Agent 自己的长期记忆（只读） -->
               <div v-else-if="agentDetail.tab === 'memory'">
                 <p v-if="agentMemory.loading" class="empty">加载中…</p>
                 <p v-else-if="agentMemory.error" class="error">出错：{{ agentMemory.error }}</p>
