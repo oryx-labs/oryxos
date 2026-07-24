@@ -12,6 +12,9 @@ public record SkillMetadata(
     String compatibility,
     Map<String, String> metadata,
     String allowedTools,
+    SkillVersion version,
+    ActivationCriteria activation,
+    GatingRequirements requires,
     Path entryPath,
     String relativeEntry) {
 
@@ -44,6 +47,8 @@ public record SkillMetadata(
     }
     metadata = metadata == null ? Map.of() : Map.copyOf(metadata);
     allowedTools = normalizeOptional(allowedTools);
+    activation = activation == null ? ActivationCriteria.empty() : activation;
+    requires = requires == null ? GatingRequirements.empty() : requires;
     entryPath = Objects.requireNonNull(entryPath, "entryPath");
     if (!entryPath.isAbsolute()) {
       throw new IllegalArgumentException("entryPath must be absolute");
@@ -54,6 +59,30 @@ public record SkillMetadata(
     if (!expectedRelativeEntry.equals(relativeEntry)) {
       throw new IllegalArgumentException("relativeEntry must equal " + expectedRelativeEntry);
     }
+  }
+
+  /** Compatibility constructor for callers that only need the original L1 projection. */
+  public SkillMetadata(
+      String name,
+      String description,
+      String license,
+      String compatibility,
+      Map<String, String> metadata,
+      String allowedTools,
+      Path entryPath,
+      String relativeEntry) {
+    this(
+        name,
+        description,
+        license,
+        compatibility,
+        metadata,
+        allowedTools,
+        null,
+        ActivationCriteria.empty(),
+        GatingRequirements.empty(),
+        entryPath,
+        relativeEntry);
   }
 
   private static String normalizeOptional(String value) {
@@ -67,30 +96,14 @@ public record SkillMetadata(
     return value.codePointCount(0, value.length());
   }
 
-  /** Linear-time equivalent of {@code [a-z0-9]+(?:-[a-z0-9]+)*}. */
+  /** Linear-time equivalent of the public Skill identity grammar. */
   static boolean isValidName(String value) {
-    if (value == null || value.isEmpty() || value.length() > MAX_NAME_CHARS) {
+    try {
+      SkillName.parse(value);
+      return true;
+    } catch (SkillValidationException error) {
       return false;
     }
-    boolean previousWasNameCharacter = false;
-    for (int index = 0; index < value.length(); index++) {
-      char character = value.charAt(index);
-      if (isAsciiLowercaseLetterOrDigit(character)) {
-        previousWasNameCharacter = true;
-      } else if (character == '-' && previousWasNameCharacter && index + 1 < value.length()) {
-        previousWasNameCharacter = false;
-      } else {
-        return false;
-      }
-    }
-    return previousWasNameCharacter;
-  }
-
-  private static boolean isAsciiLowercaseLetterOrDigit(char character) {
-    if (character >= LOWERCASE_ASCII_START && character <= LOWERCASE_ASCII_END) {
-      return true;
-    }
-    return character >= DIGIT_ASCII_START && character <= DIGIT_ASCII_END;
   }
 
   private static String requireRelativePath(String value, String field) {

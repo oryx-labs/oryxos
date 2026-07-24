@@ -249,4 +249,7 @@ With multiple developers:
 - Verify tests fail before implementing
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
+- For public Skill marketplace work, include tests for the exact relative symlink target,
+  NOFOLLOW/containment checks, L1-only initial disclosure, no Tool permission escalation, and
+  rejection of AGENT.md/AGENTS.md/database association truth sources.
 - Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence

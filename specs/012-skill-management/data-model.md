@@ -1,192 +1,176 @@
-# Data Model: Agent 内 Skill 渐进式加载与生命周期管理
+# Data Model: 公共 Skill 与 Agent 软链接关联
 
-本特性以文件系统为唯一真相源，不新增数据库表。以下对象分为持久化目录、派生领域对象和请求期并发对象。
+本特性以文件系统为唯一真相源，不新增数据库表。公共包、全局启停状态与 Agent 关联是三个独立维度；`AGENT.md` 中的 `skills:` 不参与任何状态推导。
 
 ## 1. 文件系统布局
 
 ```text
 .oryxos/
+├── skills/
+│   └── <skill>/
+│       ├── SKILL.md                 # 必填，公共内容只保存一份
+│       ├── .oryxos-disabled         # 可选，全局禁用 marker
+│       ├── .oryxos-origin.yml       # 可选，受信导入来源
+│       ├── references/              # 可选 L3
+│       ├── scripts/                 # 可选 L3
+│       └── assets/                  # 可选 L3
 ├── agents/
 │   └── <agent>/
 │       ├── AGENT.md
 │       └── skills/
-│           ├── legacy-note.md              # 旧版，unmanaged，不进入本特性
-│           └── <skill>/                    # 受管包；目录名必须等于 metadata.name
-│               ├── SKILL.md                # 必填
-│               ├── .oryxos-disabled        # 可选，零字节保留 marker
-│               ├── .oryxos-origin.yml      # 可选，系统导入来源
-│               ├── scripts/                # 可选 L3
-│               ├── references/             # 可选 L3
-│               └── assets/                 # 可选 L3
-├── .staging/
-│   └── skill-import/
-│       └── <uuid>/
-│           ├── upload.zip
-│           └── unpacked/
-└── archive/
-    └── .skills/
-        └── <agent>/<UTC>-<uuid>/
-            ├── archive.yml
-            └── package/                    # 从活动目录原子移入
+│           └── <skill> -> ../../../skills/<skill>
+├── .staging/skill-import/<uuid>/    # 上传与解包暂存，不参与发现
+└── archive/.skills/<UTC>-<uuid>/
+    ├── archive.yml
+    └── package/                     # 公共包完整归档
 ```
 
-保留文件 `.oryxos-disabled`、`.oryxos-origin.yml` 只能由 OryxOS 创建；上传包包含它们时拒绝。disabled marker 必须是零字节普通文件；origin 必须是至多 4 KiB 的安全 YAML 普通文件，任一保留文件为链接、特殊文件或格式损坏都使候选 invalid。直接子目录只有在包含 `SKILL.md` 或任一保留 marker 时才是受管候选；其他目录按 legacy/unmanaged 忽略。归档和 staging 目录不参与运行时发现。
+标准关联只能是系统创建的相对软链接，link text 必须逐字等于 `../../../skills/<skill>`。工作区整体移动后链接仍有效。公共包根、Agent 根、`skills/` 父目录、归档和 staging 的任何父链都不得是软链接。
 
-## 2. AgentName（所属键）
+## 2. SkillName 与 SkillVersion
 
-- `value`: `[A-Za-z0-9_-]+` 的原始 Agent 名；必须同时等于 `.oryxos/agents/<value>` basename、`AGENT.md` frontmatter `name` 和 `Profile.name`。
-- `lockKey`: `value.toLowerCase(Locale.ROOT)`；只用于锁表，使大小写不敏感文件系统上的别名串行化，不改变展示名或目录解析。
-- 所有目录解析先通过 `AgentName.parse`，再 resolve + parent/NOFOLLOW 校验；不得各模块复制 regex。
+- `SkillName.value`: 1–64 字符，`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`。
+- `SkillVersion.value`: 可选；出现时为 1–32 字符，`^[a-zA-Z0-9._\-+~]{1,32}$`。它未来可能进入 `<skill version="...">` XML 属性，因此拒绝空白、引号、尖括号和其它 breakout 字符。
+- 必须同时等于 `.oryxos/skills/<value>` basename 与 `SKILL.md` frontmatter `name`。
+- 任何 API path member 必须先解析为 `SkillName`，再进行 `resolve`、normalize 与 `NOFOLLOW_LINKS` 校验；不得直接拼路径。
+- 大小写或 Unicode 规范化后冲突的候选拒绝导入。
 
-## 3. SkillMetadata
+## 3. PublicSkillPackage
 
-从单个 `SKILL.md` frontmatter 派生的不可变值对象。
-
-| 字段 | 类型 | 规则 |
-|---|---|---|
-| `name` | String | 必填；1–64；`^[a-z0-9]+(?:-[a-z0-9]+)*$`；与父目录名一致 |
-| `description` | String | 必填；trim 后 1–1024 字符 |
-| `license` | String? | 可选；仅展示/保留 |
-| `compatibility` | String? | 可选；最多 500 字符 |
-| `metadata` | Map<String,String> | 可选；不进入 L1 之外的执行决策 |
-| `allowedTools` | String? | 可选、实验性；仅展示，不能扩展 Profile.tools |
-| `entryPath` | Path | 内部真实路径；只在 prompt/tool 参数内使用，不直接出 REST |
-| `relativeEntry` | String | Agent 相对路径 `skills/<name>/SKILL.md` |
-
-不变量：构建成功即表示 frontmatter 本身合法；解析必须在闭合 frontmatter 后停止，不读取正文。
-
-## 4. SkillDescriptor
-
-管理面的单个受管包视图，允许描述 invalid 包。
+公共包的派生管理视图：
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `agentName` | String | 规范化后的所属 Agent |
-| `directoryName` | String | `skills/` 下直接子目录名，也是管理 member 的稳定键；valid 时等于 metadata.name |
-| `metadata` | SkillMetadata? | invalid（含受管候选缺入口）时可能为空 |
-| `status` | SkillStatus | `ENABLED` / `DISABLED` / `INVALID` |
-| `configuredEnabled` | boolean | `.oryxos-disabled` 不存在为 true；与内容是否合法分离 |
-| `source` | SkillSource | `UPLOAD` / `WORKSPACE` |
-| `updatedAt` | Instant | 包内最近修改时间的安全汇总 |
-| `validationError` | SkillValidationError? | 稳定 reason code + 不含绝对路径的消息 |
-| `relativeEntrypoint` | String? | Agent 相对路径 |
-| `resources` | List<String> | 包内内容文件的相对路径，字典序；排除 `.oryxos-*` 保留状态文件 |
-| `fileCount` | int | 内容普通文件数，不含保留状态文件 |
-| `totalBytes` | long | 内容普通文件实际总字节数，不含保留状态文件 |
-| `catalogIncluded` | boolean | 当前聚合预算内是否会进入 L1 |
+| `name` | SkillName | 公共身份 |
+| `metadata` | SkillMetadata? | invalid 时可能为空 |
+| `status` | `ENABLED / DISABLED / INVALID` | 内容校验优先于 marker |
+| `configuredEnabled` | boolean | `.oryxos-disabled` 不存在为 true |
+| `source` | `UPLOAD / GITHUB / WORKSPACE` | 来源展示，不影响权限 |
+| `relativeEntrypoint` | String? | `skills/<skill>/SKILL.md`，REST 不返回绝对路径 |
+| `resources` | List<String> | 包根相对普通文件，排除保留文件 |
+| `fileCount` / `totalBytes` | int / long | 有界资源统计 |
+| `linkedAgents` | List<String> | 请求时扫描所得，按 Agent 名排序 |
+| `validationError` | Error? | 稳定 reason code，不含绝对路径 |
 
-状态推导：
+状态推导：结构或内容非法为 `INVALID`；合法且 marker 存在为 `DISABLED`；合法且 marker 不存在为 `ENABLED`。全局禁用不删除任何关联链接；invalid/disabled 包都不进入运行时 L1。
 
-1. 包结构或内容校验失败 → `INVALID`；
-2. 校验通过且 marker 存在 → `DISABLED`；
-3. 校验通过且 marker 不存在 → `ENABLED`。
+## 4. SkillAssociation
 
-只有第 3 类且 `catalogIncluded=true` 的项进入运行时快照。一个 invalid 包不会使集合扫描失败。
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `agentName` | String | Agent 规范名称 |
+| `skillName` | SkillName | 由链接 basename 推导 |
+| `linkPath` | Path | 内部路径，REST 只暴露相对路径 |
+| `rawTarget` | String | `readSymbolicLink` 原始文本 |
+| `status` | `VALID / INVALID` | 是否为标准关联 |
+| `skillStatus` | SkillStatus? | 目标公共包状态；不存在时为空 |
+| `discoverable` | boolean | `VALID && skillStatus == ENABLED` |
+| `error` | Error? | 错误链接、悬空目标或非法包原因 |
 
-## 5. SkillSnapshot
+标准关联的全部不变量：
 
-一次顶层请求的不可变 L1 集合。
+1. `.oryxos/agents/<agent>/skills/<skill>` 本身是软链接；
+2. `rawTarget` 逐字等于 `../../../skills/<skill>`；
+3. 解析后的 normalize 路径等于公共包目标，且真实公共包仍位于 `.oryxos/skills`；
+4. Agent 的 `skills/` 父目录是真实目录，非链接；
+5. 链接名、目标名与 metadata name 一致。
+
+手工创建的绝对链接、不同层级链接、越界链接、悬空链接和指向非标准目标的链接一律不跟随、不加载；管理列表可显示为 invalid 供修复。普通解除关联只删除经上述校验的标准链接，不删除目标包或真实目录。
+
+## 5. SkillManifest、SkillMetadata 与 SkillSnapshot
+
+`SkillManifest` 是 `SKILL.md` frontmatter 的安全反序列化结果：
+
+| 字段 | 类型 | 规则 |
+|---|---|---|
+| `name` | SkillName | 必填，且与包目录一致 |
+| `description` | String | 必填，trim 后 1–1024 字符 |
+| `version` | SkillVersion? | 可选，出现时通过安全 grammar |
+| `license` | String? | 管理展示 |
+| `compatibility` | String? | 最多 500 字符 |
+| `metadata` | Map<String,String> | 有界、安全展示；legacy 嵌套字段不进入顶层能力 |
+| `allowedTools` | String? | 只展示，不授予权限 |
+| `activation` | Activation? | 反序列化后按统一上限过滤/截断；不触发自动执行 |
+| `requires` | Requires? | `skills` 最多保留 10 项；其它声明不执行 gating |
+
+`metadata.openclaw.requires` 只产生结构化 legacy WARN；它不会阻断合法包，也不会静默赋值给顶层 `requires`。
+
+`SkillMetadata` 是供 catalog/L1 使用的派生视图，包含上述展示字段与内部 entry path。只有 `name`、`description` 与入口路径进入 L1；`allowed-tools`、`activation` 和 `requires` 都不能扩展 Agent 的 Tool 权限。
+
+`SkillSnapshot` 是一次顶层请求的不可变值：
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `agentName` | String | 所属 Agent |
-| `capturedAt` | Instant | 快照创建时间，仅用于诊断 |
-| `skills` | List<SkillMetadata> | 只含 enabled + budget included，按 name 升序 |
-| `renderedChars` | int | L1 渲染字符数 |
-| `omittedCount` | int | 仅人工超限时可能大于 0 |
+| `capturedAt` | Instant | 诊断时间 |
+| `skills` | List<SkillMetadata> | 只含有效关联且全局 enabled 的包，按 name 排序 |
+| `renderedChars` | int | L1 字符数 |
+| `omittedCount` | int | 超预算时被确定性省略的数量 |
 
-不变量：列表不可修改；同一 `AgentService.process` 的所有 ReAct 轮次引用同一个对象；不含正文、resource 内容或脚本输出。
+同一轮 ReAct 始终使用同一个 snapshot。L1 不含 `SKILL.md` 正文；命中后由既有 `read_file` 读取 L2，正文需要时再读取/执行 L3。所有 L2/L3 操作仍经过 Tool 权限、SandboxChecker 与审计。
 
-## 6. SkillLease
+## 6. 并发对象
 
-请求期的 `AutoCloseable` 读租约。
+`SkillGraphCoordinator` 维护一把 fair 全局图谱读写锁，并复用按规范 Agent 名建立的 fair `ReentrantReadWriteLock`：
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `agentName` | String | 锁键 |
-| `snapshot` | SkillSnapshot | 在取得读锁后构建 |
-| `closed` | boolean | 防重复释放 |
+- 顶层请求：图谱读锁 + 当前 Agent 读锁，构建 snapshot 后持有到本轮 ReAct 完成；
+- 单 Agent 关联/解除：图谱写锁 + 该 Agent 写锁；
+- 全局启停：图谱写锁；
+- 普通删除：图谱写锁下扫描所有 Agent；
+- 强制删除：图谱写锁 + 扫描结果中全部 Agent 写锁，按规范名排序取得、逆序释放。
 
-`AgentSkillLockRegistry` 为每个规范化 Agent 名持有一把 fair `ReentrantReadWriteLock`：
+锁对象不从 registry 删除。禁止在持有 Agent 锁后再申请图谱锁，避免锁顺序反转。本期为单实例文件系统锁；进程外直接修改只能在下一次安全扫描时发现。
 
-- `openRequest(agent)`：取得读锁、扫描 snapshot，返回 `SkillLease`；
-- `withWriteLock(agent, operation)`：管理变更的最终重检和原子切换；
-- 锁对象不从 registry 删除，避免同名 Agent 的旧持有者与新锁并存。
+## 7. DeleteConflict 与强制删除结果
 
-这是一致性锁，不是分布式锁。进程外直接改文件不受协调；下一次扫描仍必须检测变化。
+普通删除发现关联时抛出：
 
-## 7. SkillLimits
-
-从 `oryxos.skills.*` 配置转换出的 core 纯 Java值对象。
-
-| 字段 | 默认值 |
-|---|---:|
-| `maxArchiveBytes` | 10 MiB |
-| `maxExpandedBytes` | 25 MiB |
-| `maxFileBytes` | 5 MiB |
-| `maxSkillMarkdownBytes` | 256 KiB |
-| `maxFrontmatterBytes` | 64 KiB |
-| `maxYamlNestingDepth` | 8 |
-| `maxEntries` | 128 |
-| `maxDepth` | 8 |
-| `maxPathChars` | 512 |
-| `maxExpansionRatio` | 100 |
-| `maxSkillsPerAgent` | 64 |
-| `maxCandidatesPerAgent` | 1,024 |
-| `maxCatalogChars` | 12,000 |
-| `stagingTtl` | 24 h |
-
-所有数值启动时必须大于 0，且 `maxFrontmatterBytes <= maxSkillMarkdownBytes <= maxFileBytes <= maxExpandedBytes`、`maxSkillsPerAgent <= maxCandidatesPerAgent`。YAML duplicate keys/custom tags/aliases 固定禁用，不作为可放宽配置。
-
-## 8. SkillOrigin
-
-`.oryxos-origin.yml` 的持久化内容：
-
-```yaml
-schemaVersion: 1
-sourceType: upload
-originalFilename: weather-skill.zip
-importedAt: 2026-07-22T10:30:00Z
+```text
+DeleteConflict(skillName, linkedAgents(sorted), reasonCode=SKILL_IN_USE)
 ```
 
-`originalFilename` 仅保留清洗后的 basename 和可打印字符，不作为目录名或 Skill 身份。没有该文件的手工包派生为 `source=workspace`。
+强制删除返回：
 
-## 9. ArchivedSkill
-
-`archive.yml` 由固定字段安全序列化（不得字符串拼 YAML），持久化内容：
-
-```yaml
-schemaVersion: 1
-agent: ops-agent
-skill: weather
-source: upload
-deletedAt: 2026-07-22T11:00:00Z
-originalRelativePath: agents/ops-agent/skills/weather
+```text
+DeleteResult(skillName, forced=true, affectedAgents(sorted), archived)
 ```
 
-归档事件目录名使用 UTC 基本时间 + UUID；Skill/directoryName 只写入 `archive.yml`，不参与归档路径，避免手工 invalid 目录名成为路径段。不依赖毫秒时间戳唯一性。`package/` 存在才表示归档完成；启动清理可以移除超时且没有 `package/` 的空事件。
+服务在图谱写锁内重新扫描、取得排序 Agent 写锁、预检全部链接仍为标准链接，然后逐个解除并原子归档公共包。发生同进程失败时，服务只对本次已经移除且当前位置仍为空的 path 尽力重建标准链接；不得覆盖外部占位或删除非标准内容。失败返回稳定 reason code，下一次重试重新扫描文件系统真相。
 
-## 10. 状态转换
+本期不创建持久化 operation journal，不做启动恢复，也不承诺进程在多路径操作中崩溃时的事务原子性。进程重启后的列表/删除请求会重新扫描并如实报告当前包和链接状态，供管理员诊断和重试。
 
-| 当前状态 | 操作 | 前置校验 | 结果 |
+## 8. 状态转换
+
+| 当前状态 | 操作 | 前置条件 | 结果 |
 |---|---|---|---|
-| 不存在 | import | Agent 存在；ZIP/metadata/聚合预算合法；目标同名路径（含 unmanaged 目录）不存在 | 原子发布，默认 `ENABLED` |
-| ENABLED | disable | Skill 存在 | 原子创建 marker → `DISABLED` |
-| DISABLED | disable | Skill 存在 | 幂等返回 `DISABLED` |
-| DISABLED | enable | 包重新完整校验；聚合预算可容纳 | 删除 marker → `ENABLED` |
-| ENABLED | enable | Skill 合法 | 幂等返回 `ENABLED` |
-| INVALID | disable | 目录存在 | 创建 marker；状态仍 `INVALID`，configuredEnabled=false |
-| INVALID | enable | 必须重新校验成功 | 成功才删 marker；失败保持原文件与 marker |
-| 任意存在状态 | delete | 归档目标可创建且支持原子移动 | 活动包消失，归档事件完成 |
-| 不存在 | enable/disable/delete | — | 404，无文件副作用 |
+| 不存在 | import | ZIP 与 metadata 合法；公共目标不存在 | 原子发布，默认 enabled |
+| 公共包存在 | associate | Agent 存在；包合法；链接路径不存在 | 创建标准相对链接；disabled 包允许关联但不进入 L1 |
+| 已关联 | associate | 已存在相同标准链接 | 幂等成功 |
+| 非标准占位存在 | associate | — | 409，不覆盖文件/目录/错误链接 |
+| enabled | disable | 包存在且合法 | 创建全局 marker；所有 Agent 下一请求移出 L1 |
+| disabled | enable | 完整复验成功 | 删除 marker；所有有效关联下一请求恢复 L1 |
+| 任意关联 | unlink | 标准链接存在 | 只删除该链接，公共包不变 |
+| 无关联 | normal delete | 锁内扫描为空 | 公共包原子归档 |
+| 有关联 | normal delete | — | 409 + 完整排序 Agent 列表，无副作用 |
+| 有关联 | force delete | 锁内重新扫描并预检全部标准链接 | 解除全部标准链接并归档公共包；同进程失败尽力补偿 |
+| 不存在 | mutate/delete | — | 404，无文件副作用 |
 
-同名 import 返回 409，不覆盖 enabled、disabled、invalid 或 unmanaged 的现有目录路径。
+## 9. 解析、包限制与归档
 
-## 11. 一致性边界
+解析顺序固定为：归一化 CRLF/CR → 移除 UTF-8 BOM → trim 开头换行 → 校验 opening fence → 逐行寻找 trim 后为 `---` 的 closing fence → YAML 1.2 等价安全反序列化 → legacy warning → name/version 校验 → activation/requires `enforceLimits()` → 提取并验证非空正文。稳定错误至少包括 `MissingFrontmatter`、`InvalidYaml`、`InvalidName`、`InvalidVersion` 与 `EmptyPrompt`。
 
-- 管理动作在写锁外完成上传、解包和预校验，在写锁内完成 Agent/冲突/预算重检及单次原子切换，缩短阻塞时间。
-- 管理 list/get 在短读锁内完成整次扫描和统计，构造不可变 descriptor 后释放，避免与 marker/目录切换交错。
-- 删除在写锁内以 `NOFOLLOW_LINKS`/real-path containment 验证 `.oryxos/archive/.skills/<agent>` 全父链，再进行归档事件写入和原子移动；archive symlink 必须安全失败且活动包保持原位。
-- 写锁排队后，fair lock 阻止新请求无限插队；已持有读租约的请求可完成 L2/L3。
-- generic Workspace API、`AgentLifecycleService.saveFiles`/`AgentStore.writeAll` 对受管 Skill 子树写入时必须取得同一写锁并原子替换目标文件；直接 shell/scp 编辑属于运维旁路，不能获得请求内保证。
-- disabled/invalid 只控制 OryxOS 的 L1 发现与正常渐进加载；它不是通用 shell 的操作系统级文件隔离标签。
+沿用 `SkillLimits`：默认 ZIP 10 MiB、解压总量 25 MiB、单文件 5 MiB、`SKILL.md` 256 KiB、frontmatter 64 KiB、128 entries、8 层、100:1 解压比。`SkillManifestLimits` 固定 activation keywords/exclude=20、patterns=5、tags=10、setup_marker=256 bytes、requires.skills=10，并对短关键词/标签做过滤。禁止链接、特殊文件、压缩嵌套可执行归档、custom YAML tag、duplicate key 与 alias。
+
+归档事件目录名只使用 UTC 时间和 UUID；Skill 名、来源、删除模式和受影响 Agent 写入安全序列化的 `archive.yml`。`package/` 存在表示包已归档；归档区不参与发现，当前版本不提供恢复 API。
+
+## 10. 核心不变量
+
+- 公共包内容只保存一份；Agent 关联真相只来自标准软链接。
+- `AGENT.md/AGENTS.md` 不创建、不删除、不隐式迁移关联。
+- 任一请求期间 Skill 快照不变化；管理变更从下一次顶层请求生效。
+- 普通删除必须 O(Agents) 重新扫描，不能依赖缓存列表；本期不建立反向索引。
+- force delete 必须在锁内再次扫描，前端确认时显示的列表只用于交互，不能作为服务端执行依据。
+- Agent 创建的 Skill 选择必须落为标准链接；任一链接失败时不得发布半成品 Agent，也不得生成 `example`。
+- parser 的 grammar、限额、warning 与错误 code 对导入、catalog 重扫和 enable 复验保持一致。
+- 禁用/删除不追溯修改旧 Session 与既有 Tool/LLM 审计。
+- 所有 REST 错误、日志与归档 metadata 不泄露工作区绝对路径、包正文或敏感配置。

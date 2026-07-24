@@ -1,178 +1,202 @@
-# Contract: Agent Skill REST API
+# Contract: Public Skill and Agent Association REST API
 
-Base path：`/api/v1/agents/{agentName}/skills`。所有端点延续 OryxOS 统一信封；成功 HTTP 200 且 `code=0`。
+成功沿用 `ApiResponse<T>`：HTTP 200、`code=0`。失败使用对应 HTTP 状态与统一信封；`data` 可承载机器可读冲突信息。响应不得包含绝对路径、堆栈、包正文或密钥。
 
-## 1. 统一信封
+## 1. DTO
 
-成功：
+### PublicSkillSummaryView
+
+```json
+{
+  "name": "weather",
+  "description": "查询天气并给出出行建议",
+  "status": "enabled",
+  "configuredEnabled": true,
+  "source": "upload",
+  "updatedAt": "2026-07-24T10:30:00Z",
+  "entrypoint": "skills/weather/SKILL.md",
+  "linkedAgents": ["ops-agent"],
+  "validationError": null
+}
+```
+
+详情在此基础上增加 `license`、`compatibility`、`metadata`、`allowedTools`、`resources`、`fileCount`、`totalBytes`。`entrypoint/resources` 均相对 `.oryxos/` 或包根；不返回正文。
+
+### AgentSkillAssociationView
+
+```json
+{
+  "agentName": "ops-agent",
+  "skillName": "weather",
+  "description": "查询天气并给出出行建议",
+  "link": "agents/ops-agent/skills/weather",
+  "target": "../../../skills/weather",
+  "linkStatus": "valid",
+  "skillStatus": "enabled",
+  "discoverable": true,
+  "error": null
+}
+```
+
+无效/悬空关联可以出现在 Agent 列表中，但 `discoverable=false`；错误只返回稳定 code 与安全消息。
+
+## 2. 公共 Skill 资源
+
+Base path：`/api/v1/skills`。
+
+### 列表与详情
+
+```http
+GET /api/v1/skills
+GET /api/v1/skills/{skillName}
+```
+
+列表按 Skill 名排序；详情不存在返回 404。公共根下含 `SKILL.md` 或保留 marker 的直接真实目录是受管候选；坏包以 `invalid` 单项返回，不阻断集合。
+
+### 导入
+
+```http
+POST /api/v1/skills
+Content-Type: multipart/form-data
+
+file=<single ZIP>
+```
+
+成功返回 `PublicSkillDetailView`，默认 enabled。浏览器使用 `FormData.append("file", file)`，不得手工设置 boundary。
+
+| 条件 | HTTP |
+|---|---:|
+| 缺 part、空文件、坏 ZIP/metadata/路径/类型 | 400 |
+| 同名公共路径存在 | 409 |
+| ZIP、解压量、单文件、entries 或解压比超限 | 413 |
+| 原子发布或未预期 I/O 失败 | 500（安全通用消息） |
+
+现有 `POST /api/v1/skills/import` GitHub 入口若保留，属于兼容 API，必须最终调用相同 `prepare → validate → publish` 公共导入服务；本 Feature 不扩展其 URL 契约。
+
+### 全局启用/禁用
+
+```http
+PUT /api/v1/skills/{skillName}
+Content-Type: application/json
+
+{ "enabled": false }
+```
+
+disable 创建公共包 marker，保留全部 Agent 链接；enable 先完整复验再删除 marker。操作幂等，成功返回最新详情。不存在 404，invalid enable 400。变更从所有关联 Agent 的下一次顶层请求生效。
+
+### 普通删除
+
+```http
+DELETE /api/v1/skills/{skillName}
+```
+
+无关联时归档公共包并返回：
 
 ```json
 {
   "code": 0,
   "message": "success",
-  "data": {},
-  "timestamp": 1784716200000
+  "data": {
+    "skillName": "weather",
+    "forced": false,
+    "affectedAgents": [],
+    "archived": true
+  },
+  "timestamp": 1784889000000
 }
 ```
 
-失败：
+发现关联时不修改文件系统，返回 HTTP 409：
 
 ```json
 {
-  "code": 400,
-  "message": "SKILL.md is missing",
-  "data": null,
-  "timestamp": 1784716200000
+  "code": 409,
+  "message": "Skill is still associated with Agents",
+  "data": {
+    "reasonCode": "SKILL_IN_USE",
+    "skillName": "weather",
+    "linkedAgents": ["ops-agent", "support-agent"]
+  },
+  "timestamp": 1784889000000
 }
 ```
 
-失败消息只能包含 Agent/Skill 的规范名称、包内相对路径和稳定校验描述；不得包含工作区绝对路径、堆栈、原始包内容或密钥。
+`linkedAgents` 是锁内全量扫描结果，排序、去重。前端必须用它展示影响范围，不能在收到 409 后自动强删。
 
-## 2. DTO
+### 强制删除
 
-### SkillSummaryView
+```http
+DELETE /api/v1/skills/{skillName}?force=true
+```
+
+服务端不能信任上次 409 的列表，必须在图谱写锁下重新扫描并移除全部标准关联，再归档公共包。成功：
 
 ```json
 {
-  "name": "weather",
-  "directoryName": "weather",
-  "description": "查询天气并给出出行建议",
-  "status": "enabled",
-  "configuredEnabled": true,
-  "catalogIncluded": true,
-  "source": "upload",
-  "updatedAt": "2026-07-22T10:30:00Z",
-  "validationError": null
+  "code": 0,
+  "message": "success",
+  "data": {
+    "skillName": "weather",
+    "forced": true,
+    "affectedAgents": ["ops-agent", "support-agent"],
+    "archived": true
+  },
+  "timestamp": 1784889060000
 }
 ```
 
-- `name`: metadata name；metadata 无法解析时回退为安全显示的 `directoryName`。
-- `directoryName`: 管理 member 的稳定键；合法包必须与 `name` 相同。
-- `status`: `enabled | disabled | invalid`。
-- `configuredEnabled`: disabled marker 是否缺失；invalid 时也返回，便于先禁用再修复。
-- `catalogIncluded`: 当前聚合预算下是否进入下一请求的 L1。
-- `source`: `upload | workspace`。
-- `validationError`: null 或不含绝对路径的 `{ "code": "...", "message": "..." }`。
+不存在为 404。同进程补偿无法完整完成或其它 I/O 失败为 500，响应不得暴露路径；客户端可重新查询实际关联/包状态后重试。本期不提供持久化删除 journal 或启动恢复。
 
-### SkillDetailView
+## 3. Agent 关联资源
 
-在 summary 字段上增加：
+Base path：`/api/v1/agents/{agentName}/skills`。
 
-```json
-{
-  "entrypoint": "skills/weather/SKILL.md",
-  "license": "Apache-2.0",
-  "compatibility": "Requires read_file",
-  "metadata": { "author": "example-team" },
-  "allowedTools": "read_file shell",
-  "resources": ["SKILL.md", "references/api.md", "scripts/fetch.sh"],
-  "fileCount": 3,
-  "totalBytes": 4812
-}
-```
-
-`entrypoint` 是 Agent 相对路径（`skills/weather/SKILL.md`）；`resources` 是 Skill 包根相对路径（`SKILL.md`、`references/api.md`）。资源列表按 Unicode code point 字典序，且与统计一起排除 `.oryxos-*` 保留状态文件；API 不返回 `SKILL.md` 正文或保留文件内容。
-
-### SetSkillEnabledRequest
-
-```json
-{ "enabled": false }
-```
-
-`enabled` 必填且必须是 JSON boolean。
-
-## 3. GET collection
+### 实际关联列表
 
 ```http
 GET /api/v1/agents/{agentName}/skills
 ```
 
-响应：`ApiResponse<List<SkillSummaryView>>`，按 `directoryName` 升序。只列真实直接子目录中含 `SKILL.md` 或 OryxOS 保留 marker 的受管候选；根 symlink 不跟随、不列出并单独告警，也不列 `skills/*.md`、无入口/marker 的 legacy 目录或归档。
+返回 `ApiResponse<List<AgentSkillAssociationView>>`，内容仅来自 Agent `skills/` 下实际链接，不读取 `AGENT.md skills:`。Agent 不存在/已归档为 404。前端将此列表与 `GET /api/v1/skills` 合并，即可显示“已关联”和“可关联”。
 
-错误：Agent 不存在/已归档为 404。
-
-## 4. POST collection：导入
-
-```http
-POST /api/v1/agents/{agentName}/skills
-Content-Type: multipart/form-data; boundary=...
-
-file=<single .zip part>
-```
-
-- part 名固定为 `file`，必填且非空。
-- `originalFilename` 不参与身份计算。
-- 成功返回导入后的 `SkillDetailView`；合法包默认 `enabled`，从下一次顶层请求生效。
-- 浏览器必须用 `FormData.append("file", file)`，不得手工设置 multipart Content-Type/boundary。
-
-错误：
-
-| 条件 | HTTP / code |
-|---|---:|
-| Agent 不存在/已归档 | 404 |
-| 同名 enabled/disabled/invalid Skill 或已存在的 unmanaged 目标目录 | 409 |
-| 缺 part、空文件、非 ZIP、结构/metadata/路径/链接/类型非法 | 400 |
-| 压缩大小、解压量、单文件、entry 数或解压比超限 | 413 |
-| 不支持原子移动或未预期 I/O | 500（通用消息） |
-
-失败时活动目录、Skill 列表和既有包内容不变；staging 最终被清理。
-
-## 5. GET member
-
-```http
-GET /api/v1/agents/{agentName}/skills/{skillName}
-```
-
-成功返回 `SkillDetailView`。Agent 或 Skill 不存在为 404。对合法包，`skillName` 等于标准 metadata name；为能清理手工产生的 invalid 候选，GET/PUT/DELETE 也接受其实际 `directoryName`。客户端必须对该单段使用 `encodeURIComponent`。服务端必须验证解码值是 `skills/` 下一个现存直接子目录（拒绝空值、`.`、`..`、斜杠、反斜杠、NUL、链接和 normalize 后换父目录），而不是把任意字符串拼成路径。
-
-## 6. PUT member：启用/禁用
+### 建立关联
 
 ```http
 PUT /api/v1/agents/{agentName}/skills/{skillName}
-Content-Type: application/json
-
-{ "enabled": true }
 ```
 
-- disable：创建保留 marker；对已 disabled 项幂等。
-- enable：先重新完整校验包和聚合预算，成功后移除 marker；对已 enabled 且仍合法项幂等。
-- invalid + `enabled=false`：允许写 marker，仍返回 `status=invalid, configuredEnabled=false`。
-- invalid + `enabled=true`：校验失败返回 400，marker 和文件保持不变。
-- 变更从下一次顶层请求生效；若已有请求持有读租约，本请求同步等待写租约。
+无需 request body。成功创建精确相对链接并返回 association view；相同标准链接已存在时幂等成功。Agent/Skill 不存在 404，Skill invalid 为 400，link path 被普通文件、真实目录或非标准链接占用为 409。全局 disabled Skill 可以关联，但 `discoverable=false`。
 
-成功返回最新 `SkillDetailView`。Agent/Skill 不存在 404；非法内容或预算不足 400。
-
-## 7. DELETE member
+### 解除关联
 
 ```http
 DELETE /api/v1/agents/{agentName}/skills/{skillName}
 ```
 
-成功把 enabled、disabled 或 invalid 包归档并返回：
+只删除复验后的标准链接，返回被解除的 association view 或 `{agentName, skillName, removed:true}`。Agent/关联不存在为 404；路径存在但不是标准链接为 409，不得跟随或删除占位内容。
 
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": null,
-  "timestamp": 1784718000000
-}
-```
+既有逆向接口 `/api/v1/skills/{skillName}/agents/{agentName}` 若为兼容而保留，必须标记 deprecated 并委托上述同一关联服务；不得写 `AGENT.md` 或形成第二套真相。
 
-`timestamp` 沿用现有 `ApiResponse`，类型为 Unix epoch milliseconds。删除不存在项为 404，且不创建归档事件。已有请求持有读租约时同步等待；成功后下一请求不再发现。恢复不属于本 API。
+## 4. Agent 创建语义
 
-## 8. HTTP 异常映射
+Agent 创建 DTO 中的 `skills` 表示“创建完成后要建立的公共关联”。服务先验证所有 Skill，再以一个受控事务创建 Agent 文件与标准链接；任何一步失败回滚整个新 Agent。草稿生成响应和 `AGENT.md` 都不写 `skills:`，也不生成 `example` Skill。
 
-`GlobalExceptionHandler` 增加：
+## 5. 前端删除交互（A → B）
 
-- `SkillConflictException` → 409；
-- `SkillPackageTooLargeException` 和 Spring `MaxUploadSizeExceededException` → 413；
-- Skill 领域参数/校验异常 → 400；
-- Agent/Skill not found → 404。
+1. 用户第一次确认后只调用普通 DELETE。
+2. 若 200，刷新列表并结束。
+3. 若 `409 + data.reasonCode=SKILL_IN_USE`，弹出强制删除对话框，醒目列出 `linkedAgents`，说明将解除这些 Agent 的链接并归档公共包。
+4. 只有用户再次明确确认，才调用 `?force=true`。
+5. force 期间禁用按钮；只有 200 才移除行。取消或任何失败均保留页面状态。
 
-Controller 用 `@RequestPart(name="file", required=false)` 后手工处理缺失/空 part，避免框架异常落入 500。所有错误回归必须断言响应中没有 `/Users/`、`/private/`、工作区根或堆栈文本。
+## 6. 统一异常映射
 
-## 9. OpenAPI 与管理日志
+| 领域情况 | HTTP |
+|---|---:|
+| Agent/Skill/标准关联不存在 | 404 |
+| 同名公共路径、链接占位、Skill 使用中 | 409 |
+| 参数、包、链接或状态校验失败 | 400 |
+| 上传/展开资源超限 | 413 |
+| 原子操作、同进程补偿或未预期 I/O | 500 |
 
-- springdoc 必须展示 multipart `file`、三态字段和 400/404/409/413 响应。
-- 每个实际进入 core service 的 POST/PUT/DELETE mutation 只由 service 记录一条 `skill.management` 事件；multipart 超限、缺 part、坏 JSON/路径等 transport rejection 仅由 Web 错误日志记录，避免 core 未执行却伪造领域事件。GET 不写管理事件。
+每个进入 core 管理服务的 mutation 恰写一条 `event=skill.management` 结构化领域事件；Web transport 阶段拒绝的请求不伪造领域事件。OpenAPI 必须描述 multipart、三态、association view、typed 409 和 force delete。

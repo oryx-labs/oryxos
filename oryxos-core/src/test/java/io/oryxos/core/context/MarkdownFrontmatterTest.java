@@ -55,6 +55,9 @@ class MarkdownFrontmatterTest {
             "\ufeff\n\n---   \nname: weather\ndescription: BOM\n \t--- \t\n\n正文",
             "name: weather\ndescription: BOM"),
         Arguments.of(
+            "--- compatible-opening-text\nname: weather\ndescription: opening suffix\n--- \t\n正文",
+            "name: weather\ndescription: opening suffix"),
+        Arguments.of(
             "---\nname: weather\ndescription: 中文😀\n---\n正文😀", "name: weather\ndescription: 中文😀"),
         Arguments.of("---\nname: weather\n---\n---", "name: weather"));
   }
@@ -79,9 +82,8 @@ class MarkdownFrontmatterTest {
         Arguments.of("plain body", SkillValidationCode.MISSING_FRONTMATTER),
         Arguments.of(" \n---\nname: weather\n---\nbody", SkillValidationCode.MISSING_FRONTMATTER),
         Arguments.of("  ---\nname: weather\n---\nbody", SkillValidationCode.MISSING_FRONTMATTER),
-        Arguments.of("---yaml\nname: weather\n---\nbody", SkillValidationCode.MISSING_FRONTMATTER),
         Arguments.of("---", SkillValidationCode.MISSING_FRONTMATTER),
-        Arguments.of("---\nname: weather\nbody", SkillValidationCode.UNCLOSED_FRONTMATTER),
+        Arguments.of("---\nname: weather\nbody", SkillValidationCode.MISSING_FRONTMATTER),
         Arguments.of("---\nname: weather\n---\n\n\t ", SkillValidationCode.EMPTY_PROMPT),
         Arguments.of("---\nname: weather\n---\n\u00a0", SkillValidationCode.EMPTY_PROMPT));
   }

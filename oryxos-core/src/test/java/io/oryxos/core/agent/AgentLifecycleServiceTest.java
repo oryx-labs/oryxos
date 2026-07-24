@@ -1,6 +1,7 @@
 package io.oryxos.core.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,6 +22,7 @@ import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.profile.ProfileValidationException;
 import io.oryxos.core.skill.AgentSkillCoordinator;
 import io.oryxos.core.skill.Skill;
+import io.oryxos.core.skill.SkillAssociationService;
 import io.oryxos.core.skill.SkillRegistry;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -46,6 +48,7 @@ class AgentLifecycleServiceTest {
   private ProfileRegistry profileRegistry;
   private AgentScheduler agentScheduler;
   private AgentStore agentStore;
+  private SkillRegistry skillRegistry;
   private AgentLifecycleService service;
 
   @BeforeEach
@@ -54,6 +57,7 @@ class AgentLifecycleServiceTest {
     profileRegistry = mock(ProfileRegistry.class);
     agentScheduler = mock(AgentScheduler.class);
     agentStore = mock(AgentStore.class);
+    skillRegistry = new SkillRegistry();
     service =
         new AgentLifecycleService(
             agentLoader,
@@ -64,8 +68,8 @@ class AgentLifecycleServiceTest {
             "deepseek",
             "deepseek",
             "deepseek-chat",
-            java.util.Map.of(),
-            mock(io.oryxos.core.notify.NotifyChannelRegistry.class));
+            null,
+            skillRegistry);
   }
 
   private static Profile profile(String name, ScheduleConfig... schedules) {
@@ -100,27 +104,45 @@ class AgentLifecycleServiceTest {
   }
 
   @Test
-  @DisplayName("create 按序：脚手架写目录 → 派生 → 注册")
+  @DisplayName("create 按序：Agent 文件与 Skill 链接原子发布 → 派生 → 注册")
   void create_scaffoldsThenRegisters() throws Exception {
     Path dir = Path.of("agents", "demo");
     when(profileRegistry.existsIdentity("demo")).thenReturn(false);
-    when(agentStore.createAll(eq("demo"), any())).thenReturn(dir);
+    when(agentStore.createAllWithSkillLinks(eq("demo"), any(), eq(List.of()))).thenReturn(dir);
     Profile p = profile("demo");
     doReturn(p).when(agentLoader).deriveProfile(dir);
 
     assertSame(p, service.create("demo", "一个测试 Agent"));
 
     InOrder o = inOrder(agentStore, profileRegistry);
-    o.verify(agentStore).createAll(eq("demo"), any()); // 后台按模板脚手架出完整目录
+    o.verify(agentStore).createAllWithSkillLinks(eq("demo"), any(), eq(List.of()));
     o.verify(profileRegistry).register(p);
     verify(agentScheduler, never()).registerProfile(any()); // 无 schedules
 
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Map<String, String>> files = ArgumentCaptor.forClass(Map.class);
-    verify(agentStore).createAll(eq("demo"), files.capture());
-    assertTrue(files.getValue().containsKey("skills/example/SKILL.md"));
-    assertTrue(files.getValue().get("skills/example/SKILL.md").contains("name: example"));
-    assertTrue(files.getValue().get("skills/example/SKILL.md").contains("description:"));
+    verify(agentStore).createAllWithSkillLinks(eq("demo"), files.capture(), eq(List.of()));
+    assertFalse(files.getValue().containsKey("skills/example/SKILL.md"));
+    assertFalse(files.getValue().containsKey("scripts/example.py"));
+  }
+
+  @Test
+  @DisplayName("create 把创建页选择的公共 Skill 作为真实软链接原子发布")
+  void create_associatesRequiredSkills() throws Exception {
+    skillRegistry.register(new Skill("web-research", "research", "rules"));
+    Path dir = Path.of("agents", "demo");
+    when(agentStore.createAllWithSkillLinks(eq("demo"), any(), eq(List.of("web-research"))))
+        .thenReturn(dir);
+    Profile p = profile("demo");
+    doReturn(p).when(agentLoader).deriveProfile(dir);
+
+    assertSame(p, service.create("demo", "研究助手", List.of("web-research")));
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, String>> files = ArgumentCaptor.forClass(Map.class);
+    verify(agentStore)
+        .createAllWithSkillLinks(eq("demo"), files.capture(), eq(List.of("web-research")));
+    assertFalse(files.getValue().get("AGENT.md").contains("skills:"));
   }
 
   @Test
@@ -130,7 +152,7 @@ class AgentLifecycleServiceTest {
 
     assertThrows(IllegalArgumentException.class, () -> service.create("demo", "x"));
 
-    verify(agentStore, never()).createAll(any(), any());
+    verify(agentStore, never()).createAllWithSkillLinks(any(), any(), any());
   }
 
   @Test
@@ -140,7 +162,7 @@ class AgentLifecycleServiceTest {
 
     assertThrows(IllegalArgumentException.class, () -> service.create("ops", "x"));
 
-    verify(agentStore, never()).createAll(any(), any());
+    verify(agentStore, never()).createAllWithSkillLinks(any(), any(), any());
     verify(agentStore, never()).delete(any());
   }
 
@@ -149,7 +171,7 @@ class AgentLifecycleServiceTest {
   void create_registerFails_rollsBackWrittenDir() throws Exception {
     Path dir = Path.of("agents", "half");
     when(profileRegistry.existsIdentity("half")).thenReturn(false);
-    when(agentStore.createAll(eq("half"), any())).thenReturn(dir);
+    when(agentStore.createAllWithSkillLinks(eq("half"), any(), eq(List.of()))).thenReturn(dir);
     doReturn(profile("half")).when(agentLoader).deriveProfile(dir);
     doThrow(new ProfileValidationException("bad")).when(profileRegistry).register(any());
 
@@ -241,6 +263,25 @@ class AgentLifecycleServiceTest {
 
     verify(agentLoader, never()).deriveProfile(any());
     verify(profileRegistry).register(updated);
+  }
+
+  @Test
+  @DisplayName("saveFiles 新建 Agent 时把选择的公共 Skill 作为真实软链接原子发布")
+  void saveFiles_associatesRequiredSkills() throws Exception {
+    skillRegistry.register(new Skill("report-format", "report", "rules"));
+    Profile updated = profile("demo");
+    doReturn(updated).when(agentLoader).parse(any(), eq("demo"));
+    when(agentStore.createAllWithSkillLinks(eq("demo"), any(), eq(List.of("report-format"))))
+        .thenReturn(Path.of("agents", "demo"));
+
+    assertSame(
+        updated, service.saveFiles("demo", Map.of("AGENT.md", MD), List.of("report-format")));
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Map<String, String>> files = ArgumentCaptor.forClass(Map.class);
+    verify(agentStore)
+        .createAllWithSkillLinks(eq("demo"), files.capture(), eq(List.of("report-format")));
+    assertFalse(files.getValue().get("AGENT.md").contains("skills:"));
   }
 
   @Test
@@ -350,15 +391,11 @@ class AgentLifecycleServiceTest {
   }
 
   @Test
-  @DisplayName("关联公共 Skill 会重写 AGENT.md 并即时重注册")
-  void setSkillAssociation_updatesAgentDefinition() {
-    SkillRegistry registry = new SkillRegistry();
-    registry.register(new Skill("web-research", "research", "rules"));
+  @DisplayName("关联公共 Skill 只创建软链接，不读写 AGENT.md")
+  void setSkillAssociation_updatesFilesystemLinkOnly() {
     Profile current = profileWithSkills("demo", List.of());
-    Profile updated = profileWithSkills("demo", List.of("web-research"));
     when(profileRegistry.get("demo")).thenReturn(Optional.of(current));
-    when(agentStore.readAgentMarkdown("demo")).thenReturn(MD);
-    doReturn(updated).when(agentLoader).parse(any(), eq("demo"));
+    SkillAssociationService associations = mock(SkillAssociationService.class);
     AgentLifecycleService associated =
         new AgentLifecycleService(
             agentLoader,
@@ -370,39 +407,33 @@ class AgentLifecycleServiceTest {
             "deepseek",
             "deepseek-chat",
             null,
-            registry);
+            null,
+            null,
+            null,
+            null,
+            associations);
 
-    assertSame(updated, associated.setSkillAssociation("demo", "web-research", true));
+    assertSame(current, associated.setSkillAssociation("demo", "web-research", true));
 
-    ArgumentCaptor<String> markdown = ArgumentCaptor.forClass(String.class);
-    verify(agentStore).write(eq("demo"), markdown.capture());
-    assertTrue(markdown.getValue().contains("skills:\n  - web-research"));
-    verify(profileRegistry).register(updated);
+    verify(associations).associate("demo", "web-research");
+    verify(agentStore, never()).readAgentMarkdown(any());
+    verify(agentStore, never()).write(any(), any());
   }
 
   @Test
-  @DisplayName("ensureRequiredSkills：模型漏写也补齐勾选的 Skill；模型选的保留去重；已全含或空则不动")
-  void ensureRequiredSkills_mergesReliably() {
+  @DisplayName("ensureRequiredSkills：兼容入口始终剥离 AGENT.md 中的旧 skills 块")
+  void ensureRequiredSkills_stripsLegacyYamlAssociation() {
     String noSkills = "---\nname: a\nprovider:\n  name: deepseek\n  model: m\n---\n正文内容";
     String out = AgentLifecycleService.ensureRequiredSkills(noSkills, List.of("report-format"));
-    assertTrue(out.contains("skills:"), "无 skills 块时补出一个");
-    assertTrue(out.contains("- report-format"));
+    assertFalse(out.contains("skills:"));
     assertTrue(out.contains("name: a"), "其余 frontmatter 保留");
     assertTrue(out.contains("正文内容"), "正文保留");
 
     String withSkills =
         "---\nname: a\nprovider:\n  name: deepseek\n  model: m\nskills:\n  - web-research\n---\n正文";
     String out2 = AgentLifecycleService.ensureRequiredSkills(withSkills, List.of("report-format"));
-    Object parsed = AgentMarkdown.split(out2).frontmatter().get("skills");
-    assertTrue(parsed instanceof List, "skills 仍是合法列表");
-    assertTrue(
-        ((List<?>) parsed).containsAll(List.of("web-research", "report-format")), "模型选的保留 + 勾选的补上");
-    assertEquals(out2.indexOf("web-research"), out2.lastIndexOf("web-research"), "不重复写入已有项");
+    assertFalse(AgentMarkdown.split(out2).frontmatter().containsKey("skills"));
 
-    assertEquals(
-        withSkills,
-        AgentLifecycleService.ensureRequiredSkills(withSkills, List.of("web-research")),
-        "勾选的已全部在场 → 原样不动");
     assertEquals(
         noSkills,
         AgentLifecycleService.ensureRequiredSkills(noSkills, List.of()),

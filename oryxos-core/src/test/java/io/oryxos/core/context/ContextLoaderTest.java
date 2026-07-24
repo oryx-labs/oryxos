@@ -131,8 +131,8 @@ class ContextLoaderTest {
   }
 
   @Test
-  @DisplayName("第32节：引用的全局 Skill 正文注入 system prompt；引用不存在的记 WARN 跳过")
-  void referencedGlobalSkillBodyIsInjected() throws IOException {
+  @DisplayName("旧 Profile.skills 仅兼容保留，不再注入 Skill 正文或创建关联")
+  void legacyProfileSkillsDoNotInjectBodies() throws IOException {
     writeAgentBody("agent-body");
     io.oryxos.core.skill.SkillRegistry reg = new io.oryxos.core.skill.SkillRegistry();
     reg.register(new io.oryxos.core.skill.Skill("report-format", "研报格式", "SKILL-BODY-约束正文"));
@@ -154,14 +154,8 @@ class ContextLoaderTest {
 
     String context = withSkill.load(p);
 
-    assertTrue(context.contains("SKILL-BODY-约束正文"), "引用到的 Skill 正文应注入 system prompt");
-    boolean warned =
-        logAppender.list.stream()
-            .anyMatch(
-                e ->
-                    "WARN".equals(e.getLevel().toString())
-                        && e.getFormattedMessage().contains("no-such-skill"));
-    assertTrue(warned, "引用不存在的 Skill 记 WARN 跳过");
+    assertFalse(context.contains("SKILL-BODY-约束正文"));
+    assertFalse(context.contains("no-such-skill"));
   }
 
   @Test

@@ -57,6 +57,58 @@ public final class MarkdownFrontmatter {
     }
   }
 
+  /** Fully parsed in-memory Skill document used by the manifest parser after bounded UTF-8 read. */
+  public record SkillDocument(String yaml, String promptContent) {
+    public SkillDocument {
+      yaml = Objects.requireNonNull(yaml, "yaml");
+      promptContent = Objects.requireNonNull(promptContent, "promptContent");
+    }
+  }
+
+  /** Implements the canonical Skill fence semantics over already decoded text. */
+  public static SkillDocument parseSkillDocument(String content) {
+    Objects.requireNonNull(content, "content");
+    String normalized = content.replace("\r\n", "\n").replace(CARRIAGE_RETURN, LINE_FEED);
+    if (!normalized.isEmpty() && normalized.charAt(0) == BOM) {
+      normalized = normalized.substring(1);
+    }
+    int first = 0;
+    while (first < normalized.length() && normalized.charAt(first) == LINE_FEED) {
+      first++;
+    }
+    String trimmed = normalized.substring(first);
+    if (!trimmed.startsWith(FENCE)) {
+      throw failure(SkillValidationCode.MISSING_FRONTMATTER, "SKILL.md is missing frontmatter");
+    }
+    int openingEnd = trimmed.indexOf(LINE_FEED);
+    if (openingEnd < 0) {
+      throw failure(SkillValidationCode.MISSING_FRONTMATTER, "SKILL.md is missing frontmatter");
+    }
+    int yamlStart = openingEnd + 1;
+    int lineStart = yamlStart;
+    while (lineStart <= trimmed.length()) {
+      int lineEnd = trimmed.indexOf(LINE_FEED, lineStart);
+      int contentEnd = lineEnd < 0 ? trimmed.length() : lineEnd;
+      if (FENCE.equals(trimmed.substring(lineStart, contentEnd).trim())) {
+        String yaml = trimmed.substring(yamlStart, lineStart);
+        int promptStart = lineEnd < 0 ? trimmed.length() : lineEnd + 1;
+        while (promptStart < trimmed.length() && trimmed.charAt(promptStart) == LINE_FEED) {
+          promptStart++;
+        }
+        String prompt = trimmed.substring(promptStart);
+        if (prompt.trim().isEmpty()) {
+          throw failure(SkillValidationCode.EMPTY_PROMPT, "SKILL.md prompt is empty");
+        }
+        return new SkillDocument(yaml, prompt);
+      }
+      if (lineEnd < 0) {
+        break;
+      }
+      lineStart = lineEnd + 1;
+    }
+    throw failure(SkillValidationCode.MISSING_FRONTMATTER, "SKILL.md is missing frontmatter");
+  }
+
   /** Compatibility overload when one bound is intentionally used for both file and header. */
   public static Parsed read(Path file, long maxBytes) {
     return read(file, maxBytes, maxBytes);
@@ -155,7 +207,7 @@ public final class MarkdownFrontmatter {
       }
       break;
     }
-    if (!opening.terminated() || !FENCE.equals(openingText.stripTrailing())) {
+    if (!opening.terminated() || !openingText.startsWith(FENCE)) {
       throw failure(SkillValidationCode.MISSING_FRONTMATTER, safeName + " is missing frontmatter");
     }
     normalizedPosition += openingText.length() + 1;
@@ -170,7 +222,7 @@ public final class MarkdownFrontmatter {
       RawLine line = readLine(cursor, boundedLineBytes, safeName, true);
       if (line == null) {
         throw failure(
-            SkillValidationCode.UNCLOSED_FRONTMATTER, safeName + " frontmatter is not closed");
+            SkillValidationCode.MISSING_FRONTMATTER, safeName + " frontmatter is not closed");
       }
       String text = decode(line.bytes(), safeName);
       if (FENCE.equals(text.strip())) {

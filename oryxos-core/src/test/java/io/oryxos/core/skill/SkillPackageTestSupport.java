@@ -2,11 +2,16 @@ package io.oryxos.core.skill;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import io.oryxos.core.profile.Profile;
+import io.oryxos.core.profile.ProfileRegistry;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
@@ -150,6 +155,60 @@ final class SkillPackageTestSupport {
     }
   }
 
+  static Market market(Path root, String... agentNames) throws IOException {
+    Files.createDirectories(root.resolve("skills"));
+    Files.createDirectories(root.resolve("archive/.skills"));
+    Files.createDirectories(root.resolve(".staging/skill-import"));
+    Path agentsRoot = Files.createDirectories(root.resolve("agents"));
+    Map<String, Profile> profiles = new LinkedHashMap<>();
+    for (String agentName : agentNames) {
+      Path agentDir = Files.createDirectories(agentsRoot.resolve(agentName));
+      Files.writeString(
+          agentDir.resolve("AGENT.md"),
+          "---\nname: "
+              + agentName
+              + "\nprovider:\n  name: mock\n  model: mock\n---\nAgent body\n");
+      profiles.put(agentName, profile(agentName));
+    }
+    SkillLimits limits = SkillLimits.defaults();
+    PublicSkillCatalog catalog =
+        new PublicSkillCatalog(
+            root, new SkillMetadataReader(), new SkillContentValidator(), limits);
+    SkillAssociationService associations = new SkillAssociationService(root, catalog);
+    AgentSkillCatalog agentCatalog = new AgentSkillCatalog(root, associations, catalog, limits);
+    SkillGraphCoordinator graph =
+        new SkillGraphCoordinator(
+            agentsRoot, new ProfileRegistry(profiles), agentCatalog, new AgentSkillLockRegistry());
+    PublicSkillManagementService management =
+        new PublicSkillManagementService(
+            root,
+            catalog,
+            associations,
+            new SkillPackageImporter(root, limits),
+            graph,
+            new SkillManagementEventLogger());
+    return new Market(root, catalog, associations, agentCatalog, graph, management);
+  }
+
+  static byte[] validSkillZip(String name) throws IOException {
+    return zip(file("SKILL.md", validSkillMarkdown(name)));
+  }
+
+  private static Profile profile(String name) {
+    return new Profile(
+        name,
+        null,
+        null,
+        new Profile.ProviderRef("mock", "mock", null),
+        List.of("read_file", "shell"),
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        Profile.Settings.defaults());
+  }
+
   private static void patchFlag(byte[] bytes, int signature, int offset, int flag) {
     for (int index : signatureOffsets(bytes, signature)) {
       int current = unsignedShort(bytes, index + offset);
@@ -205,4 +264,12 @@ final class SkillPackageTestSupport {
       return content.clone();
     }
   }
+
+  record Market(
+      Path root,
+      PublicSkillCatalog catalog,
+      SkillAssociationService associations,
+      AgentSkillCatalog agentCatalog,
+      SkillGraphCoordinator graph,
+      PublicSkillManagementService management) {}
 }

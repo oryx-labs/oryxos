@@ -88,7 +88,8 @@ oryxos init
 
 ```text
 .oryxos/
-├── agents/      # 每个子目录 = 一个 Agent（AGENT.md + 可选 skills/ scripts/ REFERENCE.md）
+├── agents/      # 每个子目录 = 一个 Agent（AGENT.md + skills/ 下的市场安装链接）
+├── skills/      # 公共 Skill 市场；每个受管目录含 SKILL.md
 ├── memory/      # 全局长期记忆（每个 Agent 自己的 MEMORY.md 在 agents/<name>/ 下）
 ├── sessions/    # 备用（会话已入 SQLite）
 ├── logs/
@@ -141,7 +142,7 @@ oryxos profile list               # 列出全部（每行一个 Agent 目录名�
 oryxos profile delete ops-agent   # 删除整个 Agent 目录（不存在则报错点名）
 ```
 
-**一个目录 = 一个 Agent**：每个 Agent 是 `.oryxos/agents/<name>/` 下的一个目录，核心是 `AGENT.md`——YAML frontmatter（这个 Agent 的 profile：identity/provider/tools/bootstrap/settings）+ 正文（任务指令），外加可选的 `skills/`、`scripts/`、`REFERENCE.md`。**不再有 `.oryxos/profiles/` 目录**。create 生成的模板直接编辑即可定制——**改配置就是改 Agent，不需要写代码**。改完无需重启：下一轮对话即生效（上下文文件每次组装都重新读取）。
+**一个目录 = 一个 Agent**：每个 Agent 是 `.oryxos/agents/<name>/` 下的一个目录，核心是 `AGENT.md`——YAML frontmatter（这个 Agent 的 profile：identity/provider/tools/bootstrap/settings）+ 正文（任务指令），外加可选的 `scripts/`、`REFERENCE.md`；`skills/` 只保存公共市场 Skill 的标准相对软链接。**不再有 `.oryxos/profiles/` 目录**。create 生成的模板直接编辑即可定制——**改配置就是改 Agent，不需要写代码**。改完无需重启：下一轮对话即生效（上下文文件每次组装都重新读取）。
 
 ### 4.6 provider list / tool list / session list——三张清单
 

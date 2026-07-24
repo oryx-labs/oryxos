@@ -9,7 +9,9 @@ import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.provider.ProviderService;
 import io.oryxos.core.skill.AgentSkillCoordinator;
+import io.oryxos.core.skill.PublicSkillCatalog;
 import io.oryxos.core.skill.Skill;
+import io.oryxos.core.skill.SkillAssociationService;
 import io.oryxos.core.skill.SkillRegistry;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -28,9 +30,9 @@ import java.util.stream.Collectors;
  * Agent 生命周期编排（第 30 节）：三条录入（API create / WorkspaceWatcher 事件 / 启动扫描）都汇到同一段 {@link
  * #register(Path)}；创建脚手架、创建回滚、删除时序（注销定时 → 移索引 → 归档）都在这里串起来。
  *
- * <p>创建只需 name + description，后台按模板脚手架出**完整目录**（AGENT.md + scripts/ + skills/ +
- * REFERENCE.md，内容为模板），再注册。本类不产生 HTTP 语义：{@link #get} 返回 {@link Optional}，404 由 web 层决定（core 不反向依赖
- * web）；定义非法统一抛 {@code ProfileValidationException}（web 映射 400）。
+ * <p>创建只需 name + description，后台按模板脚手架出**完整目录**（AGENT.md + scripts/ + REFERENCE.md，内容为模板），再注册。本类不产生
+ * HTTP 语义：{@link #get} 返回 {@link Optional}，404 由 web 层决定（core 不反向依赖 web）；定义非法统一抛 {@code
+ * ProfileValidationException}（web 映射 400）。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
@@ -38,6 +40,7 @@ import java.util.stream.Collectors;
 public class AgentLifecycleService {
 
   private static final String FRONTMATTER_FENCE = "---";
+  private static final String AGENT_MD_FILE = "AGENT.md";
   private static final String SPACE = " ";
   private static final String TAB = "\t";
 
@@ -64,7 +67,7 @@ public class AgentLifecycleService {
       ---
 
       在这里写这个 Agent 的任务指令（正文）。被触发时它会照做。
-      - 较长的规范 / 清单放 skills/，正文指到时用 read_file 按需读；
+      - 公共 Skill 由管理台选择并以软链接关联，不要在 AGENT.md 中声明；
       - 参考资料放 REFERENCE.md，拿不准时用 read_file 读；
       - 脚本放 scripts/，正文让 shell/python 跑，产出进上下文、代码不进；
       - 任务产出的文件（研报 / 汇总 / 导出）用 write_file 写到本 Agent 的 output/ 目录，便于在管理台查看与下载。
@@ -78,17 +81,6 @@ public class AgentLifecycleService {
       import sys
 
       json.dump({"hello": "world"}, sys.stdout, ensure_ascii=False)
-      """;
-
-  private static final String SKILL_TEMPLATE =
-      """
-      ---
-      name: example
-      description: 演示按需加载的 Agent 私有 Skill
-      ---
-
-      # 示例 Skill
-      把较长的规范 / 清单 / 格式要求放这里。Agent 正文指到时，用底座的 read_file 把它读进上下文——平时不占常驻 prompt。
       """;
 
   private static final String REFERENCE_TEMPLATE =
@@ -125,9 +117,8 @@ public class AgentLifecycleService {
       6. MCP：如果任务需要用到下面【可用 MCP Server】里"已连接"的某个 server 提供的能力，把该 server 名加进 frontmatter 的 \
       mcp_servers 列表，**并且**把它提供的具体工具名也加进 tools 列表（两者都要写，只写一个不生效）；未连接 / 清单外的 server \
       不要选、不要编造。没有需要就不加 mcp_servers 字段。
-      7. Skill（用全局能力库约束产出）：下面【可用 Skill】里每个 Skill 是一段约束产出质量/格式的规范。若需求命中某个 Skill 覆盖的场景\
-      （如"产出报告/研报/日报"就用 report-format），把该 Skill 名加进 frontmatter 的 skills 列表（可多个）——这些 Skill 正文会在\
-      运行时注入 system prompt 来强约束 Agent 的产出。没有合适的就不加 skills 字段；**绝不编造清单以外的 Skill 名**。{required_skills}
+      7. Skill 由 OryxOS 在保存 Agent 时用文件系统软链接关联，**AGENT.md frontmatter 绝不能写 skills 字段**。下面目录只用于理解已选能力，\
+      运行时先注入元数据，命中后才通过 read_file 渐进读取。{required_skills}
       8. 你可以按需**额外产出文件**——脚本放 scripts/<名>、参考资料放 REFERENCE.md。要不要、要几个由你按需求决定；\
       例如需要抓 GitHub 榜单，就写一个 scripts/xxx.py 并在 AGENT.md 正文里用 shell 调它。（约束产出的规范优先用全局 Skill，不必再写 skills/ 子文件。）
       9. 输出格式：多个文件时，每个文件前**单独一行**写分隔符 `===FILE: <相对路径>===`（第一个必须是 AGENT.md）；\
@@ -139,7 +130,7 @@ public class AgentLifecycleService {
       【可用 MCP Server】（mcp_servers 只能从这里选"已连接"的，禁止编造）
       {mcp_servers}
 
-      【可用 Skill】（skills 只能从这里选，禁止编造）
+      【可用公共 Skill】（仅供理解管理台已选能力，禁止写入 AGENT.md）
       {skills}
 
       【正确示例（仅示范字段与工具用法，name/provider 以上面规则为准）】
@@ -192,8 +183,10 @@ public class AgentLifecycleService {
   private final NotifyChannelRegistry notifyChannels;
   // 31 节：生成时把已连接 MCP server 目录喂给作者模型，让它自己判断要不要挂、挂哪个（可空——旧调用方不带这个能力）
   private final McpServerAdmin mcpServerAdmin;
-  // 32 节：生成时把全局 Skill 库目录喂给作者模型，让它按需把 Skill 加进 frontmatter 的 skills（可空——旧调用方不带）
+  // 兼容旧构造器；生产运行时使用 PublicSkillCatalog，关联只由文件系统软链接表达。
   private final SkillRegistry skillRegistry;
+  private final PublicSkillCatalog publicSkillCatalog;
+  private final SkillAssociationService associationService;
 
   public AgentLifecycleService(
       AgentLoader agentLoader,
@@ -303,7 +296,7 @@ public class AgentLifecycleService {
         null);
   }
 
-  /** 32 节：注入 {@link SkillRegistry}，生成提示词里补上真实的"可用 Skill"清单，并允许显式指定必启用的 Skill。 */
+  /** 兼容旧测试/调用方的构造器；生产运行时不使用 eager SkillRegistry。 */
   public AgentLifecycleService(
       AgentLoader agentLoader,
       ProfileRegistry profileRegistry,
@@ -360,22 +353,65 @@ public class AgentLifecycleService {
     this.notifyChannels = notifyChannels;
     this.mcpServerAdmin = mcpServerAdmin;
     this.skillRegistry = skillRegistry;
+    this.publicSkillCatalog = null;
+    this.associationService = null;
+  }
+
+  /** Public Skill market production constructor. Associations are filesystem links, never YAML. */
+  public AgentLifecycleService(
+      AgentLoader agentLoader,
+      ProfileRegistry profileRegistry,
+      AgentScheduler agentScheduler,
+      AgentStore agentStore,
+      ProviderService providerService,
+      String defaultProvider,
+      String authorProvider,
+      String authorModel,
+      Map<String, OryxTool> tools,
+      NotifyChannelRegistry notifyChannels,
+      McpServerAdmin mcpServerAdmin,
+      AgentSkillCoordinator skillCoordinator,
+      PublicSkillCatalog publicSkillCatalog,
+      SkillAssociationService associationService) {
+    this.agentLoader = agentLoader;
+    this.profileRegistry = profileRegistry;
+    this.agentScheduler = agentScheduler;
+    this.agentStore = agentStore;
+    this.providerService = providerService;
+    this.defaultProvider = defaultProvider;
+    this.authorProvider = authorProvider;
+    this.authorModel = authorModel;
+    this.skillCoordinator = skillCoordinator;
+    this.tools = tools;
+    this.notifyChannels = notifyChannels;
+    this.mcpServerAdmin = mcpServerAdmin;
+    this.skillRegistry = null;
+    this.publicSkillCatalog = publicSkillCatalog;
+    this.associationService = associationService;
   }
 
   /**
-   * 创建：只需 name + description，后台按模板脚手架出完整目录（AGENT.md + scripts/ + skills/ + REFERENCE.md）→ 派生注册。name
+   * 创建：只需 name + description，后台按模板脚手架出完整目录（AGENT.md + scripts/ + REFERENCE.md）→ 派生注册。name
    * 冲突第一步就拒；中途失败回滚已写目录，不留半个 Agent。
    */
   public Profile create(String name, String description) {
-    AgentName agentName = AgentName.parse(name);
-    return mutate(agentName, () -> createLocked(agentName.value(), description));
+    return create(name, description, List.of());
   }
 
-  private Profile createLocked(String name, String description) {
+  /** 创建并把用户显式选择的公共 Skill 作为标准软链接原子发布；Skill 不存在时在落盘前拒绝。 */
+  public Profile create(String name, String description, List<String> requiredSkills) {
+    AgentName agentName = AgentName.parse(name);
+    List<String> required = requireKnownSkills(requiredSkills);
+    return mutate(agentName, () -> createLocked(agentName.value(), description, required));
+  }
+
+  private Profile createLocked(String name, String description, List<String> requiredSkills) {
     if (profileRegistry.existsIdentity(name) || agentStore.agentIdentityExists(name)) {
       throw new IllegalArgumentException("Agent 已存在: " + name);
     }
-    Path agentDir = agentStore.createAll(name, scaffold(name, description));
+    Path agentDir =
+        agentStore.createAllWithSkillLinks(
+            name, scaffold(name, description, requiredSkills), requiredSkills);
     try {
       return register(agentDir);
     } catch (RuntimeException e) {
@@ -384,19 +420,18 @@ public class AgentLifecycleService {
     }
   }
 
-  private Map<String, String> scaffold(String name, String description) {
+  private Map<String, String> scaffold(
+      String name, String description, List<String> requiredSkills) {
     String desc = description == null || description.isBlank() ? "描述这个 Agent 做什么" : description;
     String provider =
         defaultProvider == null || defaultProvider.isBlank() ? "deepseek" : defaultProvider;
     Map<String, String> files = new LinkedHashMap<>();
-    files.put(
-        "AGENT.md",
+    String agentMarkdown =
         AGENT_MD_TEMPLATE
             .replace("{name}", name)
             .replace("{description}", desc)
-            .replace("{provider}", provider));
-    files.put("scripts/example.py", SCRIPT_TEMPLATE);
-    files.put("skills/example/SKILL.md", SKILL_TEMPLATE);
+            .replace("{provider}", provider);
+    files.put("AGENT.md", rewriteSkills(agentMarkdown, List.of()));
     files.put("REFERENCE.md", REFERENCE_TEMPLATE);
     files.put("output/README.md", OUTPUT_README_TEMPLATE); // 建出产出目录（writeAll 建不了空目录，用占位说明落地）
     return files;
@@ -425,46 +460,35 @@ public class AgentLifecycleService {
     return profileRegistry.all();
   }
 
-  /**
-   * Adds or removes one global Skill reference in AGENT.md and re-registers the Agent immediately.
-   */
+  /** Adds or removes one public Skill link without modifying AGENT.md. */
   public Profile setSkillAssociation(String name, String skillName, boolean associated) {
     AgentName agentName = AgentName.parse(name);
     if (skillName == null || skillName.isBlank()) {
       throw new IllegalArgumentException("Skill 名为空");
     }
-    if (associated) {
-      requireKnownSkill(skillName);
+    if (associationService == null) {
+      throw new IllegalStateException("Public Skill association service is unavailable");
     }
     return mutate(
         agentName,
         () -> {
-          Profile current =
-              profileRegistry
-                  .get(agentName.value())
-                  .orElseThrow(
-                      () ->
-                          new java.util.NoSuchElementException("Agent 不存在: " + agentName.value()));
-          List<String> next = new ArrayList<>(current.skills());
-          boolean changed =
-              associated ? addOnce(next, skillName) : next.removeIf(skillName::equals);
-          if (!changed) {
-            return current;
+          if (associated) {
+            associationService.associate(agentName.value(), skillName);
+          } else {
+            associationService.unlink(agentName.value(), skillName);
           }
-          String markdown = agentStore.readAgentMarkdown(agentName.value());
-          return updateLocked(agentName.value(), rewriteSkills(markdown, next));
+          return profileRegistry
+              .get(agentName.value())
+              .orElseThrow(
+                  () -> new java.util.NoSuchElementException("Agent 不存在: " + agentName.value()));
         });
   }
 
-  private static boolean addOnce(List<String> skills, String skillName) {
-    if (skills.contains(skillName)) {
-      return false;
-    }
-    skills.add(skillName);
-    return true;
-  }
-
   private void requireKnownSkill(String skillName) {
+    if (publicSkillCatalog != null) {
+      publicSkillCatalog.requireLoadable(skillName);
+      return;
+    }
     if (skillRegistry == null || !skillRegistry.exists(skillName)) {
       throw new IllegalArgumentException("Skill 不存在: " + skillName);
     }
@@ -502,8 +526,8 @@ public class AgentLifecycleService {
   }
 
   /**
-   * 同上，但允许用户在前端**显式指定必须启用的 Skill**（{@code requiredSkills}）：这些 Skill 会作为硬指令写进作者提示词，让生成的 AGENT.md 的
-   * skills 列表务必包含它们。传空列表则完全由作者模型按需自选。指定了不存在的 Skill → 400。
+   * 同上，但允许用户在前端显式选择公共 Skill（{@code requiredSkills}）：生成提示词可理解这些能力，保存时由系统创建软链接，AGENT.md 始终不含 skills
+   * 字段。指定了不存在的 Skill → 400。
    */
   public Map<String, String> generateFiles(
       String name, String description, String notifyChannel, List<String> requiredSkills) {
@@ -521,12 +545,7 @@ public class AgentLifecycleService {
       throw new IllegalArgumentException("通知渠道不存在: " + channel);
     }
     // 用户显式指定的 Skill（"启用哪个 Skill"也是人的决定）：校验确实存在于全局库
-    List<String> required = requiredSkills == null ? List.of() : requiredSkills;
-    for (String s : required) {
-      if (skillRegistry == null || !skillRegistry.exists(s)) {
-        throw new IllegalArgumentException("Skill 不存在: " + s);
-      }
-    }
+    List<String> required = requireKnownSkills(requiredSkills);
     String outputProvider =
         profileRegistry.get(name).map(p -> p.provider().name()).orElse(genProvider);
     Profile genProfile =
@@ -564,33 +583,16 @@ public class AgentLifecycleService {
     if (agentMarkdown == null || agentMarkdown.isBlank()) {
       throw new IllegalArgumentException("生成结果缺少 AGENT.md");
     }
-    // 确定性兜底：用户勾选的 Skill 必须出现在 frontmatter 的 skills 里——模型漏写就在这里补齐（不靠模型自觉）
-    agentMarkdown = ensureRequiredSkills(agentMarkdown, required);
+    // 确定性移除模型可能生成的 legacy skills 字段；关联只在保存时创建软链接。
+    agentMarkdown = rewriteSkills(agentMarkdown, List.of());
     files.put("AGENT.md", agentMarkdown);
     agentLoader.parse(agentMarkdown, name); // 校验：解析不成合法定义就抛 ProfileValidationException（→400）
     return files;
   }
 
-  /**
-   * 把 {@code required} 里用户勾选的 Skill 并进 AGENT.md frontmatter 的 {@code skills}
-   * 列表：模型已写的保留，缺的补上（去重、模型选的排前）。 只重写 skills 一个块，其余 frontmatter 原样保留。required 为空或全已在则原样返回。
-   */
+  /** 兼容旧调用点：无论输入为何都移除 legacy skills 字段，绝不把关联写入 AGENT.md。 */
   static String ensureRequiredSkills(String agentMarkdown, List<String> required) {
-    if (required == null || required.isEmpty()) {
-      return agentMarkdown;
-    }
-    AgentMarkdown.Parsed parsed = AgentMarkdown.split(agentMarkdown);
-    List<String> existing = skillsFromFrontmatter(parsed.frontmatter());
-    if (existing.containsAll(required)) {
-      return agentMarkdown; // 模型已把勾选的都写进去了，无需改动
-    }
-    List<String> merged = new ArrayList<>(existing);
-    for (String s : required) {
-      if (!merged.contains(s)) {
-        merged.add(s);
-      }
-    }
-    return rewriteSkills(agentMarkdown, merged);
+    return rewriteSkills(agentMarkdown, List.of());
   }
 
   private static String rewriteSkills(String agentMarkdown, List<String> skills) {
@@ -652,38 +654,63 @@ public class AgentLifecycleService {
     return line.startsWith(SPACE) || line.startsWith(TAB);
   }
 
-  private static List<String> skillsFromFrontmatter(Map<String, Object> frontmatter) {
-    Object value = frontmatter.get("skills");
-    if (!(value instanceof List<?> list)) {
-      return List.of();
-    }
-    List<String> out = new ArrayList<>();
-    for (Object item : list) {
-      if (item != null) {
-        out.add(String.valueOf(item));
-      }
-    }
-    return out;
-  }
-
   /**
    * 保存一组（可能被用户改过的）Agent 文件并即时生效：先校验 AGENT.md 可解析（非法 → 400，不写坏目录）→ 写入 → 覆写后重注册（schedules
    * 变更先注销旧句柄再注册新的，同 {@link #update}）。用于「生成/编辑 Agent」的保存与文件浏览器的多文件保存。
    */
   public Profile saveFiles(String name, Map<String, String> files) {
-    AgentName agentName = AgentName.parse(name);
-    AgentStore.validateNoReservedSkillPaths(files == null ? null : files.keySet());
-    return mutate(agentName, () -> saveFilesLocked(agentName.value(), files));
+    return saveFiles(name, files, List.of());
   }
 
-  private Profile saveFilesLocked(String name, Map<String, String> files) {
+  /** 保存文件，并确定性补齐用户在创建页显式选择的公共 Skill。 */
+  public Profile saveFiles(String name, Map<String, String> files, List<String> requiredSkills) {
+    AgentName agentName = AgentName.parse(name);
+    AgentStore.validateNoReservedSkillPaths(files == null ? null : files.keySet());
+    List<String> required = requireKnownSkills(requiredSkills);
+    Map<String, String> effectiveFiles = files == null ? null : new LinkedHashMap<>(files);
+    if (effectiveFiles != null && effectiveFiles.containsKey(AGENT_MD_FILE)) {
+      effectiveFiles.put(
+          AGENT_MD_FILE, rewriteSkills(effectiveFiles.get(AGENT_MD_FILE), List.of()));
+    }
+    return mutate(agentName, () -> saveFilesLocked(agentName.value(), effectiveFiles, required));
+  }
+
+  private List<String> requireKnownSkills(List<String> requiredSkills) {
+    if (requiredSkills == null || requiredSkills.isEmpty()) {
+      return List.of();
+    }
+    List<String> required = new ArrayList<>();
+    for (String value : requiredSkills) {
+      String skillName = value == null ? "" : value.strip();
+      if (skillName.isEmpty()) {
+        throw new IllegalArgumentException("Skill 名为空");
+      }
+      requireKnownSkill(skillName);
+      if (!required.contains(skillName)) {
+        required.add(skillName);
+      }
+    }
+    return List.copyOf(required);
+  }
+
+  private Profile saveFilesLocked(
+      String name, Map<String, String> files, List<String> requiredSkills) {
     String agentMarkdown = files == null ? null : files.get("AGENT.md");
     if (agentMarkdown == null || agentMarkdown.isBlank()) {
       throw new IllegalArgumentException("缺少 AGENT.md 内容");
     }
     Profile updated = agentLoader.parse(agentMarkdown, name); // 先校验再落盘：非法定义不写进目录
     Profile old = profileRegistry.get(name).orElse(null);
-    agentStore.writeAll(name, files);
+    if (old == null && !agentStore.agentIdentityExists(name)) {
+      agentStore.createAllWithSkillLinks(name, files, requiredSkills);
+    } else {
+      agentStore.writeAll(name, files);
+      if (associationService != null) {
+        for (String skill : requiredSkills) {
+          associationService.associate(name, skill);
+        }
+      }
+    }
     if (old != null) {
       agentScheduler.unregisterProfile(old);
     }
@@ -740,8 +767,19 @@ public class AgentLifecycleService {
         .collect(Collectors.joining("\n"));
   }
 
-  /** 把全局 Skill 库（名+描述）铺给作者模型；模型据此按需把 Skill 加进 frontmatter 的 skills，禁止编造清单外的名字。 */
+  /** 把公共 Skill 元数据铺给作者模型理解能力；关联由保存流程按用户选择创建软链接。 */
   private String describeSkills() {
+    if (publicSkillCatalog != null) {
+      List<io.oryxos.core.skill.PublicSkillDescriptor> skills = publicSkillCatalog.list();
+      if (skills.isEmpty()) {
+        return "（当前无可用 Skill）";
+      }
+      return skills.stream()
+          .filter(skill -> skill.metadata() != null)
+          .sorted(Comparator.comparing(io.oryxos.core.skill.PublicSkillDescriptor::name))
+          .map(skill -> "- " + skill.name() + "：" + oneLine(skill.metadata().description()))
+          .collect(Collectors.joining("\n"));
+    }
     if (skillRegistry == null || skillRegistry.all().isEmpty()) {
       return "（当前无可用 Skill）";
     }
@@ -751,12 +789,12 @@ public class AgentLifecycleService {
         .collect(Collectors.joining("\n"));
   }
 
-  /** 用户显式指定必启用的 Skill：作为硬指令追加到 skills 规则末尾；没指定则为空。目标由人定，不让模型漏。 */
+  /** 用户显式选择的 Skill：告知作者模型能力由保存流程关联，禁止写入 AGENT.md。 */
   private static String requiredSkillsDirective(List<String> required) {
     if (required == null || required.isEmpty()) {
       return "";
     }
-    return "【用户已指定：frontmatter 的 skills 列表必须包含这些 Skill】" + String.join("、", required);
+    return "【用户已选择：保存时由系统建立 Skill 软链接，AGENT.md 不写 skills 字段】" + String.join("、", required);
   }
 
   /** 通知指令：用户选了渠道就固定投递到它（唯一目标）；没选就明确禁止 notify。目标由人定，不让模型猜。 */

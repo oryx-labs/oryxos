@@ -1,10 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { deleteSkill, getSkill, importSkill, listSkills, setSkillEnabled } from './skills.js'
+import {
+  ApiError,
+  associateAgentSkill,
+  deletePublicSkill,
+  getPublicSkill,
+  importPublicSkill,
+  listAgentSkills,
+  listPublicSkills,
+  setPublicSkillEnabled,
+  unlinkAgentSkill,
+} from './skills.js'
 
 function response(data, options = {}) {
   return {
     ok: options.ok ?? true,
+    status: options.status ?? 200,
     json: vi.fn().mockResolvedValue({
       code: options.code ?? 0,
       message: options.message ?? 'success',
@@ -16,67 +27,80 @@ function response(data, options = {}) {
 describe('Skill API client', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('lists and reads details with encoded path segments', async () => {
+  it('uses the public market endpoints and encodes Skill names', async () => {
     const fetch = vi
       .fn()
-      .mockResolvedValueOnce(response([{ directoryName: 'weather' }]))
-      .mockResolvedValueOnce(response({ directoryName: 'a/b' }))
+      .mockResolvedValueOnce(response([{ name: 'weather' }]))
+      .mockResolvedValueOnce(response({ name: 'a/b' }))
     vi.stubGlobal('fetch', fetch)
 
-    await expect(listSkills('ops agent')).resolves.toEqual([{ directoryName: 'weather' }])
-    await expect(getSkill('ops agent', 'a/b')).resolves.toEqual({ directoryName: 'a/b' })
+    await expect(listPublicSkills()).resolves.toEqual([{ name: 'weather' }])
+    await expect(getPublicSkill('a/b')).resolves.toEqual({ name: 'a/b' })
 
-    expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/agents/ops%20agent/skills', undefined)
-    expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/agents/ops%20agent/skills/a%2Fb', undefined)
+    expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/skills', undefined)
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/skills/a%2Fb', undefined)
   })
 
-  it('uploads the file FormData part without setting multipart Content-Type', async () => {
-    const fetch = vi.fn().mockResolvedValue(response({ directoryName: 'weather' }))
+  it('uploads one ZIP using FormData without forcing a multipart Content-Type', async () => {
+    const fetch = vi.fn().mockResolvedValue(response({ name: 'weather' }))
     vi.stubGlobal('fetch', fetch)
     const file = new File(['zip'], 'weather.zip', { type: 'application/zip' })
 
-    await importSkill('ops', file)
+    await importPublicSkill(file)
 
     const [url, options] = fetch.mock.calls[0]
-    expect(url).toBe('/api/v1/agents/ops/skills')
+    expect(url).toBe('/api/v1/skills')
     expect(options.method).toBe('POST')
     expect(options.body).toBeInstanceOf(FormData)
     expect(options.body.get('file')).toBe(file)
     expect(options.headers).toBeUndefined()
   })
 
-  it('sends a strict JSON boolean when enabling or disabling', async () => {
-    const fetch = vi.fn().mockResolvedValue(response({ status: 'disabled' }))
+  it('changes global state and supports normal-then-force deletion', async () => {
+    const fetch = vi.fn().mockResolvedValue(response({ name: 'weather' }))
     vi.stubGlobal('fetch', fetch)
 
-    await setSkillEnabled('ops', 'weather skill', false)
+    await setPublicSkillEnabled('weather skill', false)
+    await deletePublicSkill('weather skill')
+    await deletePublicSkill('weather skill', true)
 
-    expect(fetch).toHaveBeenCalledWith('/api/v1/agents/ops/skills/weather%20skill', {
+    expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/skills/weather%20skill', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: false }),
     })
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/skills/weather%20skill', { method: 'DELETE' })
+    expect(fetch).toHaveBeenNthCalledWith(3, '/api/v1/skills/weather%20skill?force=true', { method: 'DELETE' })
   })
 
-  it('deletes the encoded member and accepts a null response payload', async () => {
-    const fetch = vi.fn().mockResolvedValue(response(null))
+  it('uses canonical per-Agent association endpoints', async () => {
+    const fetch = vi.fn().mockResolvedValue(response([]))
     vi.stubGlobal('fetch', fetch)
 
-    await expect(deleteSkill('ops', 'weather?')).resolves.toBeNull()
+    await listAgentSkills('ops agent')
+    await associateAgentSkill('ops agent', 'weather?')
+    await unlinkAgentSkill('ops agent', 'weather?')
 
-    expect(fetch).toHaveBeenCalledWith('/api/v1/agents/ops/skills/weather%3F', {
-      method: 'DELETE',
+    expect(fetch).toHaveBeenNthCalledWith(1, '/api/v1/agents/ops%20agent/skills', undefined)
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/v1/agents/ops%20agent/skills/weather%3F', { method: 'PUT' })
+    expect(fetch).toHaveBeenNthCalledWith(3, '/api/v1/agents/ops%20agent/skills/weather%3F', { method: 'DELETE' })
+  })
+
+  it('preserves typed 409 conflict data for the force-delete dialog', async () => {
+    const data = { reasonCode: 'SKILL_IN_USE', skillName: 'weather', linkedAgents: ['ops'] }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(data, {
+      ok: false,
+      status: 409,
+      code: 409,
+      message: 'Skill 仍有关联',
+    })))
+
+    await expect(deletePublicSkill('weather')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 409,
+      code: 409,
+      data,
     })
-  })
-
-  it('surfaces the unified envelope message for HTTP and domain failures', async () => {
-    const fetch = vi
-      .fn()
-      .mockResolvedValueOnce(response(null, { ok: false, code: 413, message: '包过大' }))
-      .mockResolvedValueOnce(response(null, { code: 409, message: '名称冲突' }))
-    vi.stubGlobal('fetch', fetch)
-
-    await expect(importSkill('ops', new File(['x'], 'x.zip'))).rejects.toThrow('包过大')
-    await expect(listSkills('ops')).rejects.toThrow('名称冲突')
+    await expect(deletePublicSkill('weather')).rejects.toBeInstanceOf(ApiError)
   })
 })

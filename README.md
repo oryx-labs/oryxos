@@ -38,13 +38,13 @@ OryxOS is the third column — and it ships the second one for every agent it ru
 ## Features
 
 **🤖 One Directory = One Agent**
-An Agent is a directory: `.oryxos/agents/<name>/AGENT.md` — YAML frontmatter (the Agent's profile: model, tools, channels, schedules) plus a body of task instructions. Optional private Skills, scripts, and references are loaded progressively. Multiple agents co-exist on one instance.
+An Agent is a directory: `.oryxos/agents/<name>/AGENT.md` — YAML frontmatter (the Agent's profile: model, tools, channels, schedules) plus a body of task instructions. Public marketplace Skills are installed through visible relative symlinks; scripts and references remain Agent-local. Multiple agents co-exist on one instance.
 
 **⚡ Dynamic Agent Management**
 Create an agent via REST, generate a draft `AGENT.md` from one sentence with an LLM, or just drop a directory into the workspace — a `WorkspaceWatcher` picks it up and the agent goes live with no restart.
 
-**🧩 Private & Shared Skills**
-Agent-private and workspace-wide public `SKILL.md` packages expose only metadata at L1, then load instructions and resources on demand through existing, explicitly granted tools. The REST API and Web Manager support trusted ZIP install, content editing, Agent association, validation, and archived deletion.
+**🧩 Public Skill Marketplace**
+Workspace-wide `SKILL.md` packages live once under `.oryxos/skills/` and are installed into Agents through standard relative symlinks. They expose only metadata at L1, then load instructions and resources on demand through existing, explicitly granted tools. The REST API and Web Manager support trusted ZIP import, Agent installation, validation, global enable/disable, and archived deletion.
 
 **☕ Java Native**
 Built on Java 21 with virtual threads and a self-implemented ReAct loop (Spring AI is used only for protocol translation and `@Tool` schema generation). Single executable JAR, single binary deployment — no Python runtime.
@@ -74,7 +74,7 @@ Tools via MCP with a three-tier plugin model (zero-code SKILL.md → custom MCP 
 | **LLM Routing** | Dynamic, SQLite-backed provider registry with CRUD. Agents are provider-agnostic; explicit `name → ChatModel` routing keeps multi-provider dispatch correct. Switch or add providers at runtime. Local inference supported. |
 | **ReAct Loop** | Self-implemented reasoning engine — no external framework. LLM decides whether and which tool to call; OryxOS executes, feeds the result back; LLM decides the next step. Sync execution on Java 21 virtual threads; loop fully controllable. |
 | **Memory** | Per-agent long-term memory (`.oryxos/agents/<name>/MEMORY.md`, keyword search, timestamped entries; global fallback when no agent context). Auto-injected into every system prompt, with a vector-retrieval upgrade path. |
-| **Tool System** | Built-in file, shell, and HTTP tools. Agent-private `SKILL.md` packages progressively disclose instructions that use explicitly granted built-in/MCP tools; custom MCP servers and native `@Tool` methods cover code extensions. |
+| **Tool System** | Built-in file, shell, and HTTP tools. Public marketplace `SKILL.md` packages installed through Agent symlinks progressively disclose instructions that use explicitly granted built-in/MCP tools; custom MCP servers and native `@Tool` methods cover code extensions. |
 | **REST API** | All capabilities exposed via REST. Any language can integrate. Business systems connect via HTTP. |
 
 ## Roadmap
@@ -159,7 +159,7 @@ The workspace defaults to `.oryxos/` but is configurable — set `ORYXOS_ROOT` (
 | `http://localhost:8080/admin/` | **Web Manager** — Vue 3 console |
 | `http://localhost:8080/swagger-ui` | OpenAPI docs |
 
-The Web Manager is a Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **agent management** (create, one-sentence LLM generation, file editor, per-agent session, memory, and private Skill management), **public Skill CRUD and Agent association**, **provider and notify-channel CRUD**, **scheduled tasks**, **sessions, tools, sandbox whitelist**, and a **workspace file browser**. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process.
+The Web Manager is a Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **agent management** (create, one-sentence LLM generation, file editor, per-agent session, memory, and installed Skills), **public Skill marketplace CRUD and Agent installation**, **provider and notify-channel CRUD**, **scheduled tasks**, **sessions, tools, sandbox whitelist**, and a **workspace file browser**. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process.
 
 <p align="center">
   <img src="website/public/images/manager.jpg" alt="OryxOS Web Manager console" width="100%"/>
@@ -183,7 +183,7 @@ The dev server runs on port **5173** with base `/admin/` and proxies `/api` → 
 
 ## Agent Definition
 
-**One directory = one Agent.** Each agent lives in `.oryxos/agents/<name>/` with an `AGENT.md` — YAML frontmatter (its profile) plus a body of task instructions injected into the system prompt. Optional `skills/*.md`, `scripts/`, and `REFERENCE.md` in the same directory are loaded on demand via `read_file` / `shell`. There is no `.oryxos/profiles/` directory.
+**One directory = one Agent.** Each agent lives in `.oryxos/agents/<name>/` with an `AGENT.md` — YAML frontmatter (its profile) plus a body of task instructions injected into the system prompt. Agent-local `scripts/` and references may be loaded on demand; installed public Skills appear only as standard links under `skills/`. There is no `.oryxos/profiles/` directory.
 
 ```markdown
 ---
@@ -214,21 +214,21 @@ You are a professional DevOps assistant. When triggered, ... (task instructions)
 
 Drop this directory into the workspace and the `WorkspaceWatcher` registers the agent live — no restart. Agents can also be created via `POST /api/v1/agents` or drafted from one sentence via the admin console.
 
-### Private and Public Skills
+### Public Skill Marketplace
 
-Each Agent is one self-contained directory. `AGENT.md` contains Profile frontmatter plus the Agent's always-loaded instructions; standard private Skills live at `skills/<skill-name>/SKILL.md`:
+Managed Skills have one content copy in `.oryxos/skills/<skill-name>/`. Installing one for an Agent creates exactly one relative symlink; neither `AGENT.md`, a database row, nor a separate association file is a source of truth:
 
 ```text
-.oryxos/agents/ops-agent/
-├── AGENT.md
-└── skills/
-    └── incident-triage/
-        ├── SKILL.md
-        ├── references/
-        │   └── severity.md
-        ├── scripts/
-        │   └── collect.sh
-        └── assets/
+.oryxos/
+├── skills/
+│   └── incident-triage/
+│       ├── SKILL.md
+│       ├── references/severity.md
+│       ├── scripts/collect.sh
+│       └── assets/
+└── agents/ops-agent/
+    ├── AGENT.md
+    └── skills/incident-triage -> ../../../skills/incident-triage
 ```
 
 ```markdown
@@ -253,9 +253,9 @@ The Skill directory name and frontmatter `name` must match. Loading is progressi
 2. **L2** — after the model selects a relevant Skill, it uses the existing `read_file` tool to read that `SKILL.md`.
 3. **L3** — references/assets are read and scripts are run only when the L2 instructions require them, using existing `read_file`/`shell` paths.
 
-Public Skills live once under `.oryxos/skills/<skill-name>/SKILL.md` and can be explicitly associated with multiple Agents from the REST API or Web Manager. Each request merges an Agent's private Skills with its associated public Skills. There is still no `use_skill` tool: `allowed-tools` is descriptive metadata and association never grants permissions; the Agent must explicitly declare each tool in `AGENT.md`, and execution still passes through `ToolExecutor`, sandbox checks, and audit persistence. Legacy flat files such as `skills/old-guide.md` remain unmanaged.
+Only valid standard symlinks participate in discovery. There is no `use_skill` tool: `allowed-tools` is descriptive metadata and installation never grants permissions; the Agent must explicitly declare each tool in `AGENT.md`, and execution still passes through `ToolExecutor`, sandbox checks, and audit persistence. Agent-local real Skill directories and legacy flat files such as `skills/old-guide.md` remain unmanaged and never enter L1 automatically.
 
-Managed Skills have `enabled`, `disabled`, or `invalid` status. A valid local ZIP import is an explicit administrator trust action and is enabled for the next request. Disable persists across restart without deleting files; re-enable performs full validation. Delete atomically moves the complete package under `.oryxos/archive/.skills/` instead of physically erasing it; archived Skills are not discoverable and restore is not yet exposed. These changes affect the next top-level request and do not rewrite old Session history or Tool/LLM audit records.
+Managed Skills have `enabled`, `disabled`, or `invalid` status. A valid local ZIP import is an explicit administrator trust action and is globally enabled for the next request. The package-local disabled marker affects every associated Agent; disabling only one Agent means removing its link. Normal delete returns `409` plus associated Agents while links remain. Explicit forced delete scans every Agent directory, removes only standard links, records a recovery log, and atomically archives the package under `.oryxos/archive/.skills/`. These changes affect the next top-level request and do not rewrite old Session history or Tool/LLM audit records.
 
 Treat every Skill like code. Archive/path/size validation protects the filesystem but cannot prove instructions, references, or scripts are benign. Review the entire package and import only trusted sources. Disabled means excluded from OryxOS L1 and its normal progressive-loading path; it is not an OS-level per-path ACL for a broadly granted `shell` tool.
 
@@ -278,11 +278,10 @@ All endpoints are prefixed with `/api/v1` and every response is wrapped in a uni
 | `GET` `POST` `PUT` | `/schedules`, `/schedules/{id}/executions`, `/schedules/{id}/run`, `/schedules/{id}` | List / history / run-now / enable-disable |
 | `GET` `POST` `DELETE` | `/sandbox/whitelist`, `/sandbox/whitelist/{category}` | List / add / remove sandbox entries (`FILE`\|`SHELL`\|`HTTP`) |
 | `GET` `POST` | `/workspace/tree`, `/workspace/file` | Workspace file browser (read tree / read / write file) |
-| `GET` `POST` | `/agents/{name}/skills` | List private Skills / import one local Skill ZIP as multipart `file` |
-| `GET` `PUT` `DELETE` | `/agents/{name}/skills/{skillName}` | Safe metadata / enable-disable / archived deletion |
-| `GET` `POST` | `/skills` | List public Skills / install one trusted ZIP as multipart `file` |
-| `GET` `PUT` `DELETE` | `/skills/{skillName}` | View / edit `SKILL.md` / archived deletion |
-| `PUT` `DELETE` | `/skills/{skillName}/agents/{agentName}` | Associate / dissociate a public Skill |
+| `GET` `POST` | `/skills` | List public Skills / import one trusted ZIP as multipart `file` |
+| `GET` `PUT` `DELETE` | `/skills/{skillName}` | Safe metadata and associations / global enable-disable / guarded or forced archived deletion |
+| `GET` | `/agents/{name}/skills` | List the Agent's valid marketplace links |
+| `PUT` `DELETE` | `/agents/{name}/skills/{skillName}` | Install / uninstall through the standard relative symlink |
 | `GET` | `/profiles` | List derived profiles (one per agent) |
 | `GET` | `/memory` | Read long-term memory |
 | `GET` | `/tools` | List available tools |
@@ -292,7 +291,7 @@ All endpoints are prefixed with `/api/v1` and every response is wrapped in a uni
 
 - **Platform before Agent** — the most important deliverable is not a powerful Agent, but the environment that lets any Agent run reliably
 - **Self-implement the core** — reasoning loop is self-implemented; protocol adapters reuse mature libraries; no reinventing the wheel
-- **Directory = Agent** — an Agent is defined by `AGENT.md` plus optional private Skills and resources, not Java code
+- **Directory = Agent; marketplace is the sole sharing exception** — `AGENT.md` defines runtime configuration and instructions; managed Skills live once in the public root and are installed through standard links
 - **Open standards** — MCP for tools, A2A for collaboration, open formats for skills
 - **Stateless instances** — state externalized from the start; the prerequisite for scaling to distributed
 - **Security as foundation** — controlled tool sources, least privilege, mandatory sandbox, credentials never persisted, full audit trail from day one

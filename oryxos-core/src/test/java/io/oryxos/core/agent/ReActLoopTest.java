@@ -90,18 +90,19 @@ class ReActLoopTest {
     when(providerService.chat(any(), any(), any()))
         .thenReturn(responseWithToolCall(HTTP_GET_CALL))
         .thenReturn(finalAnswer("晴 28 度，建议短袖"));
-    when(toolExecutor.execute(any(), any(), any(), any())).thenReturn(ToolResult.ok("晴，28°C"));
+    when(toolExecutor.execute(any(), any(), any(), any(), any()))
+        .thenReturn(ToolResult.ok("晴，28°C"));
 
     String reply = loop.run(session, "查天气穿衣", profileWithMaxIterations(10));
 
     assertEquals("晴 28 度，建议短袖", reply);
     verify(providerService, times(2)).chat(eq("s-1"), any(), any());
     verify(toolExecutor, times(1))
-        .execute(eq("s-1"), eq("ops-agent"), eq(List.of("http_get")), eq(HTTP_GET_CALL));
+        .execute(eq("s-1"), eq("ops-agent"), eq(List.of("http_get")), eq(HTTP_GET_CALL), any());
     // 执行发生在两次模型调用之间：想→做→再想
     InOrder order = inOrder(providerService, toolExecutor);
     order.verify(providerService).chat(any(), any(), any());
-    order.verify(toolExecutor).execute(any(), any(), any(), any());
+    order.verify(toolExecutor).execute(any(), any(), any(), any(), any());
     order.verify(providerService).chat(any(), any(), any());
   }
 
@@ -112,17 +113,17 @@ class ReActLoopTest {
     when(providerService.chat(any(), any(), any()))
         .thenReturn(responseWithToolCall(HTTP_GET_CALL, second))
         .thenReturn(finalAnswer("done"));
-    when(toolExecutor.execute(any(), any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+    when(toolExecutor.execute(any(), any(), any(), any(), any())).thenReturn(ToolResult.ok("ok"));
 
     loop.run(session, "干活", profileWithMaxIterations(10));
 
     InOrder order = inOrder(toolExecutor);
     order
         .verify(toolExecutor)
-        .execute(eq("s-1"), eq("ops-agent"), eq(List.of("http_get")), eq(HTTP_GET_CALL));
+        .execute(eq("s-1"), eq("ops-agent"), eq(List.of("http_get")), eq(HTTP_GET_CALL), any());
     order
         .verify(toolExecutor)
-        .execute(eq("s-1"), eq("ops-agent"), eq(List.of("http_get")), eq(second));
+        .execute(eq("s-1"), eq("ops-agent"), eq(List.of("http_get")), eq(second), any());
   }
 
   @Test
@@ -131,7 +132,8 @@ class ReActLoopTest {
     when(providerService.chat(any(), any(), any()))
         .thenReturn(responseWithToolCall(HTTP_GET_CALL))
         .thenReturn(finalAnswer("最终答复"));
-    when(toolExecutor.execute(any(), any(), any(), any())).thenReturn(ToolResult.ok("晴，28°C"));
+    when(toolExecutor.execute(any(), any(), any(), any(), any()))
+        .thenReturn(ToolResult.ok("晴，28°C"));
 
     loop.run(session, "查天气", profileWithMaxIterations(10));
 
@@ -147,7 +149,7 @@ class ReActLoopTest {
   void modelKeepsRequestingTools_forceStopAtMaxIterations() {
     when(providerService.chat(any(), any(), any()))
         .thenReturn(responseWithToolCall(HTTP_GET_CALL)); // 每轮都要调工具，永不收敛
-    when(toolExecutor.execute(any(), any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+    when(toolExecutor.execute(any(), any(), any(), any(), any())).thenReturn(ToolResult.ok("ok"));
 
     String reply = loop.run(session, "查天气", profileWithMaxIterations(10));
 
@@ -159,7 +161,7 @@ class ReActLoopTest {
   @DisplayName("最大轮数按 Agent 配置生效（5 轮即停）")
   void maxIterationsIsPerProfileNotHardcoded() {
     when(providerService.chat(any(), any(), any())).thenReturn(responseWithToolCall(HTTP_GET_CALL));
-    when(toolExecutor.execute(any(), any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+    when(toolExecutor.execute(any(), any(), any(), any(), any())).thenReturn(ToolResult.ok("ok"));
 
     String reply = loop.run(session, "查天气", profileWithMaxIterations(5));
 
@@ -184,7 +186,7 @@ class ReActLoopTest {
     when(providerService.chat(any(), any(), any()))
         .thenReturn(responseWithToolCall(HTTP_GET_CALL))
         .thenReturn(finalAnswer("拿不到天气，建议看窗外"));
-    when(toolExecutor.execute(any(), any(), any(), any()))
+    when(toolExecutor.execute(any(), any(), any(), any(), any()))
         .thenReturn(ToolResult.error("connect timeout", true));
 
     String reply = loop.run(session, "查天气", profileWithMaxIterations(10));
@@ -202,10 +204,13 @@ class ReActLoopTest {
     when(providerService.chat(any(), any(), any()))
         .thenReturn(responseWithToolCall(HTTP_GET_CALL))
         .thenReturn(finalAnswer("done"));
-    when(toolExecutor.execute(any(), any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+    when(toolExecutor.execute(any(), any(), any(), any(), any())).thenReturn(ToolResult.ok("ok"));
 
     loop.run(session, "查天气", profile, snapshot);
 
     verify(promptBuilder, times(2)).build(same(session), same(profile), same(snapshot));
+    verify(toolExecutor)
+        .execute(
+            eq("s-1"), eq("ops-agent"), eq(List.of("http_get")), eq(HTTP_GET_CALL), same(snapshot));
   }
 }

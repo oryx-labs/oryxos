@@ -14,8 +14,7 @@ import java.util.regex.Pattern;
 /**
  * "从 GitHub 拉取"（第 32 节）：把一个 GitHub 目录 URL（如 {@code
  * https://github.com/obra/superpowers/tree/main/skills/brainstorming}）整个递归拉下来， 落成一份"相对路径 → 内容"的
- * Map，交给 {@code SkillService#importFiles} 原样落盘——不是抓网页正文，是拉整个文件夹（SKILL.md + 脚本/参考资料等），跟"一个目录 = 一个
- * Skill"的既有形态对齐。
+ * Map，交给公共 ZIP 导入管线统一校验和原子发布——不是抓网页正文，是拉整个文件夹（SKILL.md + 脚本/参考资料等），跟"一个目录 = 一个 Skill"的既有形态对齐。
  *
  * <p>只认 GitHub，不做通用 git 托管兼容：用 GitHub Contents API（{@code
  * /repos/{owner}/{repo}/contents/{path}?ref={branch}}）列目录、递归子目录，逐个文件按其 {@code download_url} 取原始内容。

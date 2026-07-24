@@ -1,152 +1,134 @@
 package io.oryxos.web.controller;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import io.oryxos.core.skill.SkillLoader;
-import io.oryxos.core.skill.SkillRegistry;
-import io.oryxos.core.skill.SkillService;
-import io.oryxos.core.skill.SkillStore;
+import io.oryxos.core.skill.DeleteResult;
+import io.oryxos.core.skill.PublicSkillDescriptor;
+import io.oryxos.core.skill.PublicSkillManagementService;
+import io.oryxos.core.skill.SkillInUseException;
+import io.oryxos.core.skill.SkillMetadata;
+import io.oryxos.core.skill.SkillSource;
+import io.oryxos.core.skill.SkillStatus;
 import io.oryxos.web.GlobalExceptionHandler;
+import java.io.InputStream;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-/** 第 32 节验收 harness：SkillApiController——全局 Skill 库 CRUD（冲突→400、不存在→404）。 */
 class SkillApiControllerTest {
 
-  @TempDir Path oryxosRoot;
+  private PublicSkillManagementService skills;
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
-    SkillStore store = new SkillStore(oryxosRoot);
-    SkillLoader loader = new SkillLoader(oryxosRoot.resolve("skills"));
-    SkillRegistry registry = loader.loadAll();
-    SkillService service = new SkillService(store, registry, loader);
+    skills = mock(PublicSkillManagementService.class);
     mvc =
-        MockMvcBuilders.standaloneSetup(new SkillApiController(service))
+        MockMvcBuilders.standaloneSetup(new SkillApiController(skills))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
 
   @Test
-  @DisplayName("create → list/get 能取到")
-  void create_thenListAndGet() throws Exception {
-    mvc.perform(
-            post("/api/v1/skills")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(
-                    "{\"name\":\"report-format\",\"description\":\"研报格式\",\"body\":\"# 规范\\n带出处\"}"))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.code").value(0))
-        .andExpect(jsonPath("$.data.name").value("report-format"));
+  void listsAndGetsOnlySafePublicMetadata() throws Exception {
+    PublicSkillDescriptor weather = descriptor("weather", List.of("ops"));
+    when(skills.list()).thenReturn(List.of(weather));
+    when(skills.get("weather")).thenReturn(weather);
 
     mvc.perform(get("/api/v1/skills"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data[0].name").value("report-format"));
-
-    mvc.perform(get("/api/v1/skills/report-format"))
+        .andExpect(jsonPath("$.data[0].name").value("weather"))
+        .andExpect(jsonPath("$.data[0].linkedAgents[0]").value("ops"))
+        .andExpect(jsonPath("$.data[0].promptContent").doesNotExist());
+    mvc.perform(get("/api/v1/skills/weather"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.description").value("研报格式"));
+        .andExpect(jsonPath("$.data.entrypoint").value("skills/weather/SKILL.md"));
   }
 
   @Test
-  @DisplayName("create 同名 → 400")
-  void create_duplicate_returns400() throws Exception {
-    mvc.perform(
-            post("/api/v1/skills")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"dup\",\"description\":\"d\",\"body\":\"b\"}"))
-        .andExpect(status().isOk());
-    mvc.perform(
-            post("/api/v1/skills")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"dup\",\"description\":\"d2\",\"body\":\"b2\"}"))
+  void importsOneMultipartZipThroughTheAuthoritativePipeline() throws Exception {
+    when(skills.importZip(any(InputStream.class), eq("weather.zip")))
+        .thenReturn(descriptor("weather", List.of()));
+    MockMultipartFile archive =
+        new MockMultipartFile("file", "weather.zip", "application/zip", new byte[] {1, 2, 3});
+
+    mvc.perform(multipart("/api/v1/skills").file(archive))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.name").value("weather"));
+    verify(skills).importZip(any(InputStream.class), eq("weather.zip"));
+  }
+
+  @Test
+  void rejectsMissingMultipartFile() throws Exception {
+    mvc.perform(multipart("/api/v1/skills"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value(400));
   }
 
   @Test
-  @DisplayName("create 空 name → 400")
-  void create_blankName_returns400() throws Exception {
-    mvc.perform(
-            post("/api/v1/skills")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"\",\"description\":\"d\",\"body\":\"b\"}"))
-        .andExpect(status().isBadRequest());
-  }
+  void changesGlobalEnabledStateUsingAStrictBoolean() throws Exception {
+    when(skills.setEnabled("weather", false)).thenReturn(descriptor("weather", List.of()));
 
-  @Test
-  @DisplayName("get / update / delete 不存在 → 404")
-  void missing_returns404() throws Exception {
-    mvc.perform(get("/api/v1/skills/nope")).andExpect(status().isNotFound());
     mvc.perform(
-            put("/api/v1/skills/nope")
+            put("/api/v1/skills/weather")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"description\":\"d\",\"body\":\"b\"}"))
-        .andExpect(status().isNotFound());
-    mvc.perform(delete("/api/v1/skills/nope")).andExpect(status().isNotFound());
-  }
-
-  @Test
-  @DisplayName("import 空 url → 400；非 http/https → 400")
-  void import_invalidUrl_returns400() throws Exception {
-    mvc.perform(
-            post("/api/v1/skills/import")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"url\":\"\"}"))
-        .andExpect(status().isBadRequest());
-    mvc.perform(
-            post("/api/v1/skills/import")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"url\":\"file:///etc/passwd\"}"))
-        .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.code").value(400));
-  }
-
-  @Test
-  @DisplayName("import 指向回环/内网/云元数据地址 → 400（SSRF 防护）")
-  void import_ssrf_blocked() throws Exception {
-    for (String url :
-        new String[] {
-          "http://127.0.0.1:8080/x/SKILL.md",
-          "http://localhost/x/SKILL.md",
-          "http://169.254.169.254/latest/meta-data/",
-          "http://10.0.0.5/SKILL.md"
-        }) {
-      mvc.perform(
-              post("/api/v1/skills/import")
-                  .contentType(MediaType.APPLICATION_JSON)
-                  .content("{\"url\":\"" + url + "\"}"))
-          .andExpect(status().isBadRequest());
-    }
-  }
-
-  @Test
-  @DisplayName("update 覆写；delete 移除")
-  void update_thenDelete() throws Exception {
-    mvc.perform(
-            post("/api/v1/skills")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"s1\",\"description\":\"old\",\"body\":\"old\"}"))
+                .content("{\"enabled\":false}"))
         .andExpect(status().isOk());
-    mvc.perform(
-            put("/api/v1/skills/s1")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"description\":\"new\",\"body\":\"new body\"}"))
+    verify(skills).setEnabled("weather", false);
+  }
+
+  @Test
+  void normalDeleteReturnsTyped409AndForceIsASeparateRequest() throws Exception {
+    when(skills.delete("weather", false))
+        .thenThrow(new SkillInUseException("weather", List.of("ops", "finance")));
+    when(skills.delete("weather", true))
+        .thenReturn(new DeleteResult("weather", true, List.of("ops", "finance"), true));
+
+    mvc.perform(delete("/api/v1/skills/weather"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.data.reasonCode").value("SKILL_IN_USE"))
+        .andExpect(jsonPath("$.data.linkedAgents[0]").value("finance"))
+        .andExpect(jsonPath("$.data.linkedAgents[1]").value("ops"));
+
+    mvc.perform(delete("/api/v1/skills/weather").queryParam("force", "true"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.description").value("new"));
-    mvc.perform(delete("/api/v1/skills/s1")).andExpect(status().isOk());
-    mvc.perform(get("/api/v1/skills/s1")).andExpect(status().isNotFound());
+        .andExpect(jsonPath("$.data.forced").value(true));
+  }
+
+  private static PublicSkillDescriptor descriptor(String name, List<String> linkedAgents) {
+    Path entry = Path.of("/workspace/skills", name, "SKILL.md");
+    SkillMetadata metadata =
+        new SkillMetadata(
+            name, "description", null, null, Map.of(), null, entry, "skills/" + name + "/SKILL.md");
+    return new PublicSkillDescriptor(
+        name,
+        metadata,
+        SkillStatus.ENABLED,
+        true,
+        SkillSource.UPLOAD,
+        Instant.EPOCH,
+        null,
+        "skills/" + name + "/SKILL.md",
+        List.of("SKILL.md"),
+        1,
+        100,
+        linkedAgents);
   }
 }

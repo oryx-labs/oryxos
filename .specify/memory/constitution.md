@@ -1,26 +1,36 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.1.0
-- Bump rationale: MINOR — 技术栈与架构约束新增「模块结构可按需演进」条款（用户在第17节
-  tasks 停点批准）：模块划分跟随 Agent 能力域，不锁死 9 模块，可新建（如 oryxos-sandbox）
-  或调整模块；新建/改名须在对应特性 plan 中声明并同步 CLAUDE.md 与 TechnicalSolution §10。
-- Previous version change: (none) → 1.0.0  (initial ratification)
-- Bump rationale (1.0.0): First formal adoption of the OryxOS constitution. MAJOR baseline.
-- Principles defined (8):
-    I.   自实现 ReAct 循环 (NON-NEGOTIABLE)
-    II.  Spring AI 仅做协议转换与 Schema 生成 (NON-NEGOTIABLE)
-    III. Provider 显式映射
+- Version change: 1.1.0 → 2.0.0
+- Bump rationale: MAJOR — Principle IV previously prohibited every cross-Agent capability library;
+  it now defines the public Skill marketplace as the sole controlled sharing exception. Principle
+  VIII is redefined so Agent identity/runtime configuration remains in AGENT.md while marketplace
+  associations are persisted as filesystem links rather than YAML fields.
+- Modified principles:
     IV.  一个目录 = 一个 Agent；AGENT.md 由 ContextLoader 加载，不作为 Tool
-    V.   审计 Day One 落库 (NON-NEGOTIABLE)
-    VI.  安全是地基：强制沙箱白名单，不用 SecurityManager (NON-NEGOTIABLE)
-    VII. 同步执行 + 虚拟线程，不引入异步编程模型
-    VIII.配置即 Agent，实例无状态、状态外置
-- Added sections: 技术栈与架构约束; 开发流程与质量门禁; Governance
-- Removed sections: none (initial)
-- Templates checked:
-    ✅ .specify/templates/plan-template.md   (Constitution Check gate is dynamic; no edit needed)
-    ✅ .specify/templates/spec-template.md    (no constitution-specific tokens)
-    ✅ .specify/templates/tasks-template.md   (no constitution-specific tokens)
+         → 一个目录 = 一个 Agent；公共 Skill 市场是唯一共享例外
+    VIII. 配置即 Agent，实例无状态、状态外置
+          → AGENT.md 定义运行配置，Skill 关联状态外置
+- Added sections: none
+- Removed sections: none
+- Templates:
+    ✅ .specify/templates/plan-template.md (marketplace exception gate added)
+    ✅ .specify/templates/spec-template.md (marketplace trust/association requirements added)
+    ✅ .specify/templates/tasks-template.md (marketplace boundary tests added)
+    ✅ .specify/templates/checklist-template.md (reviewed; no change required)
+    ✅ .specify/templates/commands/ (directory absent; no command templates to update)
+- Runtime guidance:
+    ✅ AGENTS.md
+    ✅ CLAUDE.md
+    ✅ README.md
+    ✅ docs/TechnicalSolution.md
+    ✅ docs/AiProgrammingGuide.md
+    ✅ docs/CliGuide.md
+- Active feature artifacts:
+    ✅ specs/012-skill-management/spec.md
+    ✅ specs/012-skill-management/plan.md
+    ✅ specs/012-skill-management/tasks.md
+    ✅ specs/012-skill-management/research.md
+    ✅ specs/012-skill-management/quickstart.md
 - Follow-up TODOs: none
 -->
 
@@ -57,19 +67,30 @@ Spring 容器中的 `ChatModel` Bean 类型来区分 Provider（类型相同会�
 
 **Rationale**: 显式映射是多模型可预测路由的唯一可靠方式。
 
-### IV. 一个目录 = 一个 Agent；AGENT.md 由 ContextLoader 加载，不作为 Tool
+### IV. 一个目录 = 一个 Agent；公共 Skill 市场是唯一共享例外
 
-一个 Agent MUST 是 `.oryxos/agents/<name>/` 一个目录（借 Anthropic Agent Skills 的目录形态，
-但定义的是 Agent）：`AGENT.md` = frontmatter（这个 Agent 自己的 profile）+ 正文（任务指令），
-外加可选 `skills/*.md` 子指令、`scripts/` 脚本、`REFERENCE.md`。`AgentLoader.deriveProfile`
-MUST 把 frontmatter 派生成 `Profile` 复用底座。`AGENT.md` **正文** MUST 由 `oryxos-core` 的
-`ContextLoader` 注入 system prompt，与 Bootstrap 文件（`AGENTS.md`、`SOUL.md`、`USER.md`）同类；
-目录里的子指令 / 脚本经底座既有 `read_file`/`shell` 按需取用。MUST NOT 建跨 Agent 的共享能力库、
-`use_skill` 工具或全局能力索引；一个 Agent 目录 MUST NOT 注册进 `ToolRegistry` 或放入 `oryxos-tool`
-模块。内置 Tool 与 MCP Client MUST 合并在单一 `oryxos-tool` 模块，不拆分。
+一个 Agent MUST 是 `.oryxos/agents/<name>/` 一个目录：`AGENT.md` frontmatter 定义身份、Provider、
+Model、Tool、Channel 与运行设置，正文定义任务指令。`AgentLoader.deriveProfile` MUST 从该文件派生
+`Profile`；`AGENT.md` 正文 MUST 由 `oryxos-core` 的 `ContextLoader` 注入 system prompt。Agent
+目录 MUST NOT 注册进 `ToolRegistry`，也 MUST NOT 放入 `oryxos-tool` 模块。
 
-**Rationale**: Agent 目录是上下文来源而非可执行工具；每个 Agent 自足独立，只调用底座系统基础能力，
-混淆两者会在执行期报错、并让模块依赖混乱。
+公共 Skill 市场是“不得建立跨 Agent 共享能力库”的**唯一受控例外**：受管 Skill 的唯一内容副本
+MUST 位于 `.oryxos/skills/<skill-name>/SKILL.md`；Agent 只能通过系统在
+`.oryxos/agents/<agent-name>/skills/<skill-name>` 创建、且原始目标严格等于
+`../../../skills/<skill-name>` 的相对软链接建立关联。`AGENT.md`、`AGENTS.md`、数据库或独立关联
+清单 MUST NOT 成为 Skill 关联真相源。除该市场外，项目 MUST NOT 新建其它跨 Agent 能力库、
+共享目录或隐式全局索引。
+
+Skill 仍是渐进披露的上下文包，不是可执行 Tool：运行时 MUST 只把有效且全局 enabled 的关联 Skill
+之 `name`、`description`、入口作为 L1；命中后才通过既有 `read_file` 读取 L2 `SKILL.md`，再按需
+使用既有 `read_file`/`shell` 获取 L3。项目 MUST NOT 新增 `use_skill` Tool，Skill MUST NOT 进入
+`ToolRegistry`；`allowed-tools` MUST NOT 授权或扩大 Agent 的显式 Tool 权限。所有 L2/L3 操作仍
+MUST 经过 `ToolExecutor`、沙箱与审计。公共导入是管理员的显式信任动作，系统 MUST 校验包结构、
+路径与资源限制，但 MUST NOT 把结构安全宣称为内容可信。
+
+**Rationale**: Agent 目录继续定义“谁以及如何运行”；公共 Skill 市场像软件包市场一样只保存一份
+可审查能力，并以可见、可移动、可审计的软链接显式安装到 Agent。严格限定这一例外可避免 YAML
+双写、全文 eager 注入和任意共享目录演变成执行旁路。
 
 ### V. 审计 Day One 落库 (NON-NEGOTIABLE)
 
@@ -94,13 +115,19 @@ HTTP 走域名通配白名单。MUST NOT 使用 `SecurityManager`（JDK 21 已�
 
 **Rationale**: 虚拟线程已让同步代码扛住高并发；异步会让复杂度激增、调试困难。
 
-### VIII. 配置即 Agent，实例无状态、状态外置
+### VIII. AGENT.md 定义运行配置，Skill 关联状态外置
 
-一个 Agent MUST 完全由一份 YAML Profile 定义，不需要写代码。运行实例 MUST 无状态，会话与
-记忆等状态 MUST 外置（SQLite / 文件），为走向分布式预留路径。表结构变更 MUST NOT 依赖
-Hibernate 自动迁移（SQLite `ALTER TABLE` 支持弱），需手工建表脚本或 Flyway。
+一个 Agent 的身份、Provider、Model、Tool 权限、Channel、调度与任务正文 MUST 完全由其
+`AGENT.md` 定义，不需要编写 Java。公共 Skill 的安装关联是 Principle IV 明确允许的例外状态，
+MUST 只由 Agent 目录中的标准相对软链接表达，MUST NOT 回写 `AGENT.md` Skill 名单。
 
-**Rationale**: 「配置即 Agent」降低接入门槛；「状态外置」是未来分布式化不大改设计的前提。
+运行实例 MUST 无状态；会话、记忆、公共 Skill 包、启停 marker 与 Agent-Skill 链接 MUST 外置到
+SQLite 或文件系统。本期强删不创建 operation journal 或启动恢复流程，失败只做同进程尽力补偿。
+表结构变更 MUST NOT 依赖 Hibernate 自动迁移（SQLite
+`ALTER TABLE` 支持弱），需维护显式建表脚本或引入 Flyway。
+
+**Rationale**: `AGENT.md` 保持运行配置的单一事实来源，市场安装关系保持文件系统可见且无需代码；
+所有持久状态外置，才能让实例替换、工作区迁移与未来分布式部署不依赖进程内缓存。
 
 ## 技术栈与架构约束
 
@@ -139,4 +166,4 @@ Hibernate 自动迁移（SQLite `ALTER TABLE` 支持弱），需手工建表脚�
   优先选择更简单、更符合原则的方案。
 - 运行时开发指南以 `CLAUDE.md` 为准，其内容 MUST 与本宪法保持一致。
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-01 | **Last Amended**: 2026-07-10
+**Version**: 2.0.0 | **Ratified**: 2026-07-01 | **Last Amended**: 2026-07-24

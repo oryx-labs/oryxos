@@ -8,6 +8,8 @@ import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.session.Message;
 import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
+import io.oryxos.core.skill.LinkStatus;
+import io.oryxos.core.skill.SkillAssociationManager;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.AgentExecutionView;
 import io.oryxos.web.controller.dto.AgentView;
@@ -21,7 +23,9 @@ import io.oryxos.web.controller.dto.SessionView;
 import io.oryxos.web.controller.dto.TriggerResponse;
 import io.oryxos.web.controller.dto.UpdateAgentRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
+import io.swagger.v3.oas.annotations.Operation;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -64,7 +68,27 @@ public class AgentApiController {
   private final ProfileRegistry profileRegistry;
   private final MemoryService memoryService;
   private final AgentExecutionService executionService;
+  private final SkillAssociationManager skillAssociations;
 
+  @Autowired
+  public AgentApiController(
+      AgentLifecycleService lifecycle,
+      AgentService agentService,
+      SessionManager sessionManager,
+      ProfileRegistry profileRegistry,
+      MemoryService memoryService,
+      AgentExecutionService executionService,
+      SkillAssociationManager skillAssociations) {
+    this.lifecycle = lifecycle;
+    this.agentService = agentService;
+    this.sessionManager = sessionManager;
+    this.profileRegistry = profileRegistry;
+    this.memoryService = memoryService;
+    this.executionService = executionService;
+    this.skillAssociations = skillAssociations;
+  }
+
+  /** Compatibility constructor for focused controller tests that do not load Skill beans. */
   public AgentApiController(
       AgentLifecycleService lifecycle,
       AgentService agentService,
@@ -72,26 +96,31 @@ public class AgentApiController {
       ProfileRegistry profileRegistry,
       MemoryService memoryService,
       AgentExecutionService executionService) {
-    this.lifecycle = lifecycle;
-    this.agentService = agentService;
-    this.sessionManager = sessionManager;
-    this.profileRegistry = profileRegistry;
-    this.memoryService = memoryService;
-    this.executionService = executionService;
+    this(
+        lifecycle,
+        agentService,
+        sessionManager,
+        profileRegistry,
+        memoryService,
+        executionService,
+        null);
   }
 
-  /** 创建：只需 name + description，后台按模板脚手架出完整目录 + 派生注册（失败回滚）。 */
+  /** 创建：按模板脚手架原子发布 Agent 目录，并为用户选择的公共 Skill 建立标准相对软链接。 */
   @PostMapping
+  @Operation(
+      summary = "Create an Agent and its selected public Skill links atomically",
+      description = "skills is an association request; AGENT.md never stores that list.")
   public ApiResponse<AgentView> create(@RequestBody CreateAgentRequest req) {
     if (req == null || req.name() == null || req.name().isBlank()) {
       throw new IllegalArgumentException("Agent 名为空");
     }
-    return ApiResponse.ok(AgentView.from(lifecycle.create(req.name(), req.description())));
+    return ApiResponse.ok(view(lifecycle.create(req.name(), req.description(), req.skills())));
   }
 
   @GetMapping
   public ApiResponse<List<AgentView>> list() {
-    return ApiResponse.ok(lifecycle.list().stream().map(AgentView::from).toList());
+    return ApiResponse.ok(lifecycle.list().stream().map(this::view).toList());
   }
 
   @GetMapping("/{name}")
@@ -99,7 +128,7 @@ public class AgentApiController {
     return ApiResponse.ok(
         lifecycle
             .get(name)
-            .map(AgentView::from)
+            .map(this::view)
             .orElseThrow(() -> new ResourceNotFoundException("Agent 不存在: " + name)));
   }
 
@@ -109,7 +138,7 @@ public class AgentApiController {
     if (lifecycle.get(name).isEmpty()) {
       throw new ResourceNotFoundException("Agent 不存在: " + name); // → 404
     }
-    return ApiResponse.ok(AgentView.from(lifecycle.update(name, req.agentMarkdown())));
+    return ApiResponse.ok(view(lifecycle.update(name, req.agentMarkdown())));
   }
 
   @DeleteMapping("/{name}")
@@ -227,10 +256,28 @@ public class AgentApiController {
 
   /** 保存（可能被改过的）一组 Agent 文件，写入即生效（AGENT.md 非法 → 400，不写坏目录）。 */
   @PostMapping("/{name}/files")
+  @Operation(
+      summary = "Save generated Agent files and selected public Skill links",
+      description =
+          "For a new Agent, files and all canonical Skill links publish as one directory.")
   public ApiResponse<AgentView> saveFiles(
       @PathVariable String name, @RequestBody SaveFilesRequest req) {
     return ApiResponse.ok(
-        AgentView.from(lifecycle.saveFiles(name, req == null ? null : req.files())));
+        view(
+            lifecycle.saveFiles(
+                name, req == null ? null : req.files(), req == null ? List.of() : req.skills())));
+  }
+
+  private AgentView view(io.oryxos.core.profile.Profile profile) {
+    if (skillAssociations == null) {
+      return AgentView.from(profile);
+    }
+    List<String> linked =
+        skillAssociations.list(profile.name()).stream()
+            .filter(association -> association.linkStatus() == LinkStatus.VALID)
+            .map(association -> association.skillName())
+            .toList();
+    return AgentView.from(profile, linked);
   }
 
   private static List<Message> recent(List<Message> messages) {

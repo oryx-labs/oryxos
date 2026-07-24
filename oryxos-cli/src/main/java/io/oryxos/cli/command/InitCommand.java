@@ -14,17 +14,13 @@ import picocli.CommandLine.Command;
     mixinStandardHelpOptions = true)
 public class InitCommand implements Runnable {
 
-  private static final List<String> DIRS =
-      List.of("agents", "skills", "output", "memory", "sessions", "logs");
   private static final List<String> BOOTSTRAP_FILES = List.of("AGENTS.md", "SOUL.md", "USER.md");
 
   @Override
   public void run() {
-    Path root = Workspace.root();
+    Path root = Workspace.root().toAbsolutePath().normalize();
     try {
-      for (String dir : DIRS) {
-        Files.createDirectories(root.resolve(dir));
-      }
+      root = Workspace.initializeLayout();
       for (String file : BOOTSTRAP_FILES) {
         Path target = root.resolve(file);
         if (!Files.exists(target)) {

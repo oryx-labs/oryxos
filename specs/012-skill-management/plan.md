@@ -1,62 +1,60 @@
-# Implementation Plan: Agent 内 Skill 渐进式加载与生命周期管理
+# Implementation Plan: 公共 Skill 渐进式加载、关联与生命周期管理
 
-**Branch**: `012-skill-management` | **Date**: 2026-07-22 | **Spec**: [spec.md](./spec.md)
-
-> `012-skill-management` 是本次 Spec Kit 的逻辑 feature id；当前 Git worktree 保持在 `main`，规划阶段未创建或切换 Git 分支。
+**Branch**: `012-skill-management`（当前 worktree：`codex/skill-management`） | **Date**: 2026-07-24 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `specs/012-skill-management/spec.md`
 
 ## Summary
 
-在“一个目录 = 一个 Agent”的边界内，引入兼容开放 Agent Skills 规范的 Agent 私有 Skill 包：每个包以 `SKILL.md` 为入口；每次顶层请求只把已启用 Skill 的名称、描述和读取位置作为 L1 注入 system context，命中后复用既有 `read_file` 读取 L2 正文，再按需读取参考资料或用 `shell` 运行 L3 脚本。
+统一仓库中现存的两套 Skill 机制：保留 `.oryxos/skills/<skill>/` 公共包目录，复用并收敛现有安全解析、ZIP 校验、L1 快照、租约和归档能力；Agent 关联唯一由 `.oryxos/agents/<agent>/skills/<skill> -> ../../../skills/<skill>` 标准相对软链接表达。`SKILL.md` 解析器明确处理行尾、BOM、前导空行、frontmatter fence、YAML 1.2 等价语义、name/version grammar、activation/requires 限额与稳定错误。运行时每次请求扫描软链接，只把有效且全局 enabled 的元数据放入 L1，L2/L3 继续经既有 `read_file`/`shell` 渐进读取。
 
-管理面向指定 Agent 提供本地 ZIP 导入、列表/详情、禁用/启用和归档式删除。导入通过同文件系统 staging、central-directory 安全校验、流式资源上限和 `ATOMIC_MOVE` 保证不出现半包；请求持有 Agent 级公平读租约，管理最终切换持有同一写租约，保证一轮 ReAct 内 L1/L2/L3 一致。全程不建立全局 Skill 库、不新增 `use_skill`、不自动扩大 Tool 权限、不绕过 ToolExecutor/沙箱/审计。
+管理面拆为公共包生命周期与 Agent 关联生命周期。Agent 创建时选择的 Skill 必须与 Agent 目录一起生成真实标准链接，任一步失败则新 Agent 整体不可见，且不再生成 `example`。全局禁用保留链接但影响所有 Agent；普通删除扫描全部 Agent，存在关联时返回 409 和完整 Agent 列表；前端二次确认后 force 删除在全局图谱锁与排序 Agent 写锁下重新扫描、解除标准链接并归档公共包。本期不建反向索引，也不建设持久化删除 journal/启动恢复子系统。`AGENT.md skills:` 可兼容解析但不再参与加载、关联或 API 返回。
 
 ## Technical Context
 
-**Language/Version**: Java 21；Vue 3 + Vite 6 管理台。
+**Language/Version**: Java 21；Vue 3 + Vite 6。
 
-**Primary Dependencies**: Spring Boot 3.3.5 / Spring MVC、SnakeYAML（现有 frontmatter）、JDK NIO、Apache Commons Compress 1.28.0（只读 ZIP central-directory 与 Unix entry 类型）、既有 `read_file`/`shell` Tool。前端测试增加 dev-only Vitest + Vue Test Utils；不增加运行时前端库。
+**Primary Dependencies**: Spring Boot 3.3.5 / Spring MVC、SnakeYAML、JDK NIO、Apache Commons Compress 1.28.0、既有 `read_file`/`shell` Tool；前端 Vitest + Vue Test Utils。
 
-**Storage**: 文件系统是真相源：活动包位于 `.oryxos/agents/<agent>/skills/<skill>/`，禁用状态为包内 `.oryxos-disabled`，上传来源为 `.oryxos-origin.yml`，staging 位于 `.oryxos/.staging/skill-import/`，删除归档位于 `.oryxos/archive/.skills/`。不新增 SQLite 表。
+**Storage**: 文件系统唯一真相源。公共包 `.oryxos/skills/<skill>/`；关联为 Agent 目录内相对软链接；全局禁用 marker 位于公共包；staging 位于 `.oryxos/.staging/skill-import/`；归档位于 `.oryxos/archive/.skills/`。不新增 SQLite 表。
 
-**Testing**: JUnit 5 + Mockito、Commons Compress 构造的恶意 ZIP fixtures、Spring MockMvc、Spring Boot 临时工作区集成测试、现有 mock provider E2E；前端 Vitest + Vue Test Utils、Vite production build 和 quickstart 浏览器闭环。
+**Testing**: JUnit 5 + Mockito、Spring MockMvc、临时工作区/故障注入/并发测试、Boot E2E、前端 Vitest、Vite production build、quickstart 浏览器验收。
 
-**Target Platform**: 企业内网 Java 21 单 JAR；macOS/Linux 本地开发；K8s/服务器部署。目标文件系统必须支持 staging 到活动/归档目录的原子移动，不支持时安全失败。
+**Target Platform**: Java 21 单 JAR，macOS/Linux/K8s；文件系统必须支持软链接和同 FileStore 原子移动，不支持时明确失败，不退化为复制或 AGENT.md 关联。
 
-**Project Type**: Maven 多模块 Web 应用。核心领域、发现、快照、导入和租约在 `oryxos-core`；Spring 配置绑定/装配在 `oryxos-cli`；REST/DTO/SPA 在 `oryxos-web`；默认配置和跨重启 E2E 在 `oryxos-boot`；`oryxos-tool` 不新增 Skill Tool。
+**Project Type**: Maven 多模块 Web 应用。领域与文件安全在 `oryxos-core`，装配在 `oryxos-cli`，HTTP/UI 在 `oryxos-web`，E2E 在 `oryxos-boot`；不新建模块，不改 `oryxos-tool`。
 
-**Performance Goals**: 默认上限内导入/启停在无活跃请求时 2 秒内完成；每个顶层请求不把 Skill 正文/资源载入 prompt，也不全文读取它们，但会为安全性做有界 frontmatter、全后代 `lstat`/size 和每文件最多 512 bytes magic-prefix 检查；L1 最多 12,000 字符并按名称确定性排序；上传与解包不把整包复制进 Java heap。
+**Performance Goals**: 本期删除/force 删除允许 O(Agent 数) 扫描，不设延迟目标、不建缓存或反向索引；请求快照只读有界 frontmatter/文件统计，不预载正文；L1 按名称确定性排序并受 12,000 字符预算约束。
 
-**Constraints**: 同步阻塞 + Java 21 virtual thread；一次顶层请求只建一次不可变 snapshot 并持有读租约；最终管理切换必须原子；不缓存正文；Profile 未声明 `read_file`/`shell` 时不自动扩权；旧版 `skills/*.md` 保持 legacy/unmanaged；REST 不泄露绝对路径或堆栈。
+**Constraints**: 同步阻塞 + virtual thread；请求内 snapshot 固定；全局图谱锁 → Agent 名升序写锁为唯一跨 Agent 锁序；标准链接原始 target 必须精确匹配；不得自动扩 Tool 权限；错误/日志不得泄露绝对路径、正文或密钥。
 
-**Scale/Scope**: 单实例、多 Agent；默认每 Agent 最多 64 个受管 Skill；单 ZIP 10 MiB、解压 25 MiB、128 entries、L1 12,000 字符。本期不含远程 URL/Git/Marketplace、批量导入、签名、版本依赖、归档恢复 API、跨实例分布式锁或通用 shell 的逐路径强制隔离。
-
-**Session Semantics**: disabled/deleted 阻止后续 L1 和由目录触发的 L2/L3 读取，但不改写既有 Session 消息或审计记录；新 Session 用于验证不可发现性。给 Message 增加 Skill provenance 和历史 redaction 属后续能力。
+**Scale/Scope**: 单实例、多 Agent；ZIP/解压/文件数限制沿用现有 `SkillLimits`，manifest 的 activation/requires 使用独立有界限制。本期不实现反向索引、分布式锁、跨进程 force-delete 恢复、恢复 API、版本依赖求解、签名或远程 Marketplace。现有 GitHub 导入属于既有能力，不在本 Feature 扩展，最终发布入口以本地 ZIP 契约为准；本地公共 Skill 市场仍是本 Feature 的核心。
 
 ## Constitution Check
 
-*GATE: Phase 0 前检查，并在 Phase 1 设计完成后复核。*
+*GATE: Phase 0 前检查，并在 Phase 1 后复核。*
 
 | 原则 | 设计影响 | Phase 0 前 | Phase 1 后 |
 |---|---|---:|---:|
-| I 自实现 ReAct | 只给现有 ReAct 显式传递请求 snapshot，不替换循环 | PASS | PASS |
-| II Spring AI 只做协议/Schema | L2/L3 仍由自有 ReAct + ToolExecutor 调度；无自动 Tool 执行 | PASS | PASS |
-| III Provider 显式映射 | 不改 Provider 路由或 Bean 发现 | PASS | PASS |
-| IV 一个目录=一个 Agent；无全局 Skill/use_skill | Skill 严格位于所属 Agent；L1 属 ContextLoader；L2/L3 走既有 Tool | PASS | PASS |
-| V 审计 Day One | L2/L3 继续写 tool_invocations；管理动作写结构化事件，不建执行旁路 | PASS | PASS |
-| VI 应用沙箱 | ZIP 在发布前额外拒绝路径穿越、链接、特殊文件和资源耗尽；Tool 仍过 SandboxChecker | PASS | PASS |
-| VII 同步 + virtual thread | ZIP、锁、扫描和 REST 均同步；不引入 Reactor/CompletableFuture | PASS | PASS |
-| VIII 状态外置/模块边界 | 内容和状态落所属 Agent 文件目录；只保留进程内请求租约；不新建模块或循环依赖 | PASS | PASS |
+| I 自实现 ReAct | 只传递显式 SkillSnapshot，不替换循环 | PASS | PASS |
+| II Spring AI 只做协议/Schema | L2/L3 仍由 ToolExecutor 调度 | PASS | PASS |
+| III Provider 显式映射 | 不改 Provider 路由 | PASS | PASS |
+| IV 一个目录=一个 Agent；公共 Skill 市场是唯一共享例外 | 公共包只存一份，Agent 只用标准相对软链接显式安装 | PASS | PASS |
+| V 审计 Day One | Tool 读取继续落审计；管理动作写结构化事件 | PASS | PASS |
+| VI 沙箱与路径安全 | 只接受标准相对链接，真实路径仍限制在 `.oryxos` | PASS | PASS |
+| VII 同步 + virtual thread | NIO、扫描、锁和 REST 均同步 | PASS | PASS |
+| VIII AGENT.md 定义运行配置，Skill 关联状态外置 | AGENT.md 不写 Skill 名单；包、marker 与标准链接构成文件系统真相 | PASS | PASS |
 
-**Gate result**: 通过。无需要豁免的宪法违规。
+**Gate result**: PASS。宪章 v2.0.0 已把公共 Skill 市场定义为唯一共享例外；本计划严格限制为 `.oryxos/skills` 公共包与 Agent 内标准相对软链接，不建立其它共享根、YAML/数据库关联或 Tool 旁路。PR 必须提供醒目的 `Governance Amendment / 治理修订` 区块说明该边界。
 
 ## Project Structure
 
-### Documentation (this feature)
+### Documentation
 
 ```text
 specs/012-skill-management/
+├── checklists/requirements.md
+├── governance-amendment.md
 ├── spec.md
 ├── plan.md
 ├── research.md
@@ -64,227 +62,143 @@ specs/012-skill-management/
 ├── quickstart.md
 └── contracts/
     ├── internal-api.md
+    ├── parser-manifest.md
     ├── rest-api.md
     └── skill-package.md
 ```
 
-### Source Code (repository root)
+### Source Code
 
 ```text
-pom.xml                                             # Commons Compress version/dependency management
-
 oryxos-core/src/main/java/io/oryxos/core/
 ├── agent/
-│   ├── AgentMarkdown.java                         # 委托通用 frontmatter parser
-│   ├── AgentName.java                             # Agent 名/目录/锁键唯一规则
-│   ├── AgentService.java                          # 打开请求 lease、冻结 snapshot
-│   ├── ReActLoop.java                             # 显式透传同一 snapshot
-│   ├── PromptBuilder.java                         # 显式透传同一 snapshot
-│   └── AgentLifecycleService.java                 # delete/saveFiles 共用写锁；新脚手架使用标准 Skill 包
+│   ├── AgentLifecycleService.java          # 创建后建链接；不写 AGENT.md skills/example
+│   ├── AgentService.java                   # 请求租约覆盖 ReAct 与 session save
+│   ├── PromptBuilder.java                  # 显式接收同一 SkillSnapshot
+│   └── ToolExecutor.java                   # L2/L3 guard 后执行并写审计
 ├── context/
-│   ├── ContextLoader.java                         # 渲染 L1，不读取正文
-│   └── MarkdownFrontmatter.java                   # 有界流式 frontmatter 读取
+│   ├── ContextLoader.java                  # 删除 Profile.skills 正文注入，只渲染 snapshot
+│   └── MarkdownFrontmatter.java            # 规范化、fence 定位与稳定解析错误
 └── skill/
-    ├── AgentSkillCatalog.java                     # 扫描、三态、预算、snapshot
-    ├── AgentSkillCoordinator.java                 # 请求 lease / 管理 mutation 入口
-    ├── AgentSkillLockRegistry.java                # 每 Agent fair read/write lock
-    ├── SkillDescriptor.java
+    ├── SkillMetadataReader.java             # YAML 1.2 等价安全解析与 manifest 校验
+    ├── SkillManifestLimits.java             # activation/requires 有界限制
+    ├── AgentSkillCatalog.java              # 扫描/校验 Agent 标准链接，构建 L1
+    ├── AgentSkillCoordinator.java           # 请求租约
+    ├── AgentSkillLockRegistry.java          # 单/多 Agent fair locks
+    ├── PublicSkillCatalog.java              # 公共包三态、详情、内容验证
+    ├── SkillAssociationService.java         # link/unlink/list
+    ├── SkillGraphCoordinator.java           # 全局图谱锁 + 固定锁序
+    ├── SkillManagementService.java          # 公共 import/toggle/delete/force-delete
+    ├── SkillResourceAccessGuard.java        # 每次 L2/L3 重验 snapshot/link/containment
     ├── SkillLease.java
-    ├── SkillLimits.java
-    ├── SkillManagementService.java                # list/get/import/toggle/delete + 管理日志
-    ├── SkillMetadata.java
-    ├── SkillMetadataReader.java
-    ├── SkillPackageImporter.java                  # ZIP staging/校验/解包
-    ├── SkillSnapshot.java
-    ├── SkillSource.java
-    └── SkillStatus.java
-
-oryxos-cli/src/main/java/io/oryxos/cli/
-├── OryxOsRuntime.java                             # 显式 Bean 装配
-└── config/SkillProperties.java                    # oryxos.skills.* → SkillLimits
+    ├── SkillPackageImporter.java
+    ├── SkillInUseException.java
+    ├── SkillStore.java
+    └── SkillSnapshot.java
 
 oryxos-web/src/main/java/io/oryxos/web/
-├── GlobalExceptionHandler.java                    # 新增 409/413 安全映射
-├── controller/
-│   ├── AgentSkillApiController.java
-│   ├── WorkspaceApiController.java                # 受管 Skill 写入共用写租约
-│   └── dto/                                       # 沿用现有 Web DTO 包
-│       ├── SetSkillEnabledRequest.java
-│       ├── SkillDetailView.java
-│       └── SkillSummaryView.java
-└── error/
-    ├── SkillConflictException.java
-    └── SkillPackageTooLargeException.java
+├── common/ApiResponse.java                 # 允许安全的结构化错误 data
+├── GlobalExceptionHandler.java             # 409 SkillInUse payload
+└── controller/
+    ├── SkillApiController.java              # 公共包管理
+    ├── AgentSkillApiController.java         # Agent 关联管理
+    └── dto/                                 # public/detail/association/delete DTO
 
 oryxos-web/src/main/frontend/src/
-├── api/skills.js
-├── components/
-│   ├── AgentSkillsTab.vue
-│   └── AgentSkillsTab.test.js
-└── App.vue                                        # Agent 详情加入 Skill tab
-
-oryxos-web/
-├── pom.xml                                        # Maven 前端阶段增加 npm test gate
-└── src/main/frontend/
-    ├── package.json                               # test script + Vitest/Vue Test Utils
-    └── package-lock.json                          # npm 锁文件同步更新
-
-oryxos-boot/src/main/resources/
-├── application.yml                                # multipart + oryxos.skills 默认值
-└── logback-spring.xml                             # dev pattern 显示 %kvp
+├── App.vue                                  # 公共 Skill 页、Agent 创建/详情接线
+├── api/skills.js                            # 保留 status/code/data 的错误对象
+└── components/
+    ├── AgentSkillsTab.vue                   # 已关联/可关联，不再管理私有包
+    └── SkillManagementPanel.vue             # A→B 删除及公共生命周期管理
 ```
 
-### Test Code
-
-```text
-oryxos-core/src/test/java/io/oryxos/core/
-├── agent/AgentServiceTest.java
-├── agent/ReActLoopTest.java
-├── context/ContextLoaderTest.java
-├── context/ProgressiveDisclosureTest.java
-└── skill/
-    ├── AgentSkillCatalogTest.java
-    ├── AgentSkillCoordinatorTest.java
-    ├── SkillManagementServiceTest.java
-    ├── SkillMetadataReaderTest.java
-    └── SkillPackageImporterTest.java
-
-oryxos-web/src/test/java/io/oryxos/web/
-├── GlobalExceptionHandlerTest.java
-└── controller/AgentSkillApiControllerTest.java
-
-oryxos-boot/src/test/java/io/oryxos/boot/
-├── SkillManagementE2ETest.java
-├── SkillProgressiveDisclosureE2ETest.java
-└── SkillRestartRecoveryIT.java
-```
-
-**Structure Decision**: 不新建 Maven 模块。Skill 是 Agent 上下文和文件生命周期能力，放在 `oryxos-core`；Web 只适配 HTTP/UI；Tool 模块保持通用文件/脚本能力。Commons Compress 是唯一新增生产依赖，作用限定为 JDK ZIP API 缺失的 central-directory Unix 类型检测。
+**Structure Decision**: 不新建 Maven 模块。将现有“公共 CRUD”和“Agent 私有渐进加载”合并为公共内容目录 + Agent 软链接投影；删除重复的 eager loading 与私有包 HTTP 语义，最大化复用已验证的解析、导入和租约代码。
 
 ## Phase 0: Research Decisions
 
-完整决策见 [research.md](./research.md)。已经收敛的结论：
+详见 [research.md](./research.md)：
 
-1. 请求 snapshot 在 `AgentService.process` 冻结，显式传到 ContextLoader；同一请求持有读租约到会话保存结束。
-2. L1 只含 name/description/entry；L2/L3 只走现有 `read_file`/`shell`，不自动扩权。
-3. 受管形态只认 `skills/<name>/SKILL.md`；旧 `skills/*.md` 不迁移、不管理。
-4. Commons Compress 1.28.0 读取 ZIP central directory；JDK NIO 创建普通文件和原子移动。
-5. 同盘 staging、流式实际字节限制、严格路径规范化；原子移动不支持时不降级。
-6. `.oryxos-disabled` 持久化管理员状态，invalid 每次扫描派生；删除归档到 `.oryxos/archive/.skills/`。
-7. REST 使用 Agent 子资源 collection/member；UI 使用独立 Skill tab 组件和薄 API 模块。
-8. 管理服务单点输出 SLF4J key-value 日志；结构校验不等同于内容可信。
+1. 软链接是唯一关联真相源，原始 target 必须精确等于 `../../../skills/<skill>`。
+2. 公共包是真实目录；包内链接/特殊文件仍非法。
+3. `Profile.skills` 仅兼容解析并告警，不参与加载；`ContextLoader` 删除全文注入。
+4. 全局 disabled marker 位于公共包，单 Agent 停用等于 unlink。
+5. 删除每次扫描全部 Agent；普通删除 409，force 在锁内重扫。
+6. 锁序固定为全局 Skill 图谱锁 → Agent 名升序锁；请求持图谱读锁与单 Agent 读锁。
+7. force 删除采用预检、固定锁序和同进程尽力补偿；本期不做持久化 journal、启动恢复或跨崩溃原子保证。
+8. `SKILL.md` 先规范化再解析，使用 YAML 1.2 等价安全配置，并对 name/version/activation/requires 建立独立、稳定契约。
+9. 公共包 REST 与 Agent 关联 REST 分离；409 返回结构化 Agent 列表。
 
 ## Phase 1: Design Outputs
 
-- [data-model.md](./data-model.md)：文件布局、领域对象、状态转换、限制和租约一致性。
-- [contracts/skill-package.md](./contracts/skill-package.md)：开放包格式、frontmatter、L2/L3 和 ZIP 安全规则。
-- [contracts/rest-api.md](./contracts/rest-api.md)：五个 REST 资源操作、DTO、错误码和 OpenAPI 约束。
-- [contracts/internal-api.md](./contracts/internal-api.md)：core API、运行时签名、装配和日志边界。
-- [quickstart.md](./quickstart.md)：REST/UI/渐进加载/并发/恶意包/legacy 的验收流程。
+- [data-model.md](./data-model.md)：公共包、manifest、软链接关联、快照、全局状态与锁内删除状态机。
+- [contracts/skill-package.md](./contracts/skill-package.md)：公共包、标准链接和包内容安全契约。
+- [contracts/parser-manifest.md](./contracts/parser-manifest.md)：frontmatter 解析步骤、字段 grammar、限额、告警和稳定错误。
+- [contracts/rest-api.md](./contracts/rest-api.md)：公共包/Agent 关联 REST、409→force 流程和 DTO。
+- [contracts/internal-api.md](./contracts/internal-api.md)：parser、catalog、association、graph lock、runtime snapshot 和生命周期边界。
+- [quickstart.md](./quickstart.md)：导入、关联、渐进加载、全局禁用、普通/强删、链接攻击和并发验收。
 
 ## Implementation Strategy
 
-### 1. 建立解析、模型与目录扫描基础
+### 1. 统一公共包领域模型
 
-先抽取只负责 fence/有界文本的 `MarkdownFrontmatter`，让现有 Agent YAML 解析行为保持不变；Skill reader 单独使用 SafeConstructor/LoaderOptions。再实现 metadata 标准校验、三态 descriptor、预算和 `AgentSkillCatalog.snapshot`。扫描只读含 `SKILL.md` 或 OryxOS marker 的真实直接子目录，根 symlink 忽略并告警，单项失败隔离；平铺文件和无入口/marker 的 legacy 目录明确跳过。管理 list/get 在短读锁内完成整次扫描/统计。此阶段不接 ReAct，可独立完成 parser/catalog 单测。
+把 `SkillManagementService` 的安全导入、marker、descriptor、归档从 Agent 私有目录迁移到 `.oryxos/skills`；`PublicSkillCatalog` 只扫描真实公共包。收敛 `MarkdownFrontmatter`/`SkillMetadataReader`：先统一行尾、移除 BOM 和前导换行，再定位 fence，使用 YAML 1.2 等价安全解析，校验 name/version grammar、activation/requires 限额并输出稳定错误/legacy warning。统一 `SkillStore/SkillLoader/SkillRegistry/SkillService` 与 managed package 类型，避免两套状态并存。
 
-### 2. 接入请求级渐进披露与租约
+### 2. 实现标准关联与渐进加载
 
-实现 fair lock registry/coordinator/lease，在 `AgentService.process` 用 try-with-resources 包住 ReAct 与会话保存。显式修改 ReActLoop、PromptBuilder、ContextLoader 签名，同一 snapshot 复用所有轮次；ContextLoader 只渲染 L1。通过 mock provider 证明首 prompt 无正文、只读取命中 Skill、未命中读取次数为 0；确认 ToolExecutor 审计路径未变。
+新增 `SkillAssociationService`：创建精确相对链接、幂等识别标准链接、安全 unlink、列出 valid/invalid link。改造 `AgentSkillCatalog` 从链接解析公共包；L1 entry 使用 Agent 内链接入口。`AgentService` 在顶层请求入口取得 graph read + Agent read lease，构建一次 snapshot 并显式传给 PromptBuilder、ReActLoop 与 ToolExecutor，直到 session save 后释放。移除 `ContextLoader.appendSkills(Profile)` eager body 注入，`Profile.skills` 不再影响运行时。
 
-### 3. 实现安全导入和文件生命周期
+每次指向 Agent Skill 入口或包内资源的 `read_file`/`shell` 都先过 `SkillResourceAccessGuard`：验证 Skill 属于本次 snapshot、入口仍是一层标准链接、资源最终位于该公共包且中间无链接逃逸、Agent 已显式授权对应 Tool；随后仍执行通用 SandboxChecker 和既有审计。失败作为带稳定 reason code 的 ToolResult 回填当前 ReAct，允许模型纠正或退出；不得自动改读其它路径、自动进入 L3、扩大权限或使其它 Skill/Agent 失效。
 
-导入在写锁外流式保存与预校验，在写锁内以 `NOFOLLOW_LINKS` 重检 Agent/skills 父链、所有状态下的同名冲突、FileStore 和聚合预算，再 `ATOMIC_MOVE` 发布。删除同样验证 `archive/.skills/<agent>` 全父链无链接且仍在 workspace 内，再写归档元数据并原子移动。实现 reserved origin/disabled 文件、启用前重校验和归档清理。所有 staging 用 finally 清理，并在启动时清除超过 TTL 的孤儿。Agent 删除、`AgentLifecycleService.saveFiles`/`AgentStore.writeAll` 以及 Workspace API 的受管 Skill 写入全部接入同一锁并采用临时文件原子替换，避免既有 Agent files 端点成为旁路。
+### 3. 改造 Agent 创建与兼容路径
 
-### 4. 暴露 REST 契约和安全错误
+创建请求的 `skills` 语义改为“创建后要建立的链接”。先验证全部公共包，再创建 Agent 与全部链接；失败回滚整个新 Agent。生成草稿不写 `skills:`；保存生成文件后建链接。脚手架不生成 `skills/example/SKILL.md`。旧 `AGENT.md skills:` 保持可解析但忽略并告警，不自动迁移。
 
-新增独立 Controller/DTO，把 `MultipartFile.getInputStream()` 交给 core，不把 Web 类型下沉。GlobalExceptionHandler 增加 409/413；领域消息只使用相对路径和稳定 reason code。补充 OpenAPI schema 和 MockMvc 攻击矩阵，断言所有失败无绝对路径/堆栈且无活动残留。
+### 4. 全局状态与删除
 
-### 5. 增加 Agent 详情 Skill 管理页签
+引入 fair `SkillGraphCoordinator`。关联/解除关联/禁用/启用/删除遵循固定锁序；普通删除扫描所有 Agent 并在有关联时零副作用返回 `SkillInUseException`。force 删除锁内重扫并预检全部标准链接，逐个 unlink 后原子归档公共包；同进程失败时尽力重建本操作已移除且路径仍为空的标准链接，然后返回可诊断错误供管理员重试。本期不写持久化 operation journal，不实现启动恢复，也不承诺进程崩溃时的跨路径原子性。
 
-用 `api/skills.js` 封装五个操作及统一信封检查；member 操作使用服务端返回的安全 `directoryName`，不从 description/name 自行拼路径。`AgentSkillsTab.vue` 自管理列表、上传、collection error、逐行 busy、状态开关、确认删除和成功反馈；上传区明确提示“Skill 等同代码，只导入已审查来源”。App.vue 只增加 tab 接线。使用现有 token，自带 scoped 样式；服务端成功前不乐观改变行。用 Vitest 覆盖 FormData、重复提交、失败保留、信任提示和删除确认。
+### 5. REST 与管理台
 
-### 6. 完成恢复、并发、文档和全量门禁
+公共 Skill API 管理 import/list/detail/global toggle/delete；Agent API 只管理 link list/associate/dissociate。`ApiResponse`/异常处理支持安全结构化 409 data。管理台公共页执行 A→B 删除弹窗；Agent Skill tab 展示“已关联/可关联”，移除私有 ZIP、私有 toggle/delete。请求助手保留 `status/code/data`。
 
-Boot E2E 覆盖管理闭环和真实渐进读取；两次独立 Spring Context 验证 marker/归档跨重启；受控阻塞测试验证读写租约和 fair ordering。同步更新 `CLAUDE.md`、`docs/TechnicalSolution.md` §11、`docs/AiProgrammingGuide.md`、README/管理台说明中的 Skill 目录与信任边界，再执行单元、集成、Maven verify、前端测试与生产构建。
+### 6. 验证与文档
 
-## Configuration Contract
-
-```yaml
-spring:
-  servlet:
-    multipart:
-      max-file-size: 10MB
-      max-request-size: 11MB
-
-oryxos:
-  skills:
-    staging-ttl: 24h
-    package-limits:
-      max-archive-size: 10MB
-      max-expanded-size: 25MB
-      max-file-size: 5MB
-      max-skill-markdown-size: 256KB
-      max-frontmatter-size: 64KB
-      max-entries: 128
-      max-depth: 8
-      max-path-chars: 512
-      max-expansion-ratio: 100
-      max-yaml-nesting-depth: 8
-    catalog:
-      max-skills-per-agent: 64
-      max-candidates-per-agent: 1024
-      max-l1-chars: 12000
-```
-
-Spring multipart 是入口保护，core 限制是权威安全边界。启动时验证所有值和大小关系；非法配置必须点名失败，不静默改默认。
+测试 parser 矩阵、manifest grammar/限额、精确链接字面值、Agent 创建事务与无 example、工作区移动、L1/L2/L3、全局 disabled、多 Agent 锁序、force rescan/同进程补偿、409 payload 与前端确认流。同步 TechnicalSolution/AiProgrammingGuide/README 的运行机制与宪章 v2.0.0 市场例外；PR 描述必须加入醒目的治理修订区块。
 
 ## Compatibility and Migration
 
-- 不迁移现有 `skills/*.md`；它们仍可被 AGENT 正文显式引用。
-- `AgentLoader` 明确执行既有设计不变量“目录名 = frontmatter/Profile name”；名称不一致的手工目录原本已无法被 ContextLoader 正确定位，本次改为清晰校验错误，用户需统一名称后再加载。
-- 新建 Agent 的示例改为 `skills/example/SKILL.md`，不回写已有 Agent。
-- 没有 `.oryxos-origin.yml` 的标准目录视为 `source=workspace`；无需导入登记即可在下一请求被扫描。
-- invalid 包不阻断 Agent；修复后下一扫描自动恢复。若管理员已写 disabled marker，修复后仍保持 disabled。
-- WorkspaceWatcher 继续只处理 Agent 一级注册；Skill 新鲜度来自每请求/每查询扫描，不新增内容 cache。
-- 无数据库迁移、无 Profile schema 迁移、无 Tool schema 迁移。
-
-## Security and Operational Boundaries
-
-- 导入是管理员的显式信任动作，合法包默认 enabled。UI 和文档必须提示先审查内容；ZIP 校验只保证文件系统安全，不证明指令/脚本善意。
-- disabled/invalid 从 OryxOS L1 和正常渐进加载中排除；本期不把通用 shell 变成逐路径强制访问控制器。
-- disabled/deleted 不追溯清理旧 Session 里的 Skill Tool result；这是保留审计/对话完整性的明确边界，不宣称模型会“遗忘”。
-- 进程内租约保证 Skill REST、`POST /agents/{name}/files`、管理台/Workspace 写入和 Agent 删除的一致性；管理员直接通过 shell/scp 改工作区属于旁路，无法等待当前请求，但下一扫描必须检测 invalid/变化。
-- staging 与目标不在同一 FileStore或目标不支持原子移动时，导入/删除安全失败并保留活动状态；不降级复制。
-- 管理日志不记录包内容、绝对路径或 secrets；REST 500 只返回通用消息。
+- 旧 `AGENT.md skills:` 不报解析错误，但不再产生关联或正文注入；启动/管理时一次性 WARN。
+- 不自动把旧名单迁移成链接，避免未经管理员确认改变文件系统。
+- Agent `skills/*.md` 和真实子目录保持 legacy/unmanaged；路径占用时关联返回 409，不覆盖。
+- 现有反向 `/skills/{skill}/agents/{agent}` 可暂留兼容适配，但必须委托链接服务；新 UI 使用 Agent 子资源契约。
+- 现有 GitHub 导入能力不作为本 Feature 的新增契约；若保留，必须落同一公共包验证/发布路径，不能形成旁路。
+- 旧的合法 lowercase-kebab Skill 名仍合法；解析器扩展为规范 grammar 后不会破坏既有包。可选 `version` 缺失继续兼容，出现时必须通过安全 grammar。
+- 无数据库、Profile schema 或 Tool schema 迁移。
 
 ## Verification Gates
 
-1. `SkillMetadataReaderTest` 证明 frontmatter 在第二个 fence 停止，并覆盖大小/格式/标准字段。
-2. `ContextLoaderTest`/`ProgressiveDisclosureTest` 证明 L1 无正文/L3，legacy 不被纳入。
-3. mock provider E2E 证明只加载命中的 L2/L3，且仍写 tool audit。
-4. 导入测试覆盖 Zip Slip、absolute/drive/UNC、NFC/case duplicate、symlink/special/encrypted、安全 YAML、binary/archive magic、zip bomb 和原子失败；workspace catalog 另覆盖根/入口/resource symlink 不跟随，delete 覆盖 archive 父链 symlink 拒绝。
-5. 并发测试证明当前请求可完成、写者不饥饿、下一请求看到新状态。
-6. REST 测试覆盖 400/404/409/413/500 安全信封，所有失败零活动残留。
-7. restart IT 证明 enabled/disabled/invalid 派生和归档跨上下文一致。
-8. 前端组件测试与人工 quickstart 完成导入→禁用→启用→删除。
-9. `mvn clean verify`、integration tests、`npm test -- --run`、`npm run build` 全绿。
+1. parser 矩阵覆盖 CRLF/CR、BOM、前导空行、opening 行尾部、closing fence 尾随空白、缺 fence、坏 YAML、空正文、legacy warning，以及 name/version 边界和 activation/requires 确定性过滤/截断。
+2. `readSymbolicLink` 精确等于标准 target；绝对/别名/越界/悬空/循环链接不进 L1。
+3. Agent 创建时选中 Skill 会得到真实标准链接；任何失败不发布 Agent，且不存在自动生成的 `example`。
+4. 首轮 prompt 只有已关联 enabled Skill 的 L1，`AGENT.md skills:` 和未命中正文标记均为 0；预算超限按名称顺序确定性省略并记录 omittedCount/WARN。
+5. L2/L3 每次 Tool call 重验 snapshot、标准链接、包 containment、显式 Tool 权限、沙箱和审计；失败返回稳定 Tool error，不产生旁路读取。
+6. disabled 链接保留但所有关联 Agent 下一请求不可发现；unlink 只影响单 Agent。
+7. 普通删除返回排序完整 Agent 列表且文件零变化；force 在锁内纳入新关联并完成归档；故障注入覆盖第 N 个 unlink、归档失败和同进程补偿。
+8. REST 覆盖 400/404/409/413/500、Agent collection GET 且无绝对路径/正文；前端只在 `SKILL_IN_USE` 时允许 force。
+9. `mvn clean verify`、Boot E2E、`npm test -- --run`、`npm run build` 全绿。
+10. PR 描述包含醒目的治理修订区块，并证明实现未越过宪章 v2.0.0 的市场例外边界。
 
 ## Risks and Mitigations
 
 | 风险 | 缓解 |
 |---|---|
-| 长 ReAct 持读锁导致管理操作等待 | fair lock；ZIP 预校验在写锁外；UI 显示 busy；后续如有数据再考虑版本目录 |
-| NFS/特殊卷不支持原子移动 | 启动/首次操作明确检测并安全失败；不伪装原子性 |
-| 恶意 ZIP 伪造 size 或链接类型 | central-directory 类型检查 + 实际流式字节计数 + NOFOLLOW_LINKS post-scan |
-| 手工编辑绕过 API | 每请求扫描、单项 invalid 隔离；Workspace API 接同一锁；文档标注进程外旁路 |
-| L1 目录膨胀 | 导入/启用前聚合预算校验；人工超限按名称确定性完整项截断并 WARN |
-| Skill 指令恶意使用已有 Tool | 默认最小 Profile 权限、明确导入信任提示；allowed-tools 不扩权；执行仍过 ToolExecutor/沙箱/审计 |
+| 多目录 force 删除不是文件系统事务 | 预检、固定锁序、同进程尽力补偿和可重试诊断；跨崩溃恢复明确延期 |
+| 扫描与新关联竞态 | 全局图谱锁；force 锁内重扫 |
+| 多 Agent 死锁 | Agent 名排序获取、反序释放；统一锁序 |
+| 手工恶意链接 | 原始 target 精确比较 + NOFOLLOW 父链 + real-path containment |
+| 两套旧实现继续并存 | 删除 eager path，公共/关联职责拆分，测试禁止 Profile.skills 生效 |
+| 市场例外被泛化为任意共享机制 | 测试与 PR 独立检查公共根、标准链接、无 YAML/数据库关联、无 Tool 扩权 |
 
 ## Complexity Tracking
 
-无宪法违规。新增 Apache Commons Compress 是为了满足 JDK 公共 ZIP API 无法识别 Unix symlink/special entry 的安全缺口；作用域限定在 `oryxos-core` 导入器，不形成新模块或通用归档框架。
-
-## Agent Context Update
-
-本 Spec Kit checkout 不包含 `update-agent-context` 脚本，Phase 1 无可执行的自动上下文更新步骤。设计没有引入新的编程语言、框架或持久化技术；实施时按“文档同步”步骤更新项目指南，不手工伪造脚本产物。
+无宪章违规。公共 Skill 市场与标准软链接属于宪章 v2.0.0 Principle IV 明确定义的受控例外。

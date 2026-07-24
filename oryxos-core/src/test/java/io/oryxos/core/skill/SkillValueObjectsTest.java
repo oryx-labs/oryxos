@@ -98,15 +98,15 @@ class SkillValueObjectsTest {
   void skillNameGrammarIsLinearAndExact() {
     assertTrue(SkillMetadata.isValidName("a"));
     assertTrue(SkillMetadata.isValidName("weather-2"));
+    assertTrue(SkillMetadata.isValidName("Weather_alerts.v2-"));
     assertTrue(SkillMetadata.isValidName("a".repeat(64)));
 
     for (String invalid :
         List.of(
             "-weather",
-            "weather-",
-            "weather--alerts",
-            "Weather",
-            "weather_alerts",
+            ".weather",
+            "weather alerts",
+            "weather/alerts",
             "wéather",
             "a".repeat(65))) {
       assertFalse(SkillMetadata.isValidName(invalid), invalid);

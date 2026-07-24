@@ -4,6 +4,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
 import AgentSkillsTab from './components/AgentSkillsTab.vue'
+import SkillManagementPanel from './components/SkillManagementPanel.vue'
 
 // 顶层：概览 / Agent 列表 / 定时任务。「OS 运行时」下收纳 Provider/Tool/Sandbox/长期记忆/会话——
 // 这些都是底座本身的运行时状态，跟业务 Agent 管理分层展示（31 节：侧边栏重分组）。
@@ -124,7 +125,7 @@ function refresh() {
   if (NAV.find((n) => n.key === key)?.path) load(key)
 }
 
-// —— Skill 列表（第 32 节）：全局 Skill 库 CRUD。Agent 通过 AGENT.md 的 skills:[名] 引用，运行时注入正文约束产出 ——
+// —— 公共 Skill 市场：包存一份，Agent 仅通过标准相对软链接关联，运行时按 L1/L2/L3 渐进披露 ——
 const skills = ref({ loading: false, error: null, data: [] })
 async function loadSkills() {
   skills.value = { loading: true, error: null, data: [] }
@@ -349,7 +350,7 @@ function openCreate() {
   agentCreate.busy = false
   agentCreate.error = ''
   loadNotifyChannels()
-  loadSkills() // Skill 选择器的数据源（可手动指定必启用的 Skill；不选则由作者模型自动选）
+  loadSkills() // Skill 选择器的数据源；勾选项在 Agent 原子发布时建立真实软链接
 }
 
 function cancelCreate() { agentCreate.open = false }
@@ -377,11 +378,11 @@ async function submitCreate() {
     const res = agentCreate.files
       ? await fetch(`/api/v1/agents/${encodeURIComponent(agentCreate.name)}/files`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ files: agentCreate.files }),
+          body: JSON.stringify({ files: agentCreate.files, skills: agentCreate.skills }),
         })
       : await fetch('/api/v1/agents', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: agentCreate.name, description: agentCreate.description }),
+          body: JSON.stringify({ name: agentCreate.name, description: agentCreate.description, skills: agentCreate.skills }),
         })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '创建失败')
@@ -1086,6 +1087,8 @@ const outputRows = computed(() =>
 
           <!-- Skill 列表（第 32 节）：全局 Skill 库 CRUD。Agent 按名引用、运行时注入正文约束产出 -->
           <div v-if="active === 'skills'">
+            <SkillManagementPanel />
+            <template v-if="false">
             <template v-if="!skillDetail">
             <div class="toolbar">
               <button class="btn btn-primary" @click="newImport()">从 GitHub 拉取</button>
@@ -1211,6 +1214,7 @@ const outputRows = computed(() =>
               <!-- 回退：旧后端 tree 无 skills 节点 → 直接渲染 SKILL.md 正文 -->
               <div v-else class="md-preview" v-html="skillDetailBodyMd"></div>
             </div>
+            </template>
           </div>
 
           <!-- 知识库：占位空列表（待接入知识库端点） -->
@@ -1279,7 +1283,7 @@ const outputRows = computed(() =>
                   <option value="">不通知</option>
                   <option v-for="c in (notifyChannels.data || [])" :key="c.name" :value="c.name">{{ c.name }}（{{ c.type }}）</option>
                 </select>
-                <label class="empty" style="display:block;margin:6px 0 2px">Skill（约束产出，勾选=生成时必启用；不勾则由大模型按需自动选）</label>
+                <label class="empty" style="display:block;margin:6px 0 2px">Skill（勾选后创建真实关联软链接；未勾选不会自动关联）</label>
                 <div class="skill-picker">
                   <span v-if="!(skills.data || []).length" class="empty">（暂无 Skill · 去「Skill 列表」新建）</span>
                   <label v-for="s in (skills.data || [])" :key="s.name" class="skill-opt" :title="s.description">
@@ -1287,7 +1291,7 @@ const outputRows = computed(() =>
                     <span class="mono">{{ s.name }}</span>
                   </label>
                 </div>
-                <p class="empty">可先「用大模型生成」各文件、编辑后再创建；也可直接「创建」，后台按模板脚手架出完整目录（AGENT.md + scripts/ + skills/ + REFERENCE.md）。</p>
+                <p class="empty">可先「用大模型生成」各文件、编辑后再创建；也可直接「创建」，后台按模板脚手架出完整目录（AGENT.md + scripts/ + REFERENCE.md），并关联上方勾选的公共 Skill。</p>
                 <div class="ops">
                   <button class="btn" :disabled="agentCreate.busy || !agentCreate.name.trim()" @click="generateFiles">用大模型生成</button>
                   <button class="btn btn-primary" :disabled="agentCreate.busy || !agentCreate.name.trim()" @click="submitCreate">创建</button>
@@ -1409,11 +1413,12 @@ const outputRows = computed(() =>
                 </div>
               </div>
 
-              <!-- Tab 4：Skill —— Agent 私有 Skill 的导入、启停与归档删除 -->
+              <!-- Tab 4：Skill —— 公共 Skill 关联 + Agent 私有 Skill 包管理 -->
               <AgentSkillsTab
                 v-else-if="agentDetail.tab === 'skills'"
                 :key="agentDetail.name"
                 :agent-name="agentDetail.name"
+                :associated-skills="agentDetail.agent?.skills || []"
               />
 
               <!-- Tab 5：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->

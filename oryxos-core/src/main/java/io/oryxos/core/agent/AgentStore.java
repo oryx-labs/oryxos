@@ -1,6 +1,8 @@
 package io.oryxos.core.agent;
 
 import io.oryxos.core.skill.AgentSkillCoordinator;
+import io.oryxos.core.skill.SkillAssociationService;
+import io.oryxos.core.skill.SkillName;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.DirectoryNotEmptyException;
@@ -10,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
@@ -113,6 +117,69 @@ public class AgentStore {
     AgentName agentName = AgentName.parse(name);
     validateNoReservedSkillPaths(files == null ? null : files.keySet());
     return mutate(agentName, () -> writeAllUnlocked(agentName, files, true));
+  }
+
+  /**
+   * Publishes a new Agent as one atomic directory move after writing AGENT.md and all selected
+   * public Skill links in a sibling staging directory.
+   */
+  public Path createAllWithSkillLinks(
+      String name, Map<String, String> files, List<String> skillNames) {
+    AgentName agentName = AgentName.parse(name);
+    validateNoReservedSkillPaths(files == null ? null : files.keySet());
+    List<String> skills =
+        skillNames == null
+            ? List.of()
+            : skillNames.stream().map(value -> SkillName.parse(value).value()).distinct().toList();
+    return mutate(agentName, () -> createAllWithSkillLinksUnlocked(agentName, files, skills));
+  }
+
+  private Path createAllWithSkillLinksUnlocked(
+      AgentName agentName, Map<String, String> files, List<String> skills) {
+    Path target = agentsDir.resolve(agentName.value()).normalize();
+    Path staging = agentsDir.resolve(".oryxos-agent-" + UUID.randomUUID()).normalize();
+    try {
+      createWorkspaceDirectoriesSafely(agentsDir);
+      if (agentIdentityExists(agentName.value())
+          || Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
+        throw new IllegalArgumentException("Agent 已存在或存在大小写别名: " + agentName);
+      }
+      Files.createDirectory(staging);
+      Map<Path, String> stagedTargets = resolveTargets(staging, files);
+      for (Map.Entry<Path, String> file : stagedTargets.entrySet()) {
+        Path parent = file.getKey().getParent();
+        if (parent != null) {
+          Files.createDirectories(parent);
+        }
+        Files.writeString(file.getKey(), file.getValue(), StandardOpenOption.CREATE_NEW);
+      }
+      if (!skills.isEmpty()) {
+        Path skillLinks = Files.createDirectory(staging.resolve(SKILLS_DIRECTORY));
+        for (String skill : skills) {
+          Files.createSymbolicLink(
+              skillLinks.resolve(skill), SkillAssociationService.expectedTarget(skill));
+        }
+      }
+      atomicMover.move(staging, target);
+      return target;
+    } catch (IOException error) {
+      deleteTreeBestEffort(staging);
+      throw new UncheckedIOException("创建 Agent 目录失败: " + agentName, error);
+    } catch (RuntimeException error) {
+      deleteTreeBestEffort(staging);
+      throw error;
+    }
+  }
+
+  private static void deleteTreeBestEffort(Path root) {
+    if (root == null || !Files.exists(root, LinkOption.NOFOLLOW_LINKS)) {
+      return;
+    }
+    try (Stream<Path> paths = Files.walk(root)) {
+      paths.sorted(Comparator.reverseOrder()).forEach(AgentStore::deleteOne);
+    } catch (IOException | RuntimeException ignored) {
+      // The original creation failure remains authoritative.
+    }
   }
 
   private Path writeAllUnlocked(

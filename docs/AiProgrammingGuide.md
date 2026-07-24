@@ -131,7 +131,7 @@ Claude Code 是主推的 AI agent，Spec-Kit 官方支持 Claude Code。具体�
 | 2 | 五大核心能力优先 | 核心阶段交付运行时内核，企业级治理层放扩展阶段 |
 | 3 | 自实现 ReAct loop | 不直接用 Spring AI 的 Agent 抽象 |
 | 4 | **Spring AI 只用一半** | 只用 Provider 抽象、协议转换、@Tool schema 生成；**禁用自动 tool 执行**；tool 调度完全由 `ReActLoop` + `ToolExecutor` 控制。**最容易被写错的一条** |
-| 5 | Plugin Tool 三档接入 | 主推 Agent 私有 SKILL.md + 显式配置的内置/MCP Tool 零代码方式 |
+| 5 | Plugin Tool 三档接入 | 主推公共市场 SKILL.md + Agent 显式配置的内置/MCP Tool 零代码方式 |
 | 6 | SQLite + MEMORY.md 文件存储 | 向量检索放扩展阶段；`tool_invocations` 和 `llm_calls` **核心阶段就写入落库** |
 | 7 | 每个 user story 完成后有可演示 Demo | 优先级是跑通而非完美 |
 
@@ -292,8 +292,8 @@ US-3 实施完成后跑 `/speckit.analyze`。
 
 ### 4.4 US-4：Plugin Tool 体系（核心能力四）
 
-**核心目标**：让业务方扩展 OryxOS 的能力，并让一个 Agent 通过私有 Skill 或显式关联的公共 Skill 渐进加载任务知识。Plugin Tool 三档接入：
-1. 零代码 Agent 私有 SKILL.md + 已显式配置的内置 Tool / MCP（主推）
+**核心目标**：让业务方扩展 OryxOS 的能力，并让 Agent 通过公共 Skill 市场与标准软链接渐进加载任务知识。Plugin Tool 三档接入：
+1. 零代码公共 SKILL.md + Agent 已显式配置的内置 Tool / MCP（主推）
 2. 轻代码自写 MCP server
 3. 重代码 Java `@Tool` 注解
 
@@ -302,7 +302,7 @@ US-3 实施完成后跑 `/speckit.analyze`。
 **涉及的 Maven 模块**：
 - `oryxos-tool`（补齐文件 Tool + Shell Tool、MCP Client、`SandboxChecker` 完整版、`ToolRegistry`，三合一模块）
 - `oryxos-core`（Skill catalog/snapshot、渐进披露、生命周期管理与 `ContextLoader`；不在 tool 模块）
-- `oryxos-web`（既有 Agent 的 Skill 列表/详情、ZIP 导入、启停、删除和管理台页签）
+- `oryxos-web`（公共 Skill 列表/详情、ZIP 导入、全局启停、Agent 安装链接、删除和管理台页签）
 
 **Spec-Kit 任务拆分思路**：US-4 跟 US-3 可以并行（都依赖 US-2 但互不依赖）。预期产出的 task 大类：
 
@@ -310,9 +310,9 @@ US-3 实施完成后跑 `/speckit.analyze`。
 |----------|---------|
 | 内置 Tool 补齐类 | `read_file`、`write_file`、`list_dir`，Shell Tool 带白名单，`SandboxChecker` 完整实现 |
 | MCP Client 类 | `mcp_servers.yaml` 解析、`McpClientService` 启动时连接、`tools/list` 拉工具、`McpToolAdapter` 包装成 `OryxTool` |
-| `AGENT.md` / Skill 上下文类 | `ContextLoader` 全量加载 `AGENT.md` 正文，只把已启用私有 Skill 与已关联公共 Skill 的 L1 元数据拼入 system prompt；这部分归 core 不归 tool |
+| `AGENT.md` / Skill 上下文类 | `ContextLoader` 全量加载 `AGENT.md` 正文，只把有效标准链接指向的全局 enabled Skill 的 L1 元数据拼入 system prompt；这部分归 core 不归 tool |
 | Skill 渐进披露类 | 顶层请求冻结一次 `SkillSnapshot`；命中后用既有 `read_file` 读取 L2 `SKILL.md`，再按需读取/运行 L3 |
-| Skill 管理类 | 安全 ZIP 导入、三态扫描、启停 marker、归档式删除、REST/管理台与 Agent 级读写租约 |
+| Skill 管理类 | 安全 ZIP 导入、三态扫描、全局启停 marker、Agent 标准链接、关联检测、归档式删除与 REST/管理台 |
 | Agent 定义类 | `AgentLoader.deriveProfile` 从 `AGENT.md` frontmatter 派生 `Profile`（含 `tools` / `mcp_servers` 等字段） |
 
 **关键 task 颗粒度**：US-4 的 task 数量较多，几个需要重点拆解的复杂 task：
@@ -322,23 +322,25 @@ US-3 实施完成后跑 `/speckit.analyze`。
   - stdio MCP Client 建议拆几个子 task：连接管理、`tools/list`、`tool/call`、错误恢复
 - **`SandboxChecker` 完整版**（从 US-2 的简化版扩展到完整版：文件路径白名单 + Shell 命令白名单 + HTTP 域名白名单，建议拆 3 个子 task）
 - **Skill 包与并发边界**：
-  - 私有受管路径为 `.oryxos/agents/<agent>/skills/<skill>/SKILL.md`，公共受管路径为 `.oryxos/skills/<skill>/SKILL.md`；旧 `skills/*.md` 保持 legacy/unmanaged
+  - 受管包只位于 `.oryxos/skills/<skill>/SKILL.md`；Agent 只通过原始目标严格等于 `../../../skills/<skill>` 的相对软链接安装；Agent 内真实目录和旧 `skills/*.md` 保持 legacy/unmanaged
   - L1 只含 name/description/entry，严禁为建目录全文读取正文；同一请求持有读租约并复用 snapshot
-  - 导入执行“同盘 staging → 完整校验 → 原子发布”，启停/删除拿同一 Agent 写租约，从下一次请求生效
-  - 公共 Skill 必须显式关联 Agent；不新增 `use_skill` 或 Tool 执行旁路；`allowed-tools` 只展示，不修改 `AGENT.md` 的显式 Tool 列表
+  - 导入执行“同盘 staging → 完整校验 → 原子发布”；管理变更从下一次请求生效，单次 ReAct 固定 snapshot
+  - 普通删除有关联时返回 409；强制删除扫描所有 Agent、只解除标准链接并归档，失败仅做同进程尽力补偿
+  - 不新增 `use_skill` 或 Tool 执行旁路；`allowed-tools` 只展示，不修改 `AGENT.md` 的显式 Tool 列表
 
-#### Agent 私有 Skill 标准脚手架
+#### 公共 Skill 市场与 Agent 安装链接
 
 ```text
-.oryxos/agents/daily-pr-digest/
-├── AGENT.md
-└── skills/
-    └── pr-digest/
-        ├── SKILL.md
-        ├── references/
-        │   └── review-policy.md
-        ├── scripts/
-        └── assets/
+.oryxos/
+├── skills/
+│   └── pr-digest/
+│       ├── SKILL.md
+│       ├── references/review-policy.md
+│       ├── scripts/
+│       └── assets/
+└── agents/daily-pr-digest/
+    ├── AGENT.md
+    └── skills/pr-digest -> ../../../skills/pr-digest
 ```
 
 ```markdown
@@ -359,7 +361,7 @@ allowed-tools: read_file
 
 `name` 必须与目录名一致，`description` 必须说明“做什么、何时用”。加载语义固定为：L1 只注入名称/描述/入口；模型命中后用 `read_file` 加载 L2 `SKILL.md`；只有 L2 需要时才读取 reference/assets 或用 `shell` 跑 L3 script。Profile 没有显式授予 `read_file`/`shell` 时不得自动补权。
 
-运行时状态为 `enabled`、`disabled`、`invalid`。合法本地 ZIP 导入默认 enabled；禁用通过包内 `.oryxos-disabled` 跨重启持久化，启用前重新校验；删除把完整包归档到 `.oryxos/archive/.skills/` 而非物理擦除，当前不提供恢复 API。禁用/删除从下一次顶层请求生效，不改写既有 Session 或 Tool/LLM 审计。旧 `skills/*.md` 不迁移、不进入 L1、不由管理 API 禁用或删除。
+运行时状态为 `enabled`、`disabled`、`invalid`。合法本地 ZIP 导入默认全局 enabled；包内 `.oryxos-disabled` 对所有关联 Agent 生效，单 Agent 停用必须解除链接。有关联时普通删除返回 409，明确强制删除才扫描所有 Agent、解除标准链接并把完整包归档到 `.oryxos/archive/.skills/`；本期不引入 operation journal 或启动恢复流程，失败仅做同进程尽力补偿。变更从下一次顶层请求生效，不改写既有 Session 或 Tool/LLM 审计。
 
 安全审查必须把 Skill 当成代码：ZIP Slip、链接、大小和 YAML 校验只能证明包的结构安全，不能证明指令、references 或 scripts 善意。导入是管理员的显式信任动作；所有实际 Tool 仍必须经过 `ToolExecutor`、沙箱和审计。disabled 表示退出 L1/正常渐进链路，不是通用 `shell` 的逐路径文件 ACL。
 
@@ -367,7 +369,7 @@ US-4 实施完成后跑 `/speckit.analyze`。
 
 **验收 Demo 三**：零代码 PR digest
 
-业务方写一个 Agent 目录 `.oryxos/agents/daily-pr-digest/`（`AGENT.md` 配 Profile，`skills/pr-digest/SKILL.md` 描述何时及如何生成日报），在 `mcp_servers.yaml` 配置 `github-mcp`。首个 prompt 只有该 Skill 的 L1，命中后才读取 L2/L3，再调用已授权的 `github-mcp` 拉 PR、汇总成简报；整个过程零 Java。
+业务方导入 `.oryxos/skills/pr-digest/`，再为 `.oryxos/agents/daily-pr-digest/` 创建标准 `skills/pr-digest` 链接；`AGENT.md` 配 Profile，`mcp_servers.yaml` 配置 `github-mcp`。首个 prompt 只有该 Skill 的 L1，命中后才读取 L2/L3，再调用已授权的 `github-mcp` 拉 PR、汇总成简报；整个过程零 Java。
 
 ---
 
@@ -526,7 +528,7 @@ Spec-Kit 还在快速迭代，工具本身变化频繁，使用时几个注意�
 | **跨 user story 的上下文断裂** | 每个 user story 开始前让 AI agent 重读 `spec.md` + `plan.md` + 最近代码 |
 | **`/speckit.analyze` 被跳过** | 把 analyze 作为每个 user story 结束的硬性环节，不能省 |
 | **MCP server 集成踩坑** | US-4 实施 MCP 前先用一个最简的 MCP server 测试连通性（stdio transport 可能遇到 process 启动失败、编码问题） |
-| **把 legacy 平铺文件误当 Skill** | 受管扫描只认 `skills/<name>/SKILL.md`；`skills/*.md` 必须保持 unmanaged，并加兼容回归 |
+| **把 Agent 本地内容误当受管 Skill** | 受管扫描只认公共根 `.oryxos/skills/<name>/SKILL.md` 与 Agent 标准链接；真实目录和 `skills/*.md` 保持 unmanaged |
 | **把结构校验误当内容可信** | UI/文档明确“Skill 等同代码”；导入前审查全文和脚本，`allowed-tools` 永不扩权 |
 | **启停让同一 ReAct 前后不一致** | 顶层请求冻结 snapshot 并持读租约；管理最终切换持同一 Agent 写租约 |
 | **Java 工程基础是前提** | 实施前确保团队成员对 Spring Boot + Maven + JPA 有基本掌握 |

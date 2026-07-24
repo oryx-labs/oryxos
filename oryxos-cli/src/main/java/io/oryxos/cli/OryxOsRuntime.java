@@ -30,15 +30,16 @@ import io.oryxos.core.session.SessionManager;
 import io.oryxos.core.skill.AgentSkillCatalog;
 import io.oryxos.core.skill.AgentSkillCoordinator;
 import io.oryxos.core.skill.AgentSkillLockRegistry;
+import io.oryxos.core.skill.PublicSkillCatalog;
+import io.oryxos.core.skill.PublicSkillManagementService;
+import io.oryxos.core.skill.SkillAssociationManager;
+import io.oryxos.core.skill.SkillAssociationService;
 import io.oryxos.core.skill.SkillContentValidator;
 import io.oryxos.core.skill.SkillLimits;
-import io.oryxos.core.skill.SkillLoader;
-import io.oryxos.core.skill.SkillManagementService;
+import io.oryxos.core.skill.SkillManagementEventLogger;
 import io.oryxos.core.skill.SkillMetadataReader;
 import io.oryxos.core.skill.SkillPackageImporter;
-import io.oryxos.core.skill.SkillRegistry;
-import io.oryxos.core.skill.SkillService;
-import io.oryxos.core.skill.SkillStore;
+import io.oryxos.core.skill.SkillResourceAccessGuard;
 import io.oryxos.memory.LongTermMemoryStore;
 import io.oryxos.memory.MarkdownMemoryStore;
 import io.oryxos.memory.Mem0MemoryStore;
@@ -223,7 +224,8 @@ public class OryxOsRuntime {
       Map<String, OryxTool> tools,
       NotifyChannelRegistry notifyChannelRegistry,
       io.oryxos.core.mcp.McpServerAdmin mcpServerAdmin,
-      SkillRegistry skillRegistry,
+      PublicSkillCatalog publicSkillCatalog,
+      SkillAssociationService associationService,
       @Value("${oryxos.author.provider:}") String authorProvider,
       @Value("${oryxos.author.model:}") String authorModel) {
     String defaultProvider =
@@ -245,8 +247,9 @@ public class OryxOsRuntime {
         tools,
         notifyChannelRegistry,
         mcpServerAdmin,
-        skillRegistry,
-        skillCoordinator);
+        skillCoordinator,
+        publicSkillCatalog,
+        associationService);
   }
 
   /** 30 节 WorkspaceWatcher 专用守护线程执行器（跟 25 节调度线程池同类，不手工 new Thread）。 */
@@ -270,34 +273,8 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  ContextLoader contextLoader(SkillRegistry skillRegistry) {
-    // 32 节：Agent 引用的全局 Skill 由 ContextLoader 按名从注册表解析并注入 system prompt（约束产出）
-    return new ContextLoader(oryxosRoot(), skillRegistry);
-  }
-
-  @Bean
-  SkillStore skillStore() {
-    return new SkillStore(oryxosRoot());
-  }
-
-  @Bean
-  SkillLoader skillLoader() {
-    return new SkillLoader(oryxosRoot().resolve("skills"));
-  }
-
-  /** 32 节：启动全量扫 .oryxos/skills/ 建全局 Skill 索引（CRUD 与它共用同一份注册表）。 */
-  @Bean
-  SkillRegistry skillRegistry(SkillLoader skillLoader) {
-    return skillLoader.loadAll();
-  }
-
-  /** 32 节：全局 Skill 库 CRUD；启动播种内置 Skill（report-format，幂等——用户改过不覆盖）。 */
-  @Bean
-  SkillService skillService(
-      SkillStore skillStore, SkillRegistry skillRegistry, SkillLoader skillLoader) {
-    SkillService service = new SkillService(skillStore, skillRegistry, skillLoader);
-    service.seedBuiltins();
-    return service;
+  ContextLoader contextLoader() {
+    return new ContextLoader(oryxosRoot());
   }
 
   /** 31 节：Sandbox 白名单持久化（SQLite）。运行时增删写穿落库、重启保留。 */
@@ -322,12 +299,24 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  AgentSkillCatalog agentSkillCatalog(
+  PublicSkillCatalog publicSkillCatalog(
       SkillMetadataReader metadataReader,
       SkillContentValidator contentValidator,
       SkillLimits limits) {
-    return new AgentSkillCatalog(
-        oryxosRoot().resolve("agents"), metadataReader, contentValidator, limits);
+    return new PublicSkillCatalog(oryxosRoot(), metadataReader, contentValidator, limits);
+  }
+
+  @Bean
+  SkillAssociationService skillAssociationService(PublicSkillCatalog publicSkillCatalog) {
+    return new SkillAssociationService(oryxosRoot(), publicSkillCatalog);
+  }
+
+  @Bean
+  AgentSkillCatalog agentSkillCatalog(
+      SkillAssociationService associationService,
+      PublicSkillCatalog publicSkillCatalog,
+      SkillLimits limits) {
+    return new AgentSkillCatalog(oryxosRoot(), associationService, publicSkillCatalog, limits);
   }
 
   @Bean
@@ -354,17 +343,37 @@ public class OryxOsRuntime {
   }
 
   @Bean
-  SkillManagementService skillManagementService(
-      ProfileRegistry profileRegistry,
-      AgentSkillCatalog catalog,
+  SkillManagementEventLogger skillManagementEventLogger() {
+    return new SkillManagementEventLogger();
+  }
+
+  @Bean
+  PublicSkillManagementService publicSkillManagementService(
+      PublicSkillCatalog publicSkillCatalog,
+      SkillAssociationService associationService,
       SkillPackageImporter importer,
-      AgentSkillLockRegistry lockRegistry,
-      SkillLimits limits) {
-    SkillManagementService service =
-        new SkillManagementService(
-            oryxosRoot().resolve("agents"), profileRegistry, catalog, importer, lockRegistry);
-    service.cleanupArchiveOrphans(limits.stagingTtl());
-    return service;
+      AgentSkillCoordinator coordinator,
+      SkillManagementEventLogger eventLogger) {
+    return new PublicSkillManagementService(
+        oryxosRoot(),
+        publicSkillCatalog,
+        associationService,
+        importer,
+        coordinator.graph(),
+        eventLogger);
+  }
+
+  @Bean
+  SkillAssociationManager skillAssociationManager(
+      SkillAssociationService associationService,
+      AgentSkillCoordinator coordinator,
+      SkillManagementEventLogger eventLogger) {
+    return new SkillAssociationManager(associationService, coordinator.graph(), eventLogger);
+  }
+
+  @Bean
+  SkillResourceAccessGuard skillResourceAccessGuard() {
+    return new SkillResourceAccessGuard(oryxosRoot());
   }
 
   @Bean
@@ -495,9 +504,11 @@ public class OryxOsRuntime {
       Map<String, OryxTool> tools,
       ToolRegistry toolRegistry,
       ProfileRegistry profileRegistry,
-      ToolInvocationAuditor auditor) {
+      ToolInvocationAuditor auditor,
+      SkillResourceAccessGuard skillResourceAccessGuard) {
     // 31 节：mcp_servers 白名单在此接线——Agent 只能调它声明过的 server 提供的工具
-    return new ToolExecutor(tools, toolRegistry.mcpToolOwners(), profileRegistry, auditor);
+    return new ToolExecutor(
+        tools, toolRegistry.mcpToolOwners(), profileRegistry, auditor, skillResourceAccessGuard);
   }
 
   @Bean

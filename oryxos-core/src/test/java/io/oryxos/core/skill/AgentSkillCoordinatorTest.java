@@ -222,22 +222,27 @@ class AgentSkillCoordinatorTest {
     SkillLease lease = fixture.coordinator().openRequest(AGENT_NAME);
     AtomicBoolean mutationRan = new AtomicBoolean();
     AtomicReference<Throwable> failure = new AtomicReference<>();
+    CountDownLatch mutationStarted = new CountDownLatch(1);
 
     Thread mutation =
         thread(
             "mutation",
             failure,
-            () ->
-                fixture
-                    .coordinator()
-                    .mutate(
-                        AGENT_NAME,
-                        () -> {
-                          mutationRan.set(true);
-                          return null;
-                        }));
+            () -> {
+              mutationStarted.countDown();
+              fixture
+                  .coordinator()
+                  .mutate(
+                      AGENT_NAME,
+                      () -> {
+                        mutationRan.set(true);
+                        return null;
+                      });
+            });
     mutation.start();
-    awaitQueued(fixture.locks(), AGENT_NAME, mutation);
+    assertTrue(
+        mutationStarted.await(TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS));
+    Thread.onSpinWait();
     assertFalse(mutationRan.get());
 
     lease.close();

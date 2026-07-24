@@ -19,7 +19,12 @@ import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
+import io.oryxos.core.skill.LinkStatus;
+import io.oryxos.core.skill.SkillAssociation;
+import io.oryxos.core.skill.SkillAssociationManager;
+import io.oryxos.core.skill.SkillStatus;
 import io.oryxos.web.GlobalExceptionHandler;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +41,7 @@ class AgentApiControllerTest {
   private AgentLifecycleService lifecycle;
   private AgentService agentService;
   private SessionManager sessionManager;
+  private SkillAssociationManager skillAssociations;
   private MockMvc mvc;
 
   private static Profile profile(String name) {
@@ -58,6 +64,7 @@ class AgentApiControllerTest {
     lifecycle = mock(AgentLifecycleService.class);
     agentService = mock(AgentService.class);
     sessionManager = mock(SessionManager.class);
+    skillAssociations = mock(SkillAssociationManager.class);
     ProfileRegistry registry = new ProfileRegistry(Map.of("ops", profile("ops")));
     mvc =
         MockMvcBuilders.standaloneSetup(
@@ -67,7 +74,8 @@ class AgentApiControllerTest {
                     sessionManager,
                     registry,
                     mock(io.oryxos.core.memory.MemoryService.class),
-                    mock(io.oryxos.core.agent.AgentExecutionService.class)))
+                    mock(io.oryxos.core.agent.AgentExecutionService.class),
+                    skillAssociations))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
@@ -75,20 +83,52 @@ class AgentApiControllerTest {
   @Test
   @DisplayName("create 成功_返回 AgentView")
   void create_success_returnsAgentView() throws Exception {
-    when(lifecycle.create(eq("demo"), any())).thenReturn(profile("demo"));
+    when(lifecycle.create(eq("demo"), any(), eq(List.of("web-research"))))
+        .thenReturn(profile("demo"));
+    when(skillAssociations.list("demo"))
+        .thenReturn(List.of(validAssociation("demo", "web-research")));
 
     mvc.perform(
             post("/api/v1/agents")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"demo\",\"description\":\"一个测试 Agent\"}"))
+                .content(
+                    "{\"name\":\"demo\",\"description\":\"一个测试 Agent\",\"skills\":[\"web-research\"]}"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.name").value("demo"));
+        .andExpect(jsonPath("$.data.name").value("demo"))
+        .andExpect(jsonPath("$.data.skills[0]").value("web-research"));
+    verify(lifecycle).create("demo", "一个测试 Agent", List.of("web-research"));
+  }
+
+  @Test
+  @DisplayName("save-files 传递选择的 Skill，详情从文件系统关联派生")
+  void saveFiles_passesSkillsAndReturnsFilesystemAssociations() throws Exception {
+    when(lifecycle.saveFiles(eq("demo"), any(), eq(List.of("weather", "web-research"))))
+        .thenReturn(profile("demo"));
+    when(skillAssociations.list("demo"))
+        .thenReturn(
+            List.of(validAssociation("demo", "weather"), validAssociation("demo", "web-research")));
+
+    mvc.perform(
+            post("/api/v1/agents/demo/files")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"files\":{\"AGENT.md\":\"---\\nname: demo\\n---\\nbody\"},"
+                        + "\"skills\":[\"weather\",\"web-research\"]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.skills[0]").value("weather"))
+        .andExpect(jsonPath("$.data.skills[1]").value("web-research"));
+
+    verify(lifecycle)
+        .saveFiles(
+            eq("demo"),
+            eq(Map.of("AGENT.md", "---\nname: demo\n---\nbody")),
+            eq(List.of("weather", "web-research")));
   }
 
   @Test
   @DisplayName("create name 冲突_返回400")
   void create_conflict_returns400() throws Exception {
-    when(lifecycle.create(eq("dup"), any()))
+    when(lifecycle.create(eq("dup"), any(), eq(List.of())))
         .thenThrow(new IllegalArgumentException("Agent 已存在: dup"));
 
     mvc.perform(
@@ -169,5 +209,17 @@ class AgentApiControllerTest {
                 .content("{\"content\":\"" + huge + "\"}"))
         .andExpect(status().isBadRequest());
     verify(agentService, never()).process(any(), any());
+  }
+
+  private static SkillAssociation validAssociation(String agent, String skill) {
+    return new SkillAssociation(
+        agent,
+        skill,
+        Path.of("/workspace/agents", agent, "skills", skill),
+        "../../../skills/" + skill,
+        LinkStatus.VALID,
+        SkillStatus.ENABLED,
+        true,
+        null);
   }
 }

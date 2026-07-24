@@ -42,6 +42,11 @@
 
 [Gates determined based on constitution file]
 
+For features that touch the public Skill marketplace, explicitly verify the Principle IV exception:
+the public package root is `.oryxos/skills`, Agent association uses only the exact standard relative
+symlink, no AGENT.md/AGENTS.md/database association list is introduced, and Skill loading never
+creates a Tool or grants permissions.
+
 ## Project Structure
 
 ### Documentation (this feature)

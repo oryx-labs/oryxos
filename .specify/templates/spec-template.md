@@ -87,6 +87,12 @@
 
 ### Functional Requirements
 
+<!--
+  OryxOS public Skill marketplace features MUST specify the package trust boundary, exact
+  filesystem association form, L1/L2/L3 disclosure behavior, permission non-escalation, and
+  compatibility treatment for non-standard or legacy Agent skill entries.
+-->
+
 - **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
 - **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]
 - **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]

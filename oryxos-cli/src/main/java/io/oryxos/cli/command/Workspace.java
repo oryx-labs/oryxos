@@ -1,6 +1,10 @@
 package io.oryxos.cli.command;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * 轻命令（init / status / profile 不启动 Spring，图秒回）共用的工作区根解析。
@@ -13,6 +17,17 @@ import java.nio.file.Path;
 final class Workspace {
 
   static final String DEFAULT_ROOT = ".oryxos";
+  private static final LinkOption[] NOFOLLOW = {LinkOption.NOFOLLOW_LINKS};
+  private static final List<String> RUNTIME_DIRECTORIES =
+      List.of(
+          "agents",
+          "skills",
+          "output",
+          "memory",
+          "sessions",
+          "logs",
+          ".staging/skill-import",
+          "archive/.skills");
 
   private Workspace() {}
 
@@ -27,5 +42,40 @@ final class Workspace {
       return Path.of(env);
     }
     return Path.of(DEFAULT_ROOT);
+  }
+
+  /** Creates the complete runtime layout without accepting symlinked workspace-owned paths. */
+  static Path initializeLayout() throws IOException {
+    Path root = root().toAbsolutePath().normalize();
+    createRealDirectory(root, "workspace root");
+    for (String relative : RUNTIME_DIRECTORIES) {
+      Path current = root;
+      for (Path segment : Path.of(relative)) {
+        current = current.resolve(segment);
+        createRealDirectory(current, relative);
+      }
+      if (!current.normalize().startsWith(root)) {
+        throw new IOException("Workspace directory escapes the root: " + relative);
+      }
+    }
+    return root;
+  }
+
+  private static void createRealDirectory(Path directory, String safeName) throws IOException {
+    if (Files.exists(directory, NOFOLLOW)) {
+      if (Files.isSymbolicLink(directory)
+          || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+        throw new IOException("Workspace path must be a real directory: " + safeName);
+      }
+      return;
+    }
+    Path parent = directory.getParent();
+    if (parent != null
+        && Files.exists(parent, NOFOLLOW)
+        && (Files.isSymbolicLink(parent)
+            || !Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS))) {
+      throw new IOException("Workspace parent must be a real directory: " + safeName);
+    }
+    Files.createDirectory(directory);
   }
 }

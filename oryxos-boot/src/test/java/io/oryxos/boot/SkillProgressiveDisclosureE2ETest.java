@@ -25,9 +25,12 @@ import io.oryxos.core.session.SessionManager;
 import io.oryxos.core.skill.AgentSkillCatalog;
 import io.oryxos.core.skill.AgentSkillCoordinator;
 import io.oryxos.core.skill.AgentSkillLockRegistry;
+import io.oryxos.core.skill.PublicSkillCatalog;
+import io.oryxos.core.skill.SkillAssociationService;
 import io.oryxos.core.skill.SkillContentValidator;
 import io.oryxos.core.skill.SkillLimits;
 import io.oryxos.core.skill.SkillMetadataReader;
+import io.oryxos.core.skill.SkillResourceAccessGuard;
 import io.oryxos.storage.JpaToolInvocationAuditor;
 import io.oryxos.storage.ToolInvocation;
 import io.oryxos.storage.ToolInvocationRepository;
@@ -102,19 +105,23 @@ class SkillProgressiveDisclosureE2ETest {
     Files.writeString(
         agentDir.resolve("AGENT.md"),
         "---\nname: ops-agent\n---\nYou are the operations test Agent.\n");
+    Files.createDirectories(agentDir.resolve("skills"));
+    Files.createDirectories(oryxosRoot.resolve("skills"));
     Path weatherDir =
-        writeSkill(agentDir, "weather", "Weather and travel guidance", WEATHER_L2, WEATHER_L3);
-    Path financeDir = writeSkill(agentDir, "finance", "Finance guidance", FINANCE_L2, FINANCE_L3);
+        writeSkill(
+            oryxosRoot, agentDir, "weather", "Weather and travel guidance", WEATHER_L2, WEATHER_L3);
+    Path financeDir =
+        writeSkill(oryxosRoot, agentDir, "finance", "Finance guidance", FINANCE_L2, FINANCE_L3);
 
     Profile profile = profile();
     ProfileRegistry profiles = new ProfileRegistry(Map.of(AGENT, profile));
     SkillLimits limits = SkillLimits.defaults();
+    PublicSkillCatalog publicCatalog =
+        new PublicSkillCatalog(
+            oryxosRoot, new SkillMetadataReader(), new SkillContentValidator(), limits);
+    SkillAssociationService associations = new SkillAssociationService(oryxosRoot, publicCatalog);
     AgentSkillCatalog catalog =
-        new AgentSkillCatalog(
-            oryxosRoot.resolve("agents"),
-            new SkillMetadataReader(),
-            new SkillContentValidator(),
-            limits);
+        new AgentSkillCatalog(oryxosRoot, associations, publicCatalog, limits);
     AgentSkillCoordinator coordinator =
         new AgentSkillCoordinator(
             oryxosRoot.resolve("agents"), profiles, catalog, new AgentSkillLockRegistry());
@@ -122,7 +129,13 @@ class SkillProgressiveDisclosureE2ETest {
     ToolRegistry registry = new ToolRegistry();
     registry.registerAnnotated(new FileTools(new PermissiveSandbox()));
     Map<String, OryxTool> tools = registry.asMap();
-    ToolExecutor executor = new ToolExecutor(tools, new JpaToolInvocationAuditor(repository));
+    ToolExecutor executor =
+        new ToolExecutor(
+            tools,
+            Map.of(),
+            profiles,
+            new JpaToolInvocationAuditor(repository),
+            new SkillResourceAccessGuard(oryxosRoot));
     ScriptedProvider provider =
         new ScriptedProvider(
             weatherDir.resolve("SKILL.md"), weatherDir.resolve("references/details.md"));
@@ -175,9 +188,14 @@ class SkillProgressiveDisclosureE2ETest {
   }
 
   private static Path writeSkill(
-      Path agentDir, String name, String description, String bodyMarker, String resourceMarker)
+      Path oryxosRoot,
+      Path agentDir,
+      String name,
+      String description,
+      String bodyMarker,
+      String resourceMarker)
       throws Exception {
-    Path skillDir = Files.createDirectories(agentDir.resolve("skills").resolve(name));
+    Path skillDir = Files.createDirectories(oryxosRoot.resolve("skills").resolve(name));
     Files.writeString(
         skillDir.resolve("SKILL.md"),
         "---\nname: "
@@ -189,7 +207,9 @@ class SkillProgressiveDisclosureE2ETest {
             + "\nRead references/details.md when needed.\n");
     Path references = Files.createDirectory(skillDir.resolve("references"));
     Files.writeString(references.resolve("details.md"), resourceMarker);
-    return skillDir;
+    Path link = agentDir.resolve("skills").resolve(name);
+    Files.createSymbolicLink(link, Path.of("../../../skills", name));
+    return link;
   }
 
   private static Profile profile() {

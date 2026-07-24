@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,11 +24,14 @@ import org.slf4j.LoggerFactory;
  */
 public class AgentLoader {
 
+  private static final String LEGACY_SKILLS_FIELD = "skills";
+
   private static final Logger LOG = LoggerFactory.getLogger(AgentLoader.class);
   private static final String AGENT_FILE = "AGENT.md";
 
   private final Path agentsDir;
   private final Set<String> knownTools;
+  private final Set<String> warnedLegacySkillProfiles = ConcurrentHashMap.newKeySet();
   private final ProfileLoader validator;
 
   public AgentLoader(Path agentsDir, Set<String> knownProviders) {
@@ -116,6 +120,10 @@ public class AgentLoader {
       throw new ProfileValidationException("非法 Agent 名: " + sanitize(source));
     }
     AgentMarkdown.Parsed parsed = AgentMarkdown.split(agentMarkdown);
+    if (parsed.frontmatter().containsKey(LEGACY_SKILLS_FIELD)
+        && warnedLegacySkillProfiles.add(expectedName.lockKey())) {
+      LOG.warn("Agent {} 包含已弃用的 AGENT.md skills 字段；关联只以标准软链接为准", sanitize(source));
+    }
     Profile profile = validator.fromMap(parsed.frontmatter(), source);
     try {
       expectedName.requireProfileName(profile.name());

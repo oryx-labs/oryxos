@@ -7,11 +7,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import io.oryxos.core.agent.AgentLifecycleService;
-import io.oryxos.core.profile.Profile;
+import io.oryxos.core.skill.LinkStatus;
+import io.oryxos.core.skill.PublicSkillCatalog;
+import io.oryxos.core.skill.PublicSkillDescriptor;
+import io.oryxos.core.skill.SkillAssociation;
+import io.oryxos.core.skill.SkillAssociationManager;
+import io.oryxos.core.skill.SkillStatus;
 import io.oryxos.web.GlobalExceptionHandler;
-import java.util.List;
-import java.util.Optional;
+import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
@@ -19,44 +22,37 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class SkillAssociationApiControllerTest {
 
-  private AgentLifecycleService lifecycle;
+  private SkillAssociationManager associations;
   private MockMvc mvc;
 
   @BeforeEach
   void setUp() {
-    lifecycle = mock(AgentLifecycleService.class);
+    associations = mock(SkillAssociationManager.class);
+    PublicSkillCatalog publicSkills = mock(PublicSkillCatalog.class);
+    SkillAssociation link =
+        new SkillAssociation(
+            "ops",
+            "web-research",
+            Path.of("/workspace/agents/ops/skills/web-research"),
+            "../../../skills/web-research",
+            LinkStatus.VALID,
+            SkillStatus.ENABLED,
+            true,
+            null);
+    when(associations.associate("ops", "web-research")).thenReturn(link);
+    when(publicSkills.get("web-research")).thenReturn(mock(PublicSkillDescriptor.class));
     mvc =
-        MockMvcBuilders.standaloneSetup(new SkillAssociationApiController(lifecycle))
+        MockMvcBuilders.standaloneSetup(
+                new SkillAssociationApiController(associations, publicSkills))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
 
   @Test
-  void associateUpdatesAgentProfile() throws Exception {
-    Profile before = profile(List.of());
-    Profile after = profile(List.of("web-research"));
-    when(lifecycle.get("ops")).thenReturn(Optional.of(before));
-    when(lifecycle.setSkillAssociation("ops", "web-research", true)).thenReturn(after);
-
+  void deprecatedReverseRouteDelegatesToTheCanonicalLinkManager() throws Exception {
     mvc.perform(put("/api/v1/skills/web-research/agents/ops"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.skills[0]").value("web-research"));
-    verify(lifecycle).setSkillAssociation("ops", "web-research", true);
-  }
-
-  private static Profile profile(List<String> skills) {
-    return new Profile(
-        "ops",
-        null,
-        null,
-        new Profile.ProviderRef("deepseek", "deepseek-chat", null),
-        List.of(),
-        List.of(),
-        List.of(),
-        List.of(),
-        List.of(),
-        List.of(),
-        skills,
-        Profile.Settings.defaults());
+        .andExpect(jsonPath("$.data.skillName").value("web-research"));
+    verify(associations).associate("ops", "web-research");
   }
 }

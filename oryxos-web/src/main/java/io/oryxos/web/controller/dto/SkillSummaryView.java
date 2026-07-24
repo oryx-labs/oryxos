@@ -64,6 +64,7 @@ public record SkillSummaryView(
   /** Skill package provenance exposed by the management API. */
   public enum Source {
     UPLOAD("upload"),
+    GITHUB("github"),
     WORKSPACE("workspace");
 
     private final String jsonValue;
@@ -80,6 +81,7 @@ public record SkillSummaryView(
     private static Source from(SkillSource source) {
       return switch (source) {
         case UPLOAD -> UPLOAD;
+        case GITHUB -> GITHUB;
         case WORKSPACE -> WORKSPACE;
       };
     }

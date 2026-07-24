@@ -42,7 +42,7 @@ public final class AgentSkillLockRegistry {
     return lockFor(agentName).readLock();
   }
 
-  private Lock writeLock(String agentName) {
+  Lock writeLock(String agentName) {
     return lockFor(agentName).writeLock();
   }
 

@@ -7,6 +7,10 @@ import io.oryxos.core.ToolResult;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.ToolCallRequest;
+import io.oryxos.core.skill.SkillResourceAccessGuard;
+import io.oryxos.core.skill.SkillSnapshot;
+import io.oryxos.core.skill.SkillValidationException;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Objects;
@@ -27,14 +31,20 @@ import java.util.Objects;
 public class ToolExecutor {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final String READ_FILE_TOOL = "read_file";
+  private static final String SHELL_TOOL = "shell";
+  private static final String PATH_ARGUMENT = "path";
+  private static final String COMMAND_ARGUMENT = "command";
+  private static final String WHITESPACE_PATTERN = "\\s+";
 
   private final Map<String, OryxTool> tools;
   private final Map<String, String> mcpToolOwners;
   private final ProfileRegistry profileRegistry;
   private final ToolInvocationAuditor auditor;
+  private final SkillResourceAccessGuard skillGuard;
 
   public ToolExecutor(Map<String, OryxTool> tools, ToolInvocationAuditor auditor) {
-    this(tools, Map.of(), null, auditor);
+    this(tools, Map.of(), null, auditor, null);
   }
 
   /** 31 节：注入 MCP 工具归属表 + ProfileRegistry，用以按调用方 Agent 的 mcp_servers 声明做白名单校验。 */
@@ -43,10 +53,20 @@ public class ToolExecutor {
       Map<String, String> mcpToolOwners,
       ProfileRegistry profileRegistry,
       ToolInvocationAuditor auditor) {
+    this(tools, mcpToolOwners, profileRegistry, auditor, null);
+  }
+
+  public ToolExecutor(
+      Map<String, OryxTool> tools,
+      Map<String, String> mcpToolOwners,
+      ProfileRegistry profileRegistry,
+      ToolInvocationAuditor auditor,
+      SkillResourceAccessGuard skillGuard) {
     this.tools = Map.copyOf(tools);
     this.mcpToolOwners = Map.copyOf(mcpToolOwners);
     this.profileRegistry = profileRegistry;
     this.auditor = auditor;
+    this.skillGuard = skillGuard;
   }
 
   /** Executes only tools explicitly granted by the current Profile and audits every rejection. */
@@ -60,6 +80,16 @@ public class ToolExecutor {
       String agentName,
       Collection<String> allowedToolNames,
       ToolCallRequest call) {
+    return execute(sessionId, agentName, allowedToolNames, call, SkillSnapshot.empty(agentName));
+  }
+
+  /** Executes with the immutable request Skill snapshot used to authorize explicit L2/L3 reads. */
+  public ToolResult execute(
+      String sessionId,
+      String agentName,
+      Collection<String> allowedToolNames,
+      ToolCallRequest call,
+      SkillSnapshot skillSnapshot) {
     Objects.requireNonNull(allowedToolNames, "allowedToolNames");
     Objects.requireNonNull(call, "call");
     long startedAt = System.currentTimeMillis();
@@ -80,6 +110,10 @@ public class ToolExecutor {
     } catch (Exception e) {
       return fail(sessionId, call, "工具入参不是合法 JSON: " + e.getMessage(), startedAt);
     }
+    String skillDenied = checkSkillResource(profile(agentName), skillSnapshot, call.name(), input);
+    if (skillDenied != null) {
+      return fail(sessionId, call, skillDenied, startedAt);
+    }
     // 沙箱检查位：24 节 SandboxChecker 就位后在此接线（执行前白名单校验，宪法 VI）
     // 置入当前 Agent 名（30 节 Agent 专属记忆）：save_memory 等工具据此落到本 Agent 自己的 MEMORY.md；执行后必清除。
     ToolExecutionContext.setAgentName(agentName);
@@ -99,6 +133,45 @@ public class ToolExecutor {
     } finally {
       ToolExecutionContext.clear();
     }
+  }
+
+  private Profile profile(String agentName) {
+    return profileRegistry == null ? null : profileRegistry.get(agentName).orElse(null);
+  }
+
+  private String checkSkillResource(
+      Profile profile, SkillSnapshot snapshot, String toolName, JsonNode input) {
+    if (skillGuard == null || profile == null) {
+      return null;
+    }
+    String path = null;
+    if (READ_FILE_TOOL.equals(toolName) && input.path(PATH_ARGUMENT).isTextual()) {
+      path = input.path(PATH_ARGUMENT).asText();
+    } else if (SHELL_TOOL.equals(toolName) && input.path(COMMAND_ARGUMENT).isTextual()) {
+      path = skillPathToken(input.path(COMMAND_ARGUMENT).asText(), snapshot.agentName());
+    }
+    if (path == null || path.isBlank()) {
+      return null;
+    }
+    try {
+      skillGuard.authorizeIfSkillPath(snapshot, toolName, Path.of(path), profile);
+      return null;
+    } catch (SkillValidationException error) {
+      return error.code().name() + ": " + error.getMessage();
+    } catch (RuntimeException error) {
+      return "SKILL_RESOURCE_UNAVAILABLE: Skill resource path is invalid";
+    }
+  }
+
+  private static String skillPathToken(String command, String agentName) {
+    String marker = "/agents/" + agentName + "/skills/";
+    for (String raw : command.split(WHITESPACE_PATTERN)) {
+      String token = raw.replaceAll("^[\\\"']|[\\\"';]$", "");
+      if (token.contains(marker)) {
+        return token;
+      }
+    }
+    return null;
   }
 
   /**

@@ -1,13 +1,17 @@
 package io.oryxos.web.controller;
 
-import io.oryxos.core.skill.SkillService;
+import io.oryxos.core.skill.PublicSkillManagementService;
 import io.oryxos.web.common.ApiResponse;
-import io.oryxos.web.controller.dto.CreateSkillRequest;
+import io.oryxos.web.controller.dto.DeleteSkillResultView;
 import io.oryxos.web.controller.dto.ImportSkillRequest;
-import io.oryxos.web.controller.dto.SkillView;
-import io.oryxos.web.controller.dto.UpdateSkillRequest;
-import io.oryxos.web.error.ResourceNotFoundException;
+import io.oryxos.web.controller.dto.PublicSkillDetailView;
+import io.oryxos.web.controller.dto.PublicSkillSummaryView;
+import io.oryxos.web.controller.dto.SetSkillEnabledRequest;
 import io.oryxos.web.skill.GithubFolderFetcher;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetAddress;
@@ -22,6 +26,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,11 +36,13 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 全局 Skill 库端点（第 32 节）：list/get/create/update/delete 薄转发给 {@link SkillService}。Agent 通过 AGENT.md 的
- * {@code skills:[名]} 引用这些 Skill，由 {@code ContextLoader} 注入正文来约束产出。
+ * 公共 Skill 市场端点：导入、列表、详情、全局启停和普通/强制删除都委托同一个文件系统管理服务。Agent 关联不写 AGENT.md， 只通过标准相对软链接表达。
  *
  * <p>错误码复用既有：name 冲突 / 空 → 400（`IllegalArgumentException`）；不存在 →
  * 404（`ResourceNotFoundException`）；统一 `ApiResponse` 信封。
@@ -53,32 +62,37 @@ public class SkillApiController {
   private static final String INTERNAL_DOMAIN_SUFFIX = ".internal";
   private static final Set<String> INTERNAL_HOSTS = Set.of("localhost", "metadata.google.internal");
 
-  private final SkillService skills;
+  private final PublicSkillManagementService skills;
 
-  public SkillApiController(SkillService skills) {
+  public SkillApiController(PublicSkillManagementService skills) {
     this.skills = skills;
   }
 
   @GetMapping
-  public ApiResponse<List<SkillView>> list() {
-    return ApiResponse.ok(skills.list().stream().map(SkillView::from).toList());
+  @Operation(summary = "List public Skills and their global state")
+  public ApiResponse<List<PublicSkillSummaryView>> list() {
+    return ApiResponse.ok(skills.list().stream().map(PublicSkillSummaryView::from).toList());
   }
 
   @GetMapping("/{name}")
-  public ApiResponse<SkillView> get(@PathVariable String name) {
-    return ApiResponse.ok(
-        skills
-            .get(name)
-            .map(SkillView::from)
-            .orElseThrow(() -> new ResourceNotFoundException("Skill 不存在: " + name)));
+  @Operation(summary = "Get safe public Skill metadata and linked Agents")
+  public ApiResponse<PublicSkillDetailView> get(@PathVariable String name) {
+    return ApiResponse.ok(PublicSkillDetailView.from(skills.get(name)));
   }
 
-  @PostMapping
-  public ApiResponse<SkillView> create(@RequestBody CreateSkillRequest req) {
-    if (req == null || req.name() == null || req.name().isBlank()) {
-      throw new IllegalArgumentException("Skill 名为空");
+  @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @Operation(
+      summary = "Import one reviewed Skill ZIP into the public market",
+      description = "The multipart file part is validated in staging and atomically published.")
+  public ApiResponse<PublicSkillDetailView> importZip(
+      @RequestPart(name = "file", required = false) MultipartFile file) throws IOException {
+    if (file == null || file.isEmpty()) {
+      throw new IllegalArgumentException("file part is required and must not be empty");
     }
-    return ApiResponse.ok(SkillView.from(skills.create(req.name(), req.description(), req.body())));
+    try (var input = file.getInputStream()) {
+      return ApiResponse.ok(
+          PublicSkillDetailView.from(skills.importZip(input, file.getOriginalFilename())));
+    }
   }
 
   /**
@@ -87,15 +101,18 @@ public class SkillApiController {
    * 脚本/参考资料等）原样落盘——不是抓网页正文，只支持 GitHub 目录，同名 → 400。
    */
   @PostMapping("/import")
-  public ApiResponse<SkillView> importSkill(@RequestBody ImportSkillRequest req) {
+  @Operation(summary = "Import one GitHub Skill folder through the same validation pipeline")
+  public ApiResponse<PublicSkillDetailView> importSkill(@RequestBody ImportSkillRequest req) {
     if (req == null || req.url() == null || req.url().isBlank()) {
       throw new IllegalArgumentException("url 为空");
     }
     GithubFolderFetcher.Target target = GithubFolderFetcher.parseTreeUrl(req.url().strip());
     Map<String, String> files =
         new GithubFolderFetcher(SkillApiController::fetch).fetchFolder(target);
+    byte[] archive = zip(files);
     return ApiResponse.ok(
-        SkillView.from(skills.importFiles(req.name(), files, target.fallbackName())));
+        PublicSkillDetailView.from(
+            skills.importZip(new ByteArrayInputStream(archive), target.fallbackName() + ".zip")));
   }
 
   private static URI parseHttpUrl(String url) {
@@ -195,22 +212,48 @@ public class SkillApiController {
   }
 
   @PutMapping("/{name}")
-  public ApiResponse<SkillView> update(
-      @PathVariable String name, @RequestBody UpdateSkillRequest req) {
-    if (skills.get(name).isEmpty()) {
-      throw new ResourceNotFoundException("Skill 不存在: " + name); // → 404
+  @Operation(summary = "Enable or disable a public Skill globally")
+  public ApiResponse<PublicSkillDetailView> setEnabled(
+      @PathVariable String name, @RequestBody(required = false) SetSkillEnabledRequest request) {
+    if (request == null) {
+      throw new IllegalArgumentException("enabled is required and must be a JSON boolean");
     }
-    String description = req == null ? null : req.description();
-    String body = req == null ? null : req.body();
-    return ApiResponse.ok(SkillView.from(skills.update(name, description, body)));
+    return ApiResponse.ok(
+        PublicSkillDetailView.from(skills.setEnabled(name, request.requireEnabled())));
   }
 
   @DeleteMapping("/{name}")
-  public ApiResponse<Void> delete(@PathVariable String name) {
-    if (skills.get(name).isEmpty()) {
-      throw new ResourceNotFoundException("Skill 不存在: " + name); // → 404
+  @Operation(
+      summary = "Archive a public Skill",
+      description =
+          "Normal delete returns typed 409 when linked; force=true rescans and removes canonical links before archive.")
+  @ApiResponses({
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+        responseCode = "200",
+        description = "Archived; affectedAgents reports the server-side execution set"),
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+        responseCode = "409",
+        description = "SKILL_IN_USE with the freshly scanned linkedAgents list")
+  })
+  public ApiResponse<DeleteSkillResultView> delete(
+      @PathVariable String name,
+      @RequestParam(name = "force", defaultValue = "false") boolean force) {
+    return ApiResponse.ok(DeleteSkillResultView.from(skills.delete(name, force)));
+  }
+
+  private static byte[] zip(Map<String, String> files) {
+    try {
+      ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+      try (ZipOutputStream output = new ZipOutputStream(bytes, StandardCharsets.UTF_8)) {
+        for (Map.Entry<String, String> file : files.entrySet()) {
+          output.putNextEntry(new ZipEntry(file.getKey()));
+          output.write(file.getValue().getBytes(StandardCharsets.UTF_8));
+          output.closeEntry();
+        }
+      }
+      return bytes.toByteArray();
+    } catch (IOException error) {
+      throw new UncheckedIOException("GitHub Skill package could not be prepared", error);
     }
-    skills.delete(name);
-    return ApiResponse.ok(null);
   }
 }

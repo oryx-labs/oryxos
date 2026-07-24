@@ -45,6 +45,8 @@ public class AgentSkillCatalog {
   private final SkillMetadataReader metadataReader;
   private final SkillContentValidator contentValidator;
   private final SkillLimits limits;
+  private final SkillAssociationService associationService;
+  private final PublicSkillCatalog publicCatalog;
 
   public AgentSkillCatalog(
       Path agentsDir,
@@ -55,11 +57,31 @@ public class AgentSkillCatalog {
     this.metadataReader = Objects.requireNonNull(metadataReader, "metadataReader");
     this.contentValidator = Objects.requireNonNull(contentValidator, "contentValidator");
     this.limits = Objects.requireNonNull(limits, "limits");
+    this.associationService = null;
+    this.publicCatalog = null;
+  }
+
+  /** Public-market constructor: Agent catalogs are derived only from standard association links. */
+  public AgentSkillCatalog(
+      Path workspaceRoot,
+      SkillAssociationService associationService,
+      PublicSkillCatalog publicCatalog,
+      SkillLimits limits) {
+    Path root = Objects.requireNonNull(workspaceRoot, "workspaceRoot").toAbsolutePath().normalize();
+    this.agentsDir = root.resolve("agents");
+    this.metadataReader = null;
+    this.contentValidator = null;
+    this.limits = Objects.requireNonNull(limits, "limits");
+    this.associationService = Objects.requireNonNull(associationService, "associationService");
+    this.publicCatalog = Objects.requireNonNull(publicCatalog, "publicCatalog");
   }
 
   /** Scans every direct managed candidate and derives its current status and L1 inclusion. */
   public List<SkillDescriptor> list(String agentName) {
     AgentName name = AgentName.parse(agentName);
+    if (associationService != null) {
+      return applyBudget(name.value(), scanAssociations(name.value())).descriptors();
+    }
     return applyBudget(name.value(), scan(name)).descriptors();
   }
 
@@ -81,7 +103,9 @@ public class AgentSkillCatalog {
   /** Freezes only enabled, budget-included L1 metadata for one top-level request. */
   public SkillSnapshot snapshot(String agentName) {
     AgentName name = AgentName.parse(agentName);
-    BudgetedCatalog catalog = applyBudget(name.value(), scan(name));
+    BudgetedCatalog catalog =
+        applyBudget(
+            name.value(), associationService == null ? scan(name) : scanAssociations(name.value()));
     List<SkillMetadata> included =
         catalog.descriptors().stream()
             .filter(SkillDescriptor::catalogIncluded)
@@ -89,6 +113,64 @@ public class AgentSkillCatalog {
             .toList();
     return new SkillSnapshot(
         name.value(), Instant.now(), included, catalog.renderedChars(), catalog.omittedCount());
+  }
+
+  private List<SkillDescriptor> scanAssociations(String agentName) {
+    List<SkillDescriptor> descriptors = new ArrayList<>();
+    for (SkillAssociation association : associationService.list(agentName)) {
+      PublicSkillDescriptor publicSkill = null;
+      try {
+        publicSkill = publicCatalog.get(association.skillName());
+      } catch (NoSuchElementException ignored) {
+        // A dangling standard link remains visible as one isolated invalid association.
+      }
+      SkillMetadata metadata =
+          publicSkill == null || publicSkill.metadata() == null
+              ? null
+              : metadataAtAgentLink(
+                  publicSkill.metadata(), association.linkPath().resolve(ENTRYPOINT));
+      SkillValidationError error =
+          association.error() != null
+              ? association.error()
+              : publicSkill == null
+                  ? new SkillValidationError(
+                      SkillValidationCode.SKILL_RESOURCE_UNAVAILABLE,
+                      "Linked public Skill does not exist")
+                  : publicSkill.validationError();
+      boolean configuredEnabled = publicSkill != null && publicSkill.configuredEnabled();
+      SkillStatus status = SkillStatus.resolve(configuredEnabled, error);
+      descriptors.add(
+          new SkillDescriptor(
+              agentName,
+              association.skillName(),
+              metadata,
+              status,
+              configuredEnabled,
+              publicSkill == null ? SkillSource.WORKSPACE : publicSkill.source(),
+              publicSkill == null ? Instant.EPOCH : publicSkill.updatedAt(),
+              error,
+              metadata == null ? null : metadata.relativeEntry(),
+              publicSkill == null ? List.of() : publicSkill.resources(),
+              publicSkill == null ? 0 : publicSkill.fileCount(),
+              publicSkill == null ? 0 : publicSkill.totalBytes(),
+              false));
+    }
+    return List.copyOf(descriptors);
+  }
+
+  private static SkillMetadata metadataAtAgentLink(SkillMetadata source, Path linkedEntry) {
+    return new SkillMetadata(
+        source.name(),
+        source.description(),
+        source.license(),
+        source.compatibility(),
+        source.metadata(),
+        source.allowedTools(),
+        source.version(),
+        source.activation(),
+        source.requires(),
+        linkedEntry.toAbsolutePath().normalize(),
+        "skills/" + source.name() + "/SKILL.md");
   }
 
   /**

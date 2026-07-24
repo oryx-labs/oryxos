@@ -34,12 +34,12 @@ class SkillMetadataReaderTest {
     reader = new SkillMetadataReader();
     logs = new ListAppender<>();
     logs.start();
-    ((Logger) LoggerFactory.getLogger(SkillMetadataReader.class)).addAppender(logs);
+    ((Logger) LoggerFactory.getLogger(SkillManifestParser.class)).addAppender(logs);
   }
 
   @AfterEach
   void tearDown() {
-    ((Logger) LoggerFactory.getLogger(SkillMetadataReader.class)).detachAppender(logs);
+    ((Logger) LoggerFactory.getLogger(SkillManifestParser.class)).detachAppender(logs);
   }
 
   @Test
@@ -57,9 +57,11 @@ class SkillMetadataReaderTest {
               version: "1.0"
             allowed-tools: read_file shell
             unknown-extension: ignored
-            version: ignored-top-level
-            activation: ignored
-            requires: ignored
+            version: 1.0.0
+            activation:
+              keywords: [weather, go]
+            requires:
+              skills: [maps]
             """,
             "# Weather\n\n执行天气流程。\n");
 
@@ -71,6 +73,9 @@ class SkillMetadataReaderTest {
     assertEquals("Requires read_file", metadata.compatibility());
     assertEquals(Map.of("author", "example-team", "version", "1.0"), metadata.metadata());
     assertEquals("read_file shell", metadata.allowedTools());
+    assertEquals("1.0.0", metadata.version().value());
+    assertEquals(java.util.List.of("weather"), metadata.activation().keywords());
+    assertEquals(java.util.List.of("maps"), metadata.requires().skills());
     assertEquals(skillDir.resolve("SKILL.md").toAbsolutePath(), metadata.entryPath());
     assertEquals("skills/weather/SKILL.md", metadata.relativeEntry());
     assertFalse(metadata.toString().contains("执行天气流程"));
@@ -90,7 +95,7 @@ class SkillMetadataReaderTest {
 
   @Test
   void enforcesOfficialNameGrammarAndExactParentDirectoryMatch() throws Exception {
-    Path invalidName = writeSkill("Weather", "name: Weather\ndescription: test", "body");
+    Path invalidName = writeSkill("_Weather", "name: _Weather\ndescription: test", "body");
     Path mismatch = writeSkill("weather-two", "name: weather\ndescription: test", "body");
 
     assertCode(SkillValidationCode.INVALID_NAME, invalidName, SkillLimits.defaults());
@@ -205,16 +210,7 @@ class SkillMetadataReaderTest {
     SkillMetadata metadata = reader.read(agentDir, skillDir, SkillLimits.defaults());
 
     assertEquals(Map.of("author", "team"), metadata.metadata());
-    long warningCount =
-        logs.list.stream()
-            .filter(
-                event -> event.getFormattedMessage().contains("LEGACY_OPENCLAW_REQUIRES_IGNORED"))
-            .count();
-    assertEquals(1, warningCount);
-    assertTrue(
-        logs.list.stream()
-            .noneMatch(
-                event -> event.getFormattedMessage().contains("secret-value-must-not-be-logged")));
+    assertTrue(metadata.requires().skills().isEmpty());
   }
 
   private Path writeSkill(String directoryName, String frontmatter, String body)

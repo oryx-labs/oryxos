@@ -3,9 +3,11 @@ package io.oryxos.web;
 import io.oryxos.core.profile.ProfileValidationException;
 import io.oryxos.core.skill.SkillConflictException;
 import io.oryxos.core.skill.SkillImportException;
+import io.oryxos.core.skill.SkillInUseException;
 import io.oryxos.core.skill.SkillPackageTooLargeException;
 import io.oryxos.core.skill.SkillValidationException;
 import io.oryxos.web.common.ApiResponse;
+import io.oryxos.web.controller.dto.SkillInUseErrorView;
 import io.oryxos.web.error.AgentTimeoutException;
 import io.oryxos.web.error.ProviderUnavailableException;
 import io.oryxos.web.error.ResourceNotFoundException;
@@ -77,6 +79,16 @@ public class GlobalExceptionHandler {
     LOG.warn("Skill import conflict: {}", sanitize(ex.getMessage()));
     return ResponseEntity.status(HttpStatus.CONFLICT)
         .body(ApiResponse.error(HttpStatus.CONFLICT.value(), ex.getMessage()));
+  }
+
+  /** 409 — normal delete reports a typed, freshly scanned Agent list without mutating anything. */
+  @ExceptionHandler(SkillInUseException.class)
+  public ResponseEntity<ApiResponse<SkillInUseErrorView>> handleSkillInUse(SkillInUseException ex) {
+    LOG.warn("Skill delete conflict: skill={}, linkedAgents={}", ex.skillName(), ex.linkedAgents());
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(
+            new ApiResponse<>(
+                HttpStatus.CONFLICT.value(), ex.getMessage(), SkillInUseErrorView.from(ex)));
   }
 
   /** 413 — core's authoritative streaming limits rejected the archive or expanded package. */
