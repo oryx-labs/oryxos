@@ -3,6 +3,44 @@ import { ref, reactive, computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
+import LoginView from './views/LoginView.vue'
+
+// —— 012-web-auth US3：登录守卫 —— 未登录先查 /api/v1/auth/me；登录页 LoginView 调 /auth/login
+const auth = reactive({ checking: true, enabled: true, username: null })
+async function checkAuth() {
+  auth.checking = true
+  try {
+    const res = await fetch('/api/v1/auth/me')
+    const body = await res.json()
+    if (res.status === 200 && body.code === 0) {
+      auth.enabled = body.data?.authenticationEnabled !== false
+      auth.username = body.data?.username || null
+    } else {
+      auth.enabled = true
+      auth.username = null
+    }
+  } catch (e) {
+    auth.enabled = true
+    auth.username = null
+  } finally {
+    auth.checking = false
+  }
+}
+checkAuth()
+
+function onLogined(username) {
+  auth.username = username
+}
+
+async function logout() {
+  try {
+    await fetch('/api/v1/auth/logout', { method: 'POST' })
+  } catch (e) {
+    /* 忽略，仍跳登录页 */
+  }
+  auth.username = null
+  active.value = 'overview'
+}
 
 // 顶层：概览 / Agent 列表 / 定时任务。「OS 运行时」下收纳 Provider/Tool/Sandbox/长期记忆/会话——
 // 这些都是底座本身的运行时状态，跟业务 Agent 管理分层展示（31 节：侧边栏重分组）。
@@ -968,7 +1006,12 @@ const outputRows = computed(() =>
 </script>
 
 <template>
-  <div class="layout">
+  <!-- 012-web-auth US3：未登录先显登录页；检查中显骨架屏（避免突兀的"加载中"文字） -->
+  <div v-if="auth.checking" class="boot-splash" aria-busy="true" aria-live="polite">
+    <div class="boot-spinner" aria-hidden="true"></div>
+  </div>
+  <LoginView v-else-if="auth.enabled && !auth.username" @logined="onLogined" />
+  <div v-else class="layout">
     <aside class="nav">
       <div class="brand">
         <img :src="logoUrl" alt="OryxOS" class="logo" />
@@ -1000,7 +1043,10 @@ const outputRows = computed(() =>
         </button>
       </template>
 
-      <div class="readonly">管理台</div>
+      <div class="auth-foot">
+        <span class="mono">{{ auth.username || '认证已关闭' }}</span>
+        <button v-if="auth.enabled" class="btn" @click="logout">登出</button>
+      </div>
     </aside>
 
     <main class="content">
@@ -1799,7 +1845,8 @@ const outputRows = computed(() =>
 .nav-group { display: flex; align-items: center; justify-content: space-between; }
 .chevron { color: var(--text-3); font-size: 11px; }
 .nav-sub { padding-left: 22px; font-size: 13px; }
-.readonly { margin-top: auto; color: var(--text-3); font-size: 12px; padding: 8px; }
+.auth-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-3); font-size: 12px; padding: 8px; }
+.auth-foot .mono { color: var(--text-2); }
 .content { flex: 1; padding: 24px 32px; overflow-x: auto; }
 h2 { font-weight: 600; margin: 0 0 16px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1939,4 +1986,23 @@ th { color: var(--text-2); font-weight: 500; }
 .chat-input { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
 
 @media (max-width: 640px) { .layout { flex-direction: column; } .nav { width: auto; flex-direction: row; flex-wrap: wrap; } .readonly { display: none; } .ws { flex-direction: column; } .ws-tree { width: auto; } }
+
+/* 启动闪屏：黑底居中 spinner，与登录页/管理台同色调，避免突兀文字 */
+.boot-splash {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.boot-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: boot-spin 0.7s linear infinite;
+}
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .boot-spinner { animation: none; } }
 </style>
