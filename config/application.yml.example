@@ -71,8 +71,18 @@ oryxos:
     - name: codex
       api-key: ""                # ← 可选：填入 Codex / OpenAI API Key（不用可删掉本条）
       base-url: https://ai.soulecho.cc   # codex 中转代理；OryxOS 运行时走 /v1/chat/completions
-    - name: mock                 # 内置假模型：不连真实模型、无需 key，无 key 自测全链路（生产可删）
+    # 内置 mock provider：不连真实模型、无需 key，用于无 key 自测全链路。
+    # 用它建/配一个 provider: mock 的 Agent，发一条"记住…"消息，即可在管理台看到
+    # 会话/记忆/工具端点被填充（一次 save_memory 工具调用 + 两轮 ReAct）。生产可删。
+    - name: mock
   # 「一句话生成 Agent 草稿」调 LLM 用的作者模型；provider 缺省取 providers 第一个
   author:
     provider: deepseek
     model: deepseek-chat
+  # 管理台 Basic Auth（012-web-auth）。默认关=裸内网现状不变；
+  # 开启后 /admin/** 需账密（/api/v1/** REST 不受影响）。
+  # 开启前先跑 `oryxos user add <username>` 建账号，否则启动阻断。
+  # web:
+  #   auth:
+  #     enabled: true
+  #     realm: OryxOS
