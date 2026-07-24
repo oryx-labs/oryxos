@@ -35,6 +35,7 @@ export default defineConfig({
         nav: [
           { text: 'Home', link: '/' },
           { text: 'Docs', link: '/docs/what' },
+          { text: 'Demo', link: 'http://demo.robustmq.com:1524/admin/' },
           { text: 'GitHub', link: 'https://github.com/oryx-labs/oryxos' },
         ],
         sidebar: {
@@ -83,6 +84,7 @@ export default defineConfig({
         nav: [
           { text: '首页', link: '/zh/' },
           { text: '文档', link: '/zh/docs/what' },
+          { text: 'Demo', link: 'http://demo.robustmq.com:1524/admin/' },
           { text: 'GitHub', link: 'https://github.com/oryx-labs/oryxos' },
         ],
         sidebar: {
