@@ -55,6 +55,8 @@ class ProviderRegistryBootstrapTest {
 
   @Test
   void existingProvider_isKeptWhenYamlKeyIsBlank() {
+    ProviderRegistryValidator validator = mock(ProviderRegistryValidator.class);
+    bootstrap = new ProviderRegistryBootstrap(validator);
     when(registry.exists("deepseek")).thenReturn(true);
     ProvidersProperties properties =
         new ProvidersProperties(
@@ -62,6 +64,7 @@ class ProviderRegistryBootstrapTest {
 
     bootstrap.seedMissing(registry, properties);
 
+    verify(validator, never()).violation(any());
     verify(registry, never()).save(any());
   }
 
