@@ -29,6 +29,11 @@ public class ProviderStartupCheck implements SmartInitializingSingleton {
   private final ProviderRegistry registry;
   private final ProviderRegistryValidator validator;
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification =
+          "ProviderRegistry is a shared Spring bean dependency and is intentionally retained; "
+              + "copying or wrapping it would break bean semantics.")
   public ProviderStartupCheck(ProviderRegistry registry, ProviderRegistryValidator validator) {
     this.registry = registry;
     this.validator = validator;
