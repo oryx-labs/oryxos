@@ -220,7 +220,7 @@ public class OryxOsRuntime {
     return new AgentStore(oryxosRoot());
   }
 
-  /** 30 节：Agent 生命周期编排。创建脚手架的 AGENT.md 模板里 provider 缺省取 oryxos.providers 第一个（保证可注册）。 */
+  /** 30 节：Agent 生命周期编排。创建脚手架的 AGENT.md 模板里 provider 缺省取最终注册表按名称排序后的第一项。 */
   @Bean
   AgentLifecycleService agentLifecycleService(
       AgentLoader agentLoader,
@@ -228,7 +228,7 @@ public class OryxOsRuntime {
       AgentScheduler agentScheduler,
       AgentStore agentStore,
       ProviderService providerService,
-      ProvidersProperties providers,
+      ProviderRegistry providerRegistry,
       Map<String, OryxTool> tools,
       NotifyChannelRegistry notifyChannelRegistry,
       io.oryxos.core.mcp.McpServerAdmin mcpServerAdmin,
@@ -238,8 +238,13 @@ public class OryxOsRuntime {
       @Value("${oryxos.author.provider:}") String authorProvider,
       @Value("${oryxos.author.model:}") String authorModel) {
     String defaultProvider =
-        providers.providers().isEmpty() ? null : providers.providers().get(0).name();
-    // 生成用 provider 缺省取 providers 第一个（宪法 III 显式映射的 key）
+        providerRegistry.list().stream()
+            .map(ProviderDef::name)
+            .filter(name -> name != null && !name.isBlank())
+            .sorted()
+            .findFirst()
+            .orElse(null);
+    // 生成用 provider 缺省取最终注册表的确定性默认；显式 oryxos.author.provider 仍按原行为覆盖。
     String genProvider =
         authorProvider == null || authorProvider.isBlank() ? defaultProvider : authorProvider;
     // 30 节：把真实工具清单 + notify 渠道注入作者提示词，让"一句话生成"只用真实能力、可直接运行
