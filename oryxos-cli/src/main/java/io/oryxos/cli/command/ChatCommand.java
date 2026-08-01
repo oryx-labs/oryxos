@@ -2,6 +2,8 @@ package io.oryxos.cli.command;
 
 import io.oryxos.channel.cli.CliChannel;
 import io.oryxos.cli.OryxOsRuntime;
+import io.oryxos.core.provider.ProviderRegistry;
+import io.oryxos.provider.ProviderRegistryValidator;
 import org.springframework.boot.Banner;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -24,8 +26,14 @@ public class ChatCommand implements Runnable {
             .web(WebApplicationType.NONE)
             .bannerMode(Banner.Mode.OFF)
             .run()) {
+      validateProviderRegistry(context);
       context.getBean(CliChannel.class).run(profileName, currentUser());
     }
+  }
+
+  static void validateProviderRegistry(ConfigurableApplicationContext context) {
+    ProviderRegistry registry = context.getBean(ProviderRegistry.class);
+    context.getBean(ProviderRegistryValidator.class).validate(registry);
   }
 
   /** 核心阶段无认证体系，"当前用户"取运行环境的系统用户名（clarify 既定默认）。 */

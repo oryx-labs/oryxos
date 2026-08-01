@@ -42,6 +42,8 @@ import io.oryxos.memory.MemoryServiceImpl;
 import io.oryxos.memory.SqliteMemoryStore;
 import io.oryxos.memory.builtin.MemoryTools;
 import io.oryxos.provider.ProviderChatModelFactory;
+import io.oryxos.provider.ProviderRegistryBootstrap;
+import io.oryxos.provider.ProviderRegistryValidator;
 import io.oryxos.provider.ProvidersProperties;
 import io.oryxos.provider.SpringAiProviderServiceImpl;
 import io.oryxos.provider.ToolSchemaAdapter;
@@ -136,17 +138,26 @@ public class OryxOsRuntime {
     return Path.of(oryxosRootProp);
   }
 
-  /** 31 节：Provider 动态注册表（SQLite）。启动把 config 的 oryxos.providers 播种进 DB（库里没有才写），之后以 DB 为准。 */
+  @Bean
+  ProviderRegistryValidator providerRegistryValidator() {
+    return new ProviderRegistryValidator();
+  }
+
+  @Bean
+  ProviderRegistryBootstrap providerRegistryBootstrap(ProviderRegistryValidator validator) {
+    return new ProviderRegistryBootstrap(validator);
+  }
+
+  /**
+   * 31 节：Provider 动态注册表（SQLite）。YAML 仅首次播种数据库中缺失且有效的条目；之后数据库为唯一事实源。
+   */
   @Bean
   ProviderRegistry providerRegistry(
-      LlmProviderRepository repository, ProvidersProperties properties) {
+      LlmProviderRepository repository,
+      ProvidersProperties properties,
+      ProviderRegistryBootstrap bootstrap) {
     ProviderRegistry registry = new JpaProviderRegistry(repository);
-    // 012-web-auth fix: 不在此处做严格校验——user 命令（WebApplicationType.NONE）不依赖 LLM，
-    // 不应因 api-key 未配而阻断账号管理。严格校验由 ProviderStartupCheck 在 serve/gateway 做。
-    for (ProvidersProperties.ProviderConfig c : properties.providers()) {
-      // 无条件 save（JpaProviderRegistry.save 本身是 upsert），确保 config 变更同步到 DB
-      registry.save(new ProviderDef(c.name(), c.apiKey(), c.baseUrl(), null));
-    }
+    bootstrap.seedMissing(registry, properties);
     return registry;
   }
 
