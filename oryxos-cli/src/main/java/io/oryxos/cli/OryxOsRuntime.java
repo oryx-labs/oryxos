@@ -148,9 +148,7 @@ public class OryxOsRuntime {
     return new ProviderRegistryBootstrap(validator);
   }
 
-  /**
-   * 31 节：Provider 动态注册表（SQLite）。YAML 仅首次播种数据库中缺失且有效的条目；之后数据库为唯一事实源。
-   */
+  /** 31 节：Provider 动态注册表（SQLite）。YAML 仅首次播种数据库中缺失且有效的条目；之后数据库为唯一事实源。 */
   @Bean
   ProviderRegistry providerRegistry(
       LlmProviderRepository repository,

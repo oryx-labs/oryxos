@@ -28,14 +28,12 @@ class ProviderConfigRestartTest {
         boot(workspace, dbUrl, "yaml-seed-key", "https://seed.example/v1")) {
       ProviderRegistry registry = first.getBean(ProviderRegistry.class);
       registry.save(
-          new ProviderDef(
-              "deepseek", "db-rotated-key", "https://db.example/v1", "managed"));
+          new ProviderDef("deepseek", "db-rotated-key", "https://db.example/v1", "managed"));
     }
 
     try (ConfigurableApplicationContext second =
         boot(workspace, dbUrl, "", "https://seed.example/v1")) {
-      ProviderDef restored =
-          second.getBean(ProviderRegistry.class).find("deepseek").orElseThrow();
+      ProviderDef restored = second.getBean(ProviderRegistry.class).find("deepseek").orElseThrow();
       assertEquals("db-rotated-key", restored.apiKey());
       assertEquals("https://db.example/v1", restored.baseUrl());
       assertEquals("managed", restored.description());

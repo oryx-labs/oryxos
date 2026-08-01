@@ -75,9 +75,7 @@ class ProviderRegistryBootstrapTest {
             List.of(new ProviderConfig("deepseek", " ", "https://seed.example/v1")));
     ProvidersProperties unresolved =
         new ProvidersProperties(
-            List.of(
-                new ProviderConfig(
-                    "kimi", "${KIMI_API_KEY}", "https://api.moonshot.cn/v1")));
+            List.of(new ProviderConfig("kimi", "${KIMI_API_KEY}", "https://api.moonshot.cn/v1")));
 
     bootstrap.seedMissing(registry, blank);
     bootstrap.seedMissing(registry, unresolved);

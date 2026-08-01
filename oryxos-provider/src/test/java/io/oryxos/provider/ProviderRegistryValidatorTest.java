@@ -52,8 +52,7 @@ class ProviderRegistryValidatorTest {
   void blankKey_failsWithoutLeakingOtherCredentialValues() {
     String secret = "must-not-leak";
     when(registry.list())
-        .thenReturn(
-            List.of(new ProviderDef("broken", " ", "https://broken.example/v1", secret)));
+        .thenReturn(List.of(new ProviderDef("broken", " ", "https://broken.example/v1", secret)));
 
     IllegalStateException error =
         assertThrows(IllegalStateException.class, () -> validator.validate(registry));

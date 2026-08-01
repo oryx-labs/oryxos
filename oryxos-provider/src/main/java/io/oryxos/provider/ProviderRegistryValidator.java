@@ -21,7 +21,10 @@ public final class ProviderRegistryValidator {
       Optional<String> violation = violation(provider);
       if (violation.isPresent()) {
         throw new IllegalStateException(
-            "provider " + safeName(provider == null ? null : provider.name()) + " " + violation.get());
+            "provider "
+                + safeName(provider == null ? null : provider.name())
+                + " "
+                + violation.get());
       }
       if (!names.add(provider.name())) {
         throw new IllegalStateException("Provider 注册表名称重复: " + safeName(provider.name()));
@@ -36,7 +39,9 @@ public final class ProviderRegistryValidator {
     if (MOCK.equals(provider.name())) {
       return Optional.empty();
     }
-    if (provider.apiKey() == null || provider.apiKey().isBlank() || provider.apiKey().contains("${")) {
+    if (provider.apiKey() == null
+        || provider.apiKey().isBlank()
+        || provider.apiKey().contains("${")) {
       return Optional.of("的 api-key 未配置");
     }
     if (provider.baseUrl() == null || provider.baseUrl().isBlank()) {
