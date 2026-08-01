@@ -4,7 +4,7 @@
 
 企业私有部署的 Agent 操作系统：**你用一句自然语言发布一个任务 → 底座把它拆解 → 组织一支 Agent 团队 → 多个 Agent 分工协作 → 交付一个结果。** 让每一家公司，都能用自然语言跑起来自己的 Agent。
 
-![OryxOS](../docs/images/logo.svg)
+![OryxOS](../website/public/images/logo.svg)
 
 ## 愿景
 
