@@ -26,14 +26,17 @@ public final class ProviderRegistryBootstrap {
           new ProviderDef(config.name(), config.apiKey(), config.baseUrl(), null);
       Optional<String> violation = validator.violation(candidate);
       if (violation.isPresent()) {
-        LOG.warn("跳过 provider {} 的启动播种: {}", safeName(config.name()), violation.get());
+        LOG.warn(
+            "跳过 provider {} 的启动播种: {}",
+            sanitizeLogValue(config.name()),
+            sanitizeLogValue(violation.get()));
         continue;
       }
       registry.save(candidate);
     }
   }
 
-  private static String safeName(String name) {
-    return name == null ? "<unknown>" : name.replace('\r', '_').replace('\n', '_');
+  private static String sanitizeLogValue(String value) {
+    return value == null ? "<unknown>" : value.replace('\r', '_').replace('\n', '_');
   }
 }

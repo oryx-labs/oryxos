@@ -7,13 +7,18 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.oryxos.core.provider.ProviderDef;
 import io.oryxos.core.provider.ProviderRegistry;
 import io.oryxos.provider.ProvidersProperties.ProviderConfig;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 
 class ProviderRegistryBootstrapTest {
 
@@ -80,6 +85,34 @@ class ProviderRegistryBootstrapTest {
     bootstrap.seedMissing(registry, blank);
     bootstrap.seedMissing(registry, unresolved);
 
+    verify(registry, never()).save(any());
+  }
+
+  @Test
+  void invalidProvider_logReasonCannotInjectNewline() {
+    ProviderRegistryValidator validator = mock(ProviderRegistryValidator.class);
+    when(validator.violation(any())).thenReturn(Optional.of("invalid\r\nforged"));
+    bootstrap = new ProviderRegistryBootstrap(validator);
+    Logger logger = (Logger) LoggerFactory.getLogger(ProviderRegistryBootstrap.class);
+    ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    boolean previousAdditive = logger.isAdditive();
+    appender.start();
+    logger.addAppender(appender);
+    logger.setAdditive(false);
+
+    try {
+      bootstrap.seedMissing(
+          registry,
+          new ProvidersProperties(
+              List.of(new ProviderConfig("deepseek", "test-key", "https://seed.example/v1"))));
+    } finally {
+      logger.detachAppender(appender);
+      logger.setAdditive(previousAdditive);
+      appender.stop();
+    }
+
+    assertEquals(1, appender.list.size());
+    assertEquals("invalid__forged", appender.list.getFirst().getArgumentArray()[1]);
     verify(registry, never()).save(any());
   }
 
