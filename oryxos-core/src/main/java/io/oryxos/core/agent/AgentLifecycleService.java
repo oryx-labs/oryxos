@@ -397,6 +397,16 @@ public class AgentLifecycleService {
     return profile;
   }
 
+  /** WorkspaceWatcher 刷新用（issue #61）：先注销旧定时，再按目录重注册。 */
+  public Profile refresh(Path agentDir) {
+    // 同名 Profile 已在册时先注销其旧定时：否则重复编辑会让旧 cron 句柄被
+    // registerProfile 覆盖而永不 cancel（句柄泄漏 + 同一任务双跑）。
+    // 首次出现（无旧 Profile）时 ifPresent 跳过，等价于 register。
+    String name = String.valueOf(agentDir.getFileName());
+    profileRegistry.get(name).ifPresent(agentScheduler::unregisterProfile);
+    return register(agentDir);
+  }
+
   public Optional<Profile> get(String name) {
     return profileRegistry.get(name);
   }
