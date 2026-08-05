@@ -18,8 +18,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * Profile（单请求测试永远测不出的串号 bug）。
  *
  * <p>并发（review 高危 4）：同一会话（sessionId）的并发请求在此按会话串行化。web 的 send/invoke/trigger 与定时触发
- * 都可能并发操作同一会话（Session 无锁 ArrayList + JpaSessionManager.save 整段覆写），不加锁会 last-write-wins 丢消息。
- * 锁是进程内、按 sessionId 隔离——跨会话并行不受影响（宪法 VII 虚拟线程并发仍成立）。
+ * 都可能并发操作同一会话（Session 无锁 ArrayList + JpaSessionManager.save 整段覆写），不加锁会 last-write-wins 丢消息。 锁是进程内、按
+ * sessionId 隔离——跨会话并行不受影响（宪法 VII 虚拟线程并发仍成立）。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
@@ -49,7 +49,8 @@ public class AgentService {
 
   public String process(Session session, String userMessage) {
     // 同一会话的读写整段互斥；sessionId 理论上永不为 null（来自 SessionManager），mock 场景兜底防 NPE
-    String sessionKey = session.sessionId() == null ? profileNameOrFallback(session) : session.sessionId();
+    String sessionKey =
+        session.sessionId() == null ? profileNameOrFallback(session) : session.sessionId();
     Lock lock = sessionLocks.computeIfAbsent(sessionKey, id -> new ReentrantLock());
     lock.lock();
     try {

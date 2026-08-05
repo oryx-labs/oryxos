@@ -18,8 +18,8 @@ import org.springframework.ai.tool.annotation.ToolParam;
 /**
  * 内置 Shell 工具：执行 bash 命令，带超时兜底——命令挂死不能拖死整个 ReAct 循环。
  *
- * <p>命令首词白名单归 24 节（SHELL_COMMAND 检查位已过 enforce，含命令注入元字符扫描）；超时默认 30 秒。 两个运维细节（review 高危 6）：
- * (1) stdout/stderr 在 waitFor 前就并发排空——否则输出超过管道缓冲（~64KB）的命令会写阻塞、被误判超时； (2) 超时后递归杀进程树——{@code bash -c}
+ * <p>命令首词白名单归 24 节（SHELL_COMMAND 检查位已过 enforce，含命令注入元字符扫描）；超时默认 30 秒。 两个运维细节（review 高危 6）： (1)
+ * stdout/stderr 在 waitFor 前就并发排空——否则输出超过管道缓冲（~64KB）的命令会写阻塞、被误判超时； (2) 超时后递归杀进程树——{@code bash -c}
  * 派生的孙进程不在 bash 的进程组内，只杀 bash 会留孤儿继续跑。
  */
 public class ShellTools {
@@ -28,6 +28,7 @@ public class ShellTools {
   static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
 
   /** 排空子进程输出的虚拟线程执行器（宪法 VII）：流读取是 IO 等待，虚拟线程天然适配。 */
+  @SuppressWarnings("PMD.ThreadPoolCreationRule") // Java 21 虚拟线程无池参数可配，非 P3C 针对的固定线程池反模式。
   private static final ExecutorService DRAINER = Executors.newVirtualThreadPerTaskExecutor();
 
   private final Sandbox sandbox;

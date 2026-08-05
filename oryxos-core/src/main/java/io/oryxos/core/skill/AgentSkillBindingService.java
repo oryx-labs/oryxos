@@ -177,8 +177,8 @@ public class AgentSkillBindingService implements AgentSkillBindingReader {
 
   /**
    * 返回 Agent 的 skills/ 绑定目录，但先校验它不是一个越界符号链接（review 高危 5）。 skills/ 被替换成指向任意目录的软链接时，
-   * bind/unbind/replaceBindings 会直接在那里面建/删链接——写操作前必须确认其真实路径仍落在 Agent 目录内。 目录不存在时投影到
-   * Agent 目录下的正常位置（真实路径仍在 agentDir 内），放行。
+   * bind/unbind/replaceBindings 会直接在那里面建/删链接——写操作前必须确认其真实路径仍落在 Agent 目录内。 目录不存在时投影到 Agent
+   * 目录下的正常位置（真实路径仍在 agentDir 内），放行。
    */
   private Path requireRealSkillsDir(Path agentDir) {
     Path linksDir = agentDir.resolve("skills");

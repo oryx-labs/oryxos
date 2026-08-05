@@ -17,11 +17,11 @@ import io.oryxos.core.provider.ProviderRegistry;
 import io.oryxos.web.GlobalExceptionHandler;
 import io.oryxos.web.provider.ProviderModelsService;
 import java.util.Optional;
-import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -110,17 +110,16 @@ class ProviderApiControllerTest {
         .thenReturn(
             Optional.of(
                 new ProviderDef("kimi", "sk-secretvalue", "https://api.moonshot.cn", "月之暗面")));
-    when(registry.save(any()))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
     mvc.perform(
             put("/api/v1/providers/kimi")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
-                    "{\"apiKey\":\"****value\",\"baseUrl\":\"https://api.moonshot.cn\",\"description\":\"月之暗面\"}"))
+                    "{\"apiKey\":\"****alue\",\"baseUrl\":\"https://api.moonshot.cn\",\"description\":\"月之暗面\"}"))
         .andExpect(status().isOk());
 
-    // 掩码（****value）被识别为未修改，落库的仍是原 key sk-secretvalue
+    // 掩码（****alue，mask() 留末 4 位）被识别为未修改，落库的仍是原 key sk-secretvalue
     ArgumentCaptor<ProviderDef> captor = ArgumentCaptor.forClass(ProviderDef.class);
     verify(registry).save(captor.capture());
     Assertions.assertEquals("sk-secretvalue", captor.getValue().apiKey());

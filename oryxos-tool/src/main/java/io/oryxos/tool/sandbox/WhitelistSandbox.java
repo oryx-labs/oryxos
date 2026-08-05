@@ -163,8 +163,8 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   /**
-   * 命令串是否含可被 bash 解释为"追加执行/命令替换/重定向"的元字符。逐字符状态机：单引号内全字面； 双引号内仅 {@code $}、{@code `} 仍特殊（命令替换在双引号内照常执行）；引号外所有分隔/替换/重定向符一律拒绝。
-   * 反斜杠转义跳过下一字符。未闭合引号视为不合法命令，拒绝。
+   * 命令串是否含可被 bash 解释为"追加执行/命令替换/重定向"的元字符。逐字符状态机：单引号内全字面； 双引号内仅 {@code $}、{@code `}
+   * 仍特殊（命令替换在双引号内照常执行）；引号外所有分隔/替换/重定向符一律拒绝。 反斜杠转义跳过下一字符。未闭合引号视为不合法命令，拒绝。
    */
   private static boolean hasShellInjection(String command) {
     boolean inSingle = false;

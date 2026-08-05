@@ -64,8 +64,8 @@ public class AgentScheduler {
 
   /**
    * 可注销句柄表（为 30 节运行时注销/更新 Agent 铺路）。 键是 {@code profileName@taskId} 复合（review 高危 7）：schedule id 只在
-   * 单个 Agent 内唯一，跨 Agent 撞 id 时若用裸 taskId 作键，后注册覆盖先注册的句柄（旧 future 泄漏、任务双跑）， 删除先注册的 Agent 还会
-   * cancel 掉另一个 Agent 的任务。
+   * 单个 Agent 内唯一，跨 Agent 撞 id 时若用裸 taskId 作键，后注册覆盖先注册的句柄（旧 future 泄漏、任务双跑）， 删除先注册的 Agent 还会 cancel
+   * 掉另一个 Agent 的任务。
    */
   private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
 

@@ -157,7 +157,8 @@ class WhitelistSandboxTest {
       // 引号/转义不追加执行：允许
       assertDoesNotThrow(
           () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "echo \"a;b\"")));
-      assertDoesNotThrow(() -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "echo 'a;b'")));
+      assertDoesNotThrow(
+          () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "echo 'a;b'")));
     }
 
     @Test

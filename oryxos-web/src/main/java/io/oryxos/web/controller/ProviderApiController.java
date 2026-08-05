@@ -81,7 +81,10 @@ public class ProviderApiController {
             .orElseThrow(() -> new ResourceNotFoundException("provider 不存在: " + name)); // → 404
     validate(name, req.baseUrl());
     // 前端编辑表单回填的是掩码值；提交掩码 = 未修改，保留原 key——否则打码值会覆盖真实 key
-    String apiKey = ProviderView.mask(existing.apiKey()).equals(req.apiKey()) ? existing.apiKey() : req.apiKey();
+    String apiKey =
+        ProviderView.mask(existing.apiKey()).equals(req.apiKey())
+            ? existing.apiKey()
+            : req.apiKey();
     ProviderDef saved =
         registry.save(new ProviderDef(name, apiKey, req.baseUrl(), req.description()));
     return ApiResponse.ok(ProviderView.from(saved));
