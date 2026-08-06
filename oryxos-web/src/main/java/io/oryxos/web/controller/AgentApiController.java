@@ -202,9 +202,7 @@ public class AgentApiController {
     if (req.content().length() > MAX_MESSAGE_LENGTH) {
       throw new IllegalArgumentException("消息超过 32KB 上限"); // → 400
     }
-    if (profileRegistry.get(name).isEmpty()) {
-      throw new ResourceNotFoundException("Agent 不存在: " + name); // → 404
-    }
+    requireAgent(name);
     Session session = sessionManager.getOrCreate(INVOKE_CHANNEL, DEFAULT_USER, name);
     String reply = agentService.process(session, req.content());
     return ApiResponse.ok(new MessageResponse(reply));
@@ -213,18 +211,14 @@ public class AgentApiController {
   /** 这个 Agent 的专属长期记忆（30 节：记忆跟着 Agent 走）。 */
   @GetMapping("/{name}/memory")
   public ApiResponse<String> memory(@PathVariable String name) {
-    if (profileRegistry.get(name).isEmpty()) {
-      throw new ResourceNotFoundException("Agent 不存在: " + name); // → 404
-    }
+    requireAgent(name);
     return ApiResponse.ok(memoryService.readAll(name));
   }
 
   /** 这个 Agent 的固定管理台会话（getOrCreate 幂等 → 恒为同一条，历史自动恢复）。 */
   @GetMapping("/{name}/session")
   public ApiResponse<SessionView> consoleSession(@PathVariable String name) {
-    if (profileRegistry.get(name).isEmpty()) {
-      throw new ResourceNotFoundException("Agent 不存在: " + name); // → 404
-    }
+    requireAgent(name);
     Session session = sessionManager.getOrCreate(CONSOLE_CHANNEL, CONSOLE_USER, name);
     return ApiResponse.ok(
         new SessionView(session.sessionId(), session.profileName(), recent(session.messages())));
@@ -240,9 +234,7 @@ public class AgentApiController {
     if (req.content().length() > MAX_MESSAGE_LENGTH) {
       throw new IllegalArgumentException("消息超过 32KB 上限"); // → 400
     }
-    if (profileRegistry.get(name).isEmpty()) {
-      throw new ResourceNotFoundException("Agent 不存在: " + name); // → 404
-    }
+    requireAgent(name);
     Session session = sessionManager.getOrCreate(CONSOLE_CHANNEL, CONSOLE_USER, name);
     return ApiResponse.ok(new MessageResponse(agentService.process(session, req.content())));
   }
@@ -254,9 +246,7 @@ public class AgentApiController {
   @PostMapping("/{name}/trigger")
   public ApiResponse<TriggerResponse> trigger(
       @PathVariable String name, @RequestBody(required = false) MessageRequest req) {
-    if (profileRegistry.get(name).isEmpty()) {
-      throw new ResourceNotFoundException("Agent 不存在: " + name); // → 404
-    }
+    requireAgent(name);
     String message =
         req == null || req.content() == null || req.content().isBlank()
             ? DEFAULT_TRIGGER_MESSAGE
@@ -277,9 +267,7 @@ public class AgentApiController {
   /** 该 Agent 的执行历史（手动触发 + 定时触发，起止时间 / 状态 / 时长），按开始时间倒序，最多 50 条。 */
   @GetMapping("/{name}/executions")
   public ApiResponse<List<AgentExecutionView>> executions(@PathVariable String name) {
-    if (profileRegistry.get(name).isEmpty()) {
-      throw new ResourceNotFoundException("Agent 不存在: " + name); // → 404
-    }
+    requireAgent(name);
     return ApiResponse.ok(
         executionService.history(name, MAX_EXECUTION_HISTORY).stream()
             .map(AgentExecutionView::from)
