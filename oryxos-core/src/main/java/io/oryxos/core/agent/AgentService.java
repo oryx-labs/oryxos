@@ -8,13 +8,15 @@ import io.oryxos.core.session.Message;
 import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 一次处理的编排者：三种触发源（CLI / Web / 定时）最终都调同一个 {@link #process}。
+ * 一次处理的编排者：有状态触发源（CLI / Web 会话 / 定时 / 管理台）走 {@link #process}；无状态 Web invoke 走 {@link
+ * #processStateless}。
  *
  * <p>ProfileContext 生命周期在此收口：入口 set、出口 finally clear——即使循环中途抛异常也必须清， 否则复用线程的下一个请求会拿到别人的
  * Profile（单请求测试永远测不出的串号 bug）。
@@ -29,6 +31,7 @@ import java.util.concurrent.locks.ReentrantLock;
 public class AgentService {
 
   private static final int MEMORY_LINE_MAX = 200;
+  private static final String STATELESS_EXECUTION_ID_PREFIX = "invoke-exec:";
 
   /** 会话 id → 该会话的串行锁。会话数是有限的（channel:user:profile 三元组），增长有界，可接受。 */
   private final ConcurrentMap<String, Lock> sessionLocks = new ConcurrentHashMap<>();
@@ -85,6 +88,31 @@ public class AgentService {
       }
     } finally {
       lock.unlock(); // 无论成功失败必须放锁，否则该会话永久卡死
+    }
+  }
+
+  /**
+   * 无状态调用：使用带唯一执行标识的内存 Session，不创建或更新持久会话。
+   *
+   * <p>单次请求内的 ReAct 多轮仍完整执行；审计沿用 Session 标识关联到本次执行，请求结束后临时消息丢弃。
+   */
+  public String processStateless(String agentName, String userMessage) {
+    Profile profile =
+        profileRegistry
+            .get(agentName)
+            .orElseThrow(() -> new IllegalStateException("Agent 不存在: " + agentName));
+    Session session =
+        new Session(STATELESS_EXECUTION_ID_PREFIX + UUID.randomUUID(), profile.name());
+    ProfileContext.set(profile);
+    try {
+      String reply = reActLoop.run(session, userMessage, profile);
+      if (ReActLoop.MAX_ITERATIONS_REPLY.equals(reply)) {
+        throw new AgentMaxIterationsExceededException(reply);
+      }
+      recordTrigger(profile.name(), userMessage, reply);
+      return reply;
+    } finally {
+      ProfileContext.clear();
     }
   }
 

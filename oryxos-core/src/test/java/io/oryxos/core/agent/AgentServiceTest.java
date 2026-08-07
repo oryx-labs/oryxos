@@ -1,10 +1,12 @@
 package io.oryxos.core.agent;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 /** 课件《第17节》验收 harness：AgentServiceTest——统一入口与 ProfileContext 生命周期。 */
 class AgentServiceTest {
@@ -193,5 +196,37 @@ class AgentServiceTest {
 
     assertEquals(List.of("问题3", "问题4"), latest.messages().stream().map(Message::content).toList());
     verify(sessionManager).saveIfUnchanged(latest, baseline);
+  }
+
+  @Test
+  @DisplayName("无状态处理不保存会话且每次使用独立审计标识")
+  void statelessProcessingDoesNotSaveSessionAndUsesUniqueExecutionIds() {
+    when(reActLoop.run(any(), any(), any())).thenReturn("无状态答复");
+
+    assertEquals("无状态答复", agentService.processStateless("ops-agent", "first"));
+    assertEquals("无状态答复", agentService.processStateless("ops-agent", "second"));
+
+    ArgumentCaptor<Session> sessions = ArgumentCaptor.forClass(Session.class);
+    verify(reActLoop, org.mockito.Mockito.times(2)).run(sessions.capture(), any(), eq(profile));
+    String firstExecutionId = sessions.getAllValues().get(0).sessionId();
+    String secondExecutionId = sessions.getAllValues().get(1).sessionId();
+    assertTrue(firstExecutionId.startsWith("invoke-exec:"));
+    assertTrue(secondExecutionId.startsWith("invoke-exec:"));
+    assertNotEquals(firstExecutionId, secondExecutionId);
+    verify(sessionManager, never()).save(any());
+    assertNull(ProfileContext.current());
+  }
+
+  @Test
+  @DisplayName("无状态处理达到迭代上限仍抛异常且不保存会话")
+  void statelessMaxIterationsThrowsWithoutSavingSession() {
+    when(reActLoop.run(any(), any(), any())).thenReturn(ReActLoop.MAX_ITERATIONS_REPLY);
+
+    assertThrows(
+        AgentMaxIterationsExceededException.class,
+        () -> agentService.processStateless("ops-agent", "hi"));
+
+    verify(sessionManager, never()).save(any());
+    assertNull(ProfileContext.current());
   }
 }

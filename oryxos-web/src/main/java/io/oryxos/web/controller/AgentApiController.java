@@ -43,7 +43,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Agent 端点（第 26 节的 invoke + 第 30 节的动态管理 CRUD）：generate/create/get/list/update/delete 薄转发给 {@link
- * AgentLifecycleService}；invoke 走 {@link AgentService#process} 同一入口。
+ * AgentLifecycleService}；invoke 走 {@link AgentService#processStateless}，不创建持久会话。
  *
  * <p>错误码复用既有：name 冲突 / 定义非法 → 400（`IllegalArgumentException`/`ProfileValidationException`）； 不存在 →
  * 404（`ResourceNotFoundException`）；统一 `ApiResponse` 信封。
@@ -58,8 +58,6 @@ public class AgentApiController {
 
   private static final int MAX_MESSAGE_LENGTH = 32 * 1024;
   private static final int MAX_HISTORY_MESSAGES = 100;
-  private static final String INVOKE_CHANNEL = "invoke";
-  private static final String DEFAULT_USER = "default";
   // 管理台「一个 Agent 一个固定会话」：固定 channel+user，profile=Agent 名 → 每个 Agent 恰好一条会话（上下文累积）。
   private static final String CONSOLE_CHANNEL = "admin";
   private static final String CONSOLE_USER = "console";
@@ -203,8 +201,7 @@ public class AgentApiController {
       throw new IllegalArgumentException("消息超过 32KB 上限"); // → 400
     }
     requireAgent(name);
-    Session session = sessionManager.getOrCreate(INVOKE_CHANNEL, DEFAULT_USER, name);
-    String reply = agentService.process(session, req.content());
+    String reply = agentService.processStateless(name, req.content());
     return ApiResponse.ok(new MessageResponse(reply));
   }
 
