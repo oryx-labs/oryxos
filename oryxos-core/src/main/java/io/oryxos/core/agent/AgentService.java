@@ -4,8 +4,10 @@ import io.oryxos.core.memory.MemoryScope;
 import io.oryxos.core.memory.MemoryService;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
+import io.oryxos.core.session.Message;
 import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.Lock;
@@ -19,7 +21,7 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * <p>并发（review 高危 4）：同一会话（sessionId）的并发请求在此按会话串行化。web 的 send/invoke/trigger 与定时触发
  * 都可能并发操作同一会话（Session 无锁 ArrayList + JpaSessionManager.save 整段覆写），不加锁会 last-write-wins 丢消息。 锁是进程内、按
- * sessionId 隔离——跨会话并行不受影响（宪法 VII 虚拟线程并发仍成立）。
+ * sessionId 隔离——跨会话并行不受影响（宪法 VII 虚拟线程并发仍成立）。进入锁后必须重读最新快照；保存时再由 SessionManager 做条件更新， 防止跨进程旧快照静默覆盖。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
@@ -54,20 +56,25 @@ public class AgentService {
     Lock lock = sessionLocks.computeIfAbsent(sessionKey, id -> new ReentrantLock());
     lock.lock();
     try {
+      // Controller / Channel 在进入本锁前已拿到 Session；等待锁期间它可能过期，因此必须在锁内重读。
+      Session activeSession = sessionManager.get(sessionKey).orElse(session);
+      List<Message> expectedMessages = activeSession.messages();
       Profile profile =
           profileRegistry
-              .get(session.profileName())
+              .get(activeSession.profileName())
               .orElseThrow(
                   () ->
                       new IllegalStateException(
-                          "Session 引用的 Profile 不存在: " + session.profileName()));
+                          "Session 引用的 Profile 不存在: " + activeSession.profileName()));
       ProfileContext.set(profile); // 工具执行时靠它知道"当前是哪个 Agent"
       try {
-        String reply = reActLoop.run(session, userMessage, profile);
+        String reply = reActLoop.run(activeSession, userMessage, profile);
         // 达到最大迭代上限时 ReAct 返回占位文本（不抛异常），这里检测并转为异常，
         // 让 triggerAsync 把执行记成失败状态（否则前端显示"执行成功"——错误引导用户）
         boolean exhausted = ReActLoop.MAX_ITERATIONS_REPLY.equals(reply);
-        sessionManager.save(session); // 无论是正常结束还是迭代耗尽，保存现场供审计/排查
+        activeSession.retainRecentTurns(profile.settings().maxHistoryTurns());
+        // 无论正常结束还是迭代耗尽都保存现场；条件更新确保跨进程旧快照不会覆盖新历史。
+        sessionManager.saveIfUnchanged(activeSession, expectedMessages);
         if (exhausted) {
           throw new AgentMaxIterationsExceededException(reply);
         }

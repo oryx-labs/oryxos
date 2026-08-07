@@ -3,6 +3,7 @@ package io.oryxos.core.agent;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -10,7 +11,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -57,6 +60,25 @@ class ToolExecutorTest {
             eq(true),
             isNull(),
             anyLong());
+  }
+
+  @Test
+  @DisplayName("审计失败向上抛出且不重试工具或审计")
+  void auditFailurePropagatesWithoutRetry() {
+    when(httpGet.execute(any())).thenReturn(ToolResult.ok("ok"));
+    doThrow(new IllegalStateException("audit unavailable"))
+        .when(auditor)
+        .record(eq("s-1"), eq("http_get"), anyString(), eq("ok"), eq(true), isNull(), anyLong());
+
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "{}")));
+
+    assertEquals("audit unavailable", error.getMessage());
+    verify(httpGet, times(1)).execute(any());
+    verify(auditor, times(1))
+        .record(eq("s-1"), eq("http_get"), anyString(), eq("ok"), eq(true), isNull(), anyLong());
   }
 
   @Test

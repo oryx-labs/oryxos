@@ -7,6 +7,7 @@ import io.oryxos.core.session.Message;
 import io.oryxos.core.session.SessionManager;
 import io.oryxos.core.session.SessionStats;
 import io.oryxos.core.session.SessionSummary;
+import io.oryxos.core.session.SessionUpdateConflictException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +62,19 @@ public class JpaSessionManager implements SessionManager {
     entity.setMessagesJson(writeMessages(session.messages()));
     entity.setLastActiveAt(Instant.now());
     repository.save(entity);
+  }
+
+  @Override
+  public void saveIfUnchanged(
+      io.oryxos.core.session.Session session, List<Message> expectedMessages) {
+    String expectedJson = writeMessages(expectedMessages == null ? List.of() : expectedMessages);
+    String messagesJson = writeMessages(session.messages());
+    int updated =
+        repository.updateMessagesIfUnchanged(
+            session.sessionId(), expectedJson, messagesJson, Instant.now());
+    if (updated != 1) {
+      throw new SessionUpdateConflictException(safeId(session));
+    }
   }
 
   @Override

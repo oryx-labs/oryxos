@@ -65,30 +65,37 @@ public class SpringAiProviderServiceImpl implements ProviderService {
     ChatModel model = resolveModel(def);
     Prompt prompt = buildPrompt(profile, request);
     long startedAt = System.currentTimeMillis();
+    ProviderResponse result;
     try {
       ChatResponse response = model.call(prompt);
-      ProviderResponse result = toProviderResponse(response);
-      audit.record(
-          sessionId,
-          providerName,
-          profile.provider().model(),
-          result.usage(),
-          true,
-          null,
-          System.currentTimeMillis() - startedAt);
-      return result;
+      result = toProviderResponse(response);
     } catch (RuntimeException e) {
       // 失败也留痕（宪法 V）：先落审计再上抛——只记成功不记失败，一次真实事故就没有痕迹
-      audit.record(
-          sessionId,
-          providerName,
-          profile.provider().model(),
-          null,
-          false,
-          e.getMessage(),
-          System.currentTimeMillis() - startedAt);
+      try {
+        audit.record(
+            sessionId,
+            providerName,
+            profile.provider().model(),
+            null,
+            false,
+            e.getMessage(),
+            System.currentTimeMillis() - startedAt);
+      } catch (RuntimeException auditFailure) {
+        auditFailure.addSuppressed(e);
+        throw auditFailure;
+      }
       throw e;
     }
+    // 成功审计放在模型异常边界之外，避免审计失败被误记成一次模型调用失败。
+    audit.record(
+        sessionId,
+        providerName,
+        profile.provider().model(),
+        result.usage(),
+        true,
+        null,
+        System.currentTimeMillis() - startedAt);
+    return result;
   }
 
   /** 按 name+key+url 缓存构建好的 ChatModel；参数变化即换缓存键、下次重建（provider CRUD 改了配置立即生效）。 */

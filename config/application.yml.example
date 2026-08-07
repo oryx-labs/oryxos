@@ -20,6 +20,10 @@ server:
 spring:
   datasource:
     url: jdbc:sqlite:oryxos.db  # SQLite 数据文件（会话 + 审计表），相对启动目录
+    hikari:
+      data-source-properties:
+        journal_mode: WAL        # 允许读写并发，避免默认 rollback journal 放大锁竞争
+        busy_timeout: 5000       # 短暂写锁时最多等待 5 秒，而不是立即报 database is locked
   threads:
     virtual:
       enabled: true             # 宪法七：Java 21 虚拟线程扛并发，不引入异步框架

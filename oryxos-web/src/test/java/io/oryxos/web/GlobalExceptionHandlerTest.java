@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.oryxos.core.session.SessionUpdateConflictException;
 import io.oryxos.web.error.AgentTimeoutException;
 import io.oryxos.web.error.ProviderUnavailableException;
 import io.oryxos.web.error.ResourceNotFoundException;
@@ -73,6 +74,15 @@ class GlobalExceptionHandlerTest {
   }
 
   @Test
+  @DisplayName("会话旧快照冲突_映射409并提示重新获取")
+  void sessionUpdateConflictMaps409() throws Exception {
+    mvc.perform(MockMvcRequestBuilders.get("/throw/session-conflict"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value(409))
+        .andExpect(jsonPath("$.message").value(containsString("重新获取")));
+  }
+
+  @Test
   @DisplayName("内部异常细节_绝不能出现在500响应里")
   void internalDetailsNeverLeakIn500() throws Exception {
     mvc.perform(MockMvcRequestBuilders.get("/throw/internal"))
@@ -108,6 +118,11 @@ class GlobalExceptionHandlerTest {
     @GetMapping("/throw/timeout")
     void timeout() {
       throw new AgentTimeoutException("Agent 调用超过 60 秒");
+    }
+
+    @GetMapping("/throw/session-conflict")
+    void sessionConflict() {
+      throw new SessionUpdateConflictException("s-x");
     }
 
     @GetMapping("/throw/internal")

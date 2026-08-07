@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
 /**
  * LlmCallAuditor 的 JPA 实现。
  *
- * <p>research D5：审计自身失败只记 ERROR、不上抛——可用性优先，审计故障不阻断模型调用主链路。
+ * <p>审计写入失败时 fail-closed：记录错误并抛出异常，防止主链路在没有审计记录的情况下返回成功。
  */
 public class JpaLlmCallAuditor implements LlmCallAuditor {
 
@@ -44,7 +44,8 @@ public class JpaLlmCallAuditor implements LlmCallAuditor {
       record.setDurationMs(durationMs);
       repository.save(record);
     } catch (RuntimeException e) {
-      LOG.error("llm_calls 审计写入失败（不阻断调用）: {}", sanitize(e.getMessage()));
+      LOG.error("llm_calls 审计写入失败: {}", sanitize(e.getMessage()));
+      throw new IllegalStateException("llm_calls 审计写入失败", e);
     }
   }
 
