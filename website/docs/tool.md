@@ -45,7 +45,7 @@ About two dozen tools ship with OryxOS core — a set of **universal primitives*
 | `move_file` | `FileTools` | Move / rename a file | Path whitelist (source + target) |
 | `copy_file` | `FileTools` | Copy a file | Path whitelist (source + target) |
 | `delete_file` | `FileTools` | Delete a file (never a directory) | Path whitelist |
-| `shell` | `ShellTools` | Execute a shell command | Command first-token whitelist + timeout |
+| `shell` | `ShellTools` | Execute a shell command | Command whitelist + metacharacter scan + timeout |
 | `http_get` / `http_post` | `HttpTools` | HTTP GET / POST | Domain wildcard whitelist |
 | `http_request` | `HttpTools` | HTTP with any method (GET/POST/PUT/PATCH/DELETE) + headers | Domain wildcard whitelist |
 | `fetch_webpage` | `HttpTools` | Fetch a URL and extract readable text (strip HTML) | Domain wildcard whitelist |
@@ -132,7 +132,7 @@ Each entry carries comments on prerequisites (Node.js/`npx` or `uv`/`uvx` on the
 
 `SandboxChecker` runs before every tool invocation. It enforces three independent whitelists configured as top-level keys in `application.yml`. An empty list means **deny-all** — the sandbox is closed by default and you widen it explicitly, following least privilege. The configured workspace root is added to the file whitelist automatically at runtime.
 
-**File path whitelist** — applies to `read_file`, `write_file`, `list_dir`. The requested path must match at least one entry.
+**File path whitelist** — applies to `read_file`, `write_file`, `list_dir`. The requested path's real target must remain under at least one entry; symlinks cannot escape an allowed root.
 
 ```yaml
 file:
@@ -141,17 +141,18 @@ file:
     - /tmp/oryxos
 ```
 
-**Shell command whitelist** — applies to `shell`. Only the first token of the command is checked (the executable name). Arguments are not restricted by the whitelist.
+**Shell command whitelist** — applies to `shell`. The executable (first token) must be listed, and shell control, substitution, and redirection metacharacters such as `;`, `&&`, `|`, `$()`, backticks, newlines, and `>` are rejected. Quoted literal punctuation remains valid. Arguments are not independently restricted.
 
 ```yaml
 shell:
   allowed_commands:
     - ls
     - cat
+    - echo
     - grep
-    - python3
-  timeout_seconds: 30
 ```
+
+The shell whitelist is an independent capability boundary. Adding an interpreter or shell such as `python`, `python3`, `sh`, or `bash` grants the agent the capabilities of that executable and can bypass the file and HTTP tool policies. They are deliberately excluded from the default configuration. Add such entries only for trusted scripts and only when that broader authority is intentional.
 
 **HTTP domain whitelist** — applies to `http_get` and `http_post`. Supports `*` as a prefix wildcard.
 
