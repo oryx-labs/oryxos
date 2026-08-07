@@ -17,6 +17,10 @@ spring:
   datasource:
     url: jdbc:sqlite:oryxos.db
     driver-class-name: org.sqlite.JDBC
+    hikari:
+      data-source-properties:
+        journal_mode: WAL
+        busy_timeout: 5000
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:

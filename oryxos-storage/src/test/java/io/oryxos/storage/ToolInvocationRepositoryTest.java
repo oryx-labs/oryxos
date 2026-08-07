@@ -1,9 +1,9 @@
 package io.oryxos.storage;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -77,13 +77,17 @@ class ToolInvocationRepositoryTest {
   }
 
   @Test
-  @DisplayName("审计实现自吞异常_不阻断工具结果返回")
-  void auditorSwallowsItsOwnFailureWithoutBreakingMainPath() {
+  @DisplayName("审计写入失败_必须阻断工具结果返回")
+  void auditFailureStopsToolResultFromReturning() {
     ToolInvocationRepository broken = mock(ToolInvocationRepository.class);
     when(broken.save(any())).thenThrow(new RuntimeException("db locked"));
     JpaToolInvocationAuditor auditor = new JpaToolInvocationAuditor(broken);
 
-    // 口径同 16 节 D5：审计自身失败只记 ERROR，不上抛
-    assertDoesNotThrow(() -> auditor.record("s-3", "http_get", "{}", null, true, null, 1L));
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> auditor.record("s-3", "http_get", "{}", null, true, null, 1L));
+    assertTrue(error.getMessage().contains("tool_invocations"));
+    assertEquals("db locked", error.getCause().getMessage());
   }
 }

@@ -46,6 +46,31 @@ public class Session {
     return List.copyOf(messages);
   }
 
+  /** 最近 N 个完整用户轮次；一轮从 user 消息开始，包含其后的 assistant / tool 消息。 */
+  public List<Message> recentTurns(int maxHistoryTurns) {
+    if (maxHistoryTurns <= 0) {
+      return List.of();
+    }
+    List<Integer> turnStarts = new ArrayList<>();
+    for (int i = 0; i < messages.size(); i++) {
+      if (Message.ROLE_USER.equals(messages.get(i).role())) {
+        turnStarts.add(i);
+      }
+    }
+    if (turnStarts.size() <= maxHistoryTurns) {
+      return messages();
+    }
+    int from = turnStarts.get(turnStarts.size() - maxHistoryTurns);
+    return List.copyOf(messages.subList(from, messages.size()));
+  }
+
+  /** 原地只保留最近 N 个完整用户轮次，用于限制持久化历史的长期增长。 */
+  public void retainRecentTurns(int maxHistoryTurns) {
+    List<Message> retained = recentTurns(maxHistoryTurns);
+    messages.clear();
+    messages.addAll(retained);
+  }
+
   public void appendUser(String content) {
     messages.add(new Message(Message.ROLE_USER, content, null));
   }

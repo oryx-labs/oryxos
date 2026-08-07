@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -177,6 +178,24 @@ class ProviderServiceTest {
 
     verify(audit, times(1))
         .record(eq("s-1"), eq("deepseek"), eq("model-x"), any(), eq(true), isNull(), anyLong());
+  }
+
+  @Test
+  void 成功调用的审计失败_向上抛出且不伪装成模型失败() {
+    when(deepseek.call(any(Prompt.class))).thenReturn(textResponse("你好"));
+    doThrow(new IllegalStateException("audit unavailable"))
+        .when(audit)
+        .record(eq("s-1"), eq("deepseek"), eq("model-x"), any(), eq(true), isNull(), anyLong());
+
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> service.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi")));
+
+    assertEquals("audit unavailable", error.getMessage());
+    verify(deepseek, times(1)).call(any(Prompt.class));
+    verify(audit, never())
+        .record(eq("s-1"), eq("deepseek"), eq("model-x"), isNull(), eq(false), any(), anyLong());
   }
 
   @Test

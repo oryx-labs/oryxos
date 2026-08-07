@@ -19,6 +19,13 @@ public interface SessionManager {
   void save(Session session);
 
   /**
+   * 仅当持久化历史仍与调用方读取时的 {@code expectedMessages} 相同时保存。
+   *
+   * <p>用于防止跨线程或跨进程的旧快照覆盖新历史；发生竞争时抛 {@link SessionUpdateConflictException}。
+   */
+  void saveIfUnchanged(Session session, List<Message> expectedMessages);
+
+  /**
    * 归档一个会话（status→archived、记 archived_at）。26 节 DELETE /sessions/{id} 接线；sessions 的
    * status/archived_at 列自 18 节 data model 即在，此前未接对外入口。
    *

@@ -1,7 +1,9 @@
 package io.oryxos.storage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.oryxos.core.ToolResult;
@@ -113,5 +115,27 @@ class SessionRepositoryTest {
     Session entity = repository.findById("cli:wang:weather").orElseThrow();
     assertNotNull(entity.getLastActiveAt());
     assertTrue(!entity.getLastActiveAt().isBefore(beforeSave.minusSeconds(5)));
+  }
+
+  @Test
+  @DisplayName("两个旧快照依次保存_第二个被拒绝而不是覆盖第一条消息")
+  void staleSnapshotCannotOverwriteNewerConversation() {
+    JpaSessionManager manager = new JpaSessionManager(repository);
+    var first = manager.getOrCreate("web", "default", "ops");
+    var stale = manager.getOrCreate("web", "default", "ops");
+    List<Message> firstBaseline = first.messages();
+    List<Message> staleBaseline = stale.messages();
+
+    first.appendUser("先到的消息");
+    manager.saveIfUnchanged(first, firstBaseline);
+    stale.appendUser("后到但基于旧快照的消息");
+
+    assertThrows(
+        io.oryxos.core.session.SessionUpdateConflictException.class,
+        () -> manager.saveIfUnchanged(stale, staleBaseline));
+
+    List<Message> persisted = manager.get("web:default:ops").orElseThrow().messages();
+    assertTrue(persisted.stream().anyMatch(m -> "先到的消息".equals(m.content())));
+    assertFalse(persisted.stream().anyMatch(m -> "后到但基于旧快照的消息".equals(m.content())));
   }
 }

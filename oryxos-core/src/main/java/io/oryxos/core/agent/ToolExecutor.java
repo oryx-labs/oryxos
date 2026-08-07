@@ -67,7 +67,13 @@ public class ToolExecutor {
     // 置入当前 Agent 名（30 节 Agent 专属记忆）：save_memory 等工具据此落到本 Agent 自己的 MEMORY.md；执行后必清除。
     ToolExecutionContext.setAgentName(agentName);
     try {
-      ToolResult result = tool.execute(input);
+      ToolResult result;
+      try {
+        result = tool.execute(input);
+      } catch (RuntimeException e) {
+        return fail(sessionId, call, e.getMessage(), startedAt);
+      }
+      // 审计异常不属于工具异常，必须向上抛出，不能重试工具或伪造第二条失败审计。
       auditor.record(
           sessionId,
           call.name(),
@@ -77,8 +83,6 @@ public class ToolExecutor {
           result.success() ? null : result.errorMessage(),
           System.currentTimeMillis() - startedAt);
       return result;
-    } catch (RuntimeException e) {
-      return fail(sessionId, call, e.getMessage(), startedAt);
     } finally {
       ToolExecutionContext.clear();
     }

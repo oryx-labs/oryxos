@@ -12,10 +12,12 @@ import static org.mockito.Mockito.when;
 
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
+import io.oryxos.core.session.Message;
 import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -96,7 +98,7 @@ class AgentServiceTest {
     String reply = agentService.process(session, "hi");
 
     assertEquals("最终答复", reply);
-    verify(sessionManager).save(session);
+    verify(sessionManager).saveIfUnchanged(session, List.of());
     assertNull(ProfileContext.current()); // 正常路径同样清干净
   }
 
@@ -107,7 +109,7 @@ class AgentServiceTest {
 
     assertThrows(RuntimeException.class, () -> agentService.process(session, "hi"));
 
-    verify(sessionManager, never()).save(any());
+    verify(sessionManager, never()).saveIfUnchanged(any(), any());
   }
 
   @Test
@@ -131,7 +133,65 @@ class AgentServiceTest {
             AgentMaxIterationsExceededException.class, () -> agentService.process(session, "hi"));
 
     assertEquals(ReActLoop.MAX_ITERATIONS_REPLY, ex.getMessage());
-    verify(sessionManager).save(session); // 对话现场保留，供排查为什么不收敛
+    verify(sessionManager).saveIfUnchanged(session, List.of()); // 对话现场保留，供排查为什么不收敛
     assertNull(ProfileContext.current());
+  }
+
+  @Test
+  @DisplayName("进入会话锁后重读最新快照并基于原始历史做条件保存")
+  void processingReloadsLatestSessionInsideLockAndSavesConditionally() {
+    Session stale = new Session("s-1", "ops-agent");
+    Session latest = new Session("s-1", "ops-agent");
+    latest.appendUser("已经保存的上一轮");
+    List<Message> expectedMessages = latest.messages();
+    when(sessionManager.get("s-1")).thenReturn(Optional.of(latest));
+    when(reActLoop.run(any(), any(), any())).thenReturn("ok");
+
+    agentService.process(stale, "下一轮");
+
+    verify(reActLoop).run(latest, "下一轮", profile);
+    verify(sessionManager).saveIfUnchanged(latest, expectedMessages);
+    verify(sessionManager, never()).save(any());
+  }
+
+  @Test
+  @DisplayName("保存前按 Agent 的 maxHistoryTurns 截断持久历史")
+  void persistedHistoryIsTrimmedToProfileLimit() {
+    Profile boundedProfile =
+        new Profile(
+            "ops-agent",
+            null,
+            null,
+            new Profile.ProviderRef("deepseek", "deepseek-chat", null),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            new Profile.Settings(10, 2));
+    AgentService boundedService =
+        new AgentService(
+            new ProfileRegistry(Map.of("ops-agent", boundedProfile)),
+            reActLoop,
+            sessionManager,
+            mock(io.oryxos.core.memory.MemoryService.class));
+    Session latest = new Session("s-1", "ops-agent");
+    latest.appendUser("问题1");
+    latest.appendUser("问题2");
+    latest.appendUser("问题3");
+    List<Message> baseline = latest.messages();
+    when(sessionManager.get("s-1")).thenReturn(Optional.of(latest));
+    when(reActLoop.run(any(), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              invocation.<Session>getArgument(0).appendUser("问题4");
+              return "ok";
+            });
+
+    boundedService.process(new Session("s-1", "ops-agent"), "问题4");
+
+    assertEquals(List.of("问题3", "问题4"), latest.messages().stream().map(Message::content).toList());
+    verify(sessionManager).saveIfUnchanged(latest, baseline);
   }
 }
