@@ -17,7 +17,6 @@ import io.oryxos.core.agent.AgentLifecycleService;
 import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
-import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
 import io.oryxos.web.GlobalExceptionHandler;
 import java.util.List;
@@ -30,7 +29,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-/** 端点切片：动态管理 CRUD 薄转发（冲突→400、不存在→404）；invoke 走 AgentService.process 同一入口。 */
+/** 端点切片：动态管理 CRUD 薄转发（冲突→400、不存在→404）；invoke 走无状态编排入口。 */
 class AgentApiControllerTest {
 
   private AgentLifecycleService lifecycle;
@@ -132,11 +131,9 @@ class AgentApiControllerTest {
   }
 
   @Test
-  @DisplayName("invoke 已存在 Agent_走编排入口返回回复")
-  void invokeKnownAgent_callsProcess() throws Exception {
-    Session session = new Session("invoke:default:ops", "ops");
-    when(sessionManager.getOrCreate("invoke", "default", "ops")).thenReturn(session);
-    when(agentService.process(eq(session), eq("查天气"))).thenReturn("晴");
+  @DisplayName("invoke 已存在 Agent_走无状态编排且不创建持久会话")
+  void invokeKnownAgent_callsStatelessProcess() throws Exception {
+    when(agentService.processStateless(eq("ops"), eq("查天气"))).thenReturn("晴");
 
     mvc.perform(
             post("/api/v1/agents/ops/invoke")
@@ -144,7 +141,9 @@ class AgentApiControllerTest {
                 .content("{\"content\":\"查天气\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.reply").value("晴"));
-    verify(agentService).process(eq(session), eq("查天气"));
+    verify(agentService).processStateless(eq("ops"), eq("查天气"));
+    verify(sessionManager, never()).getOrCreate(eq("invoke"), any(), any());
+    verify(agentService, never()).process(any(), any());
   }
 
   @Test
@@ -156,6 +155,7 @@ class AgentApiControllerTest {
                 .content("{\"content\":\"hi\"}"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value(404));
+    verify(agentService, never()).processStateless(any(), any());
     verify(agentService, never()).process(any(), any());
   }
 
@@ -168,6 +168,7 @@ class AgentApiControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"content\":\"" + huge + "\"}"))
         .andExpect(status().isBadRequest());
+    verify(agentService, never()).processStateless(any(), any());
     verify(agentService, never()).process(any(), any());
   }
 
