@@ -5,6 +5,7 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.oryxos.core.mcp.McpServerConfig;
 import io.oryxos.core.mcp.McpServerStatus;
 import io.oryxos.tool.ToolRegistry;
@@ -23,8 +24,7 @@ import org.slf4j.LoggerFactory;
  * 循环由此对来源无感知）。管理台 CRUD（31 节）新增/删除一个 server 也走同一段 {@link #connect}/{@link #disconnect}，不需要重启。
  *
  * <p>失联的 server 只 WARN 跳过——外部依赖的可用性不是自己的可用性，不能变成自己的启动故障。 连接工厂构造可注入（测试替身），生产默认按 transport 分派：{@code
- * stdio} 起本地子进程，{@code http} 连远程 server（当前 SDK 版本的 SSE 客户端不支持自定义请求头， 需要 Authorization 头鉴权的远程 server
- * 暂时连不上鉴权网关——见 {@link #connectHttp}）。其余 transport 一律跳过。
+ * stdio} 起本地子进程，{@code http} 连远程 SSE server，并透传配置的请求头。其余 transport 一律跳过。
  */
 public class McpClientService {
 
@@ -70,11 +70,6 @@ public class McpClientService {
       LOG.warn("MCP server {} 的 {}，跳过", s(config.name()), s(msg));
       lastErrors.put(config.name(), msg);
       return;
-    }
-    if (McpServerConfig.TRANSPORT_HTTP.equals(config.transport()) && !config.headers().isEmpty()) {
-      LOG.warn(
-          "MCP server {} 配置了 headers，但当前 SDK 版本的远程传输不支持自定义请求头，将忽略 headers 尝试匿名连接",
-          s(config.name()));
     }
     try {
       McpSyncClient client = clientFactory.apply(config);
@@ -137,19 +132,20 @@ public class McpClientService {
             .args(java.util.Arrays.copyOfRange(parts, 1, parts.length))
             .env(config.env())
             .build();
-    return McpClient.sync(new StdioClientTransport(params)).requestTimeout(REQUEST_TIMEOUT).build();
-  }
-
-  /**
-   * 远程 http server：用 SDK 自带的 SSE 客户端传输连接 {@code url}。已知限制——这版 SDK （{@code
-   * io.modelcontextprotocol.sdk:mcp:0.7.0}）的 {@code HttpClientSseClientTransport} 不支持挂自定义请求头， 所以
-   * {@code config.headers()} 里配的 Authorization 之类目前不会真正发出去；需要鉴权的远程 server 要嘛换成 无需请求头鉴权的方式（如 URL
-   * 自带签名），要嘛等 SDK 升级后再补上请求头透传。
-   */
-  private static McpSyncClient connectHttp(McpServerConfig config) {
-    return McpClient.sync(new HttpClientSseClientTransport(config.url()))
+    return McpClient.sync(new StdioClientTransport(params, McpJsonDefaults.getMapper()))
         .requestTimeout(REQUEST_TIMEOUT)
         .build();
+  }
+
+  /** 远程 http server：用 SDK 自带的 SSE 客户端连接 {@code url}，并把配置请求头应用到每次请求。 */
+  private static McpSyncClient connectHttp(McpServerConfig config) {
+    HttpClientSseClientTransport.Builder transport =
+        HttpClientSseClientTransport.builder(config.url());
+    if (!config.headers().isEmpty()) {
+      transport.httpRequestCustomizer(
+          (request, method, uri, body, context) -> config.headers().forEach(request::header));
+    }
+    return McpClient.sync(transport.build()).requestTimeout(REQUEST_TIMEOUT).build();
   }
 
   private static String s(String value) {

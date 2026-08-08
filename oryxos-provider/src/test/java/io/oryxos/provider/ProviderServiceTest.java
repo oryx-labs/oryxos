@@ -116,9 +116,9 @@ class ProviderServiceTest {
     ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
     verify(deepseek).call(captor.capture());
     OpenAiChatOptions options = (OpenAiChatOptions) captor.getValue().getOptions();
-    assertTrue(options.getProxyToolCalls()); // 坑二的回归：一旦有人改回自动执行，这里立刻红
+    assertFalse(options.getInternalToolExecutionEnabled()); // 坑二的回归：一旦有人改回自动执行，这里立刻红
     assertFalse(options.getToolCallbacks().isEmpty()); // 翻译过的 schema 确实带上了
-    assertEquals("http_get", options.getToolCallbacks().get(0).getName());
+    assertEquals("http_get", options.getToolCallbacks().get(0).getToolDefinition().name());
   }
 
   @Test
@@ -182,11 +182,14 @@ class ProviderServiceTest {
   @Test
   void 模型想调工具_请求被原样透传_本模块零执行() {
     AssistantMessage withToolCall =
-        new AssistantMessage(
-            "",
-            Map.of(),
-            List.of(
-                new AssistantMessage.ToolCall("id-1", "function", "http_get", "{\"url\":\"x\"}")));
+        AssistantMessage.builder()
+            .content("")
+            .properties(Map.of())
+            .toolCalls(
+                List.of(
+                    new AssistantMessage.ToolCall(
+                        "id-1", "function", "http_get", "{\"url\":\"x\"}")))
+            .build();
     when(deepseek.call(any(Prompt.class)))
         .thenReturn(new ChatResponse(List.of(new Generation(withToolCall))));
 

@@ -45,7 +45,7 @@ public class ProviderChatModelFactory {
       // 端点版本在 baseUrl 里（如 GLM 的 /api/paas/v4），改补无版本的 /chat/completions
       api.completionsPath("/chat/completions");
     }
-    return new OpenAiChatModel(api.build());
+    return OpenAiChatModel.builder().openAiApi(api.build()).build();
   }
 
   /**

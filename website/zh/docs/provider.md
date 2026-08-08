@@ -1,6 +1,6 @@
 # Provider
 
-OryxOS 把 Spring AI Alibaba 用作薄薄的协议适配层——它处理各厂商的 wire format 差异（OpenAI、Anthropic、Gemini 等），OryxOS 本身不需要关心这些。在此之上，`ProviderService` 负责路由、审计，以及让多 Provider 可靠运行的显式名称到模型的映射。
+OryxOS 使用 Spring AI 的 OpenAI connector 作为薄协议适配层，接入 OpenAI 兼容端点。在此之上，`ProviderService` 负责路由、审计，以及让多 Provider 可靠运行的显式名称到模型的映射。
 
 ## Provider 是动态的
 

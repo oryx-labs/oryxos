@@ -1,6 +1,6 @@
 # Provider
 
-OryxOS uses Spring AI Alibaba as a thin protocol adapter layer — it handles the per-vendor wire format differences (OpenAI, Anthropic, Gemini, etc.) so OryxOS does not have to. On top of that, `ProviderService` owns routing, auditing, and the explicit name-to-model mapping that makes multi-provider setups reliable.
+OryxOS uses Spring AI's OpenAI connector as a thin protocol adapter for OpenAI-compatible endpoints. On top of that, `ProviderService` owns routing, auditing, and the explicit name-to-model mapping that makes multi-provider setups reliable.
 
 ## Providers are dynamic
 

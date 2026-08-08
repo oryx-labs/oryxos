@@ -2,7 +2,7 @@
 
 OryxOS 是一个 Spring Boot 3.x 单体应用，运行在 JDK 21 上，整个系统——LLM 路由、推理循环、记忆系统、工具体系、REST API 以及 Web 管理台——打包在一个 fat JAR 里交付。除了 JVM 和你配置的 LLM Provider 凭证，不需要任何外部依赖。状态存储在 SQLite 和工作区目录下的本地文件系统中（默认 `.oryxos/`，可配置——见下文）。
 
-推理引擎是自实现的 ReAct Loop。Spring AI Alibaba 负责 LLM 协议转换；循环本身、上下文组装、工具调度和审计记录，都由 OryxOS 自己掌控。
+推理引擎是自实现的 ReAct Loop。Spring AI 的 OpenAI connector 负责 OpenAI 兼容 LLM 协议转换；循环本身、上下文组装、工具调度和审计记录，都由 OryxOS 自己掌控。
 
 ## 架构图
 
@@ -117,7 +117,7 @@ Provider 和通知渠道不再是静态配置——两者都存储在 SQLite 中
 | --- | --- |
 | 语言 / 运行时 | Java 21（必须；虚拟线程，无 SecurityManager） |
 | 框架 | Spring Boot 3.x |
-| LLM 集成 | Spring AI + Spring AI Alibaba（仅用于协议转换和 `@Tool` Schema 生成） |
+| LLM 集成 | Spring AI（仅用于 OpenAI 兼容协议转换和 `@Tool` Schema 生成） |
 | HTTP 服务 | Spring MVC + Java 21 虚拟线程 |
 | 管理台 | Vue 3 + Vite（通过 `/admin/` 提供） |
 | 命令行 | Picocli |

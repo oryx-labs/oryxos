@@ -36,7 +36,12 @@ class McpServerAdminServiceTest {
     org.mockito.Mockito.when(client.listTools())
         .thenReturn(
             new io.modelcontextprotocol.spec.McpSchema.ListToolsResult(
-                List.of(new io.modelcontextprotocol.spec.McpSchema.Tool("demo_tool", "demo", "{}")),
+                List.of(
+                    io.modelcontextprotocol.spec.McpSchema.Tool.builder()
+                        .name("demo_tool")
+                        .description("demo")
+                        .inputSchema(io.modelcontextprotocol.json.McpJsonDefaults.getMapper(), "{}")
+                        .build()),
                 null));
     return client;
   }
