@@ -27,6 +27,8 @@
         <sqlite-jdbc.version>3.46.1.0</sqlite-jdbc.version>
 
         <!-- Infrastructure libraries -->
+        <jackson-bom.version>2.21.5</jackson-bom.version>
+        <log4j2.version>2.25.5</log4j2.version>
         <logstash-logback.version>7.4</logstash-logback.version>
         <springdoc.version>2.6.0</springdoc.version>
 
@@ -40,7 +42,7 @@
         <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
         <spotbugs.version>4.8.6</spotbugs.version>
         <findsecbugs.version>1.13.0</findsecbugs.version>
-        <dependency-check.version>10.0.4</dependency-check.version>
+        <dependency-check.version>12.2.2</dependency-check.version>
 
         <!-- OWASP Dependency-Check is slow (downloads the NVD) and benefits from an API key;
              skipped by default for fast local builds, enabled in CI with -Dowasp.skip=false. -->
@@ -323,6 +325,8 @@
                     <configuration>
                         <skip>${owasp.skip}</skip>
                         <failBuildOnCVSS>8</failBuildOnCVSS>
+                        <!-- Fork PRs do not receive OSS Index credentials; NVD and CISA remain enabled. -->
+                        <ossindexAnalyzerEnabled>false</ossindexAnalyzerEnabled>
                         <formats>
                             <format>HTML</format>
                             <format>JSON</format>
