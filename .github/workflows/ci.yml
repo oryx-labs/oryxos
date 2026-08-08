@@ -32,9 +32,7 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      # Enabled via -Dowasp.skip=false. NVD_API_KEY (repo secret) makes the NVD
-      # download fast and avoids rate limiting; the scan still works without it, slowly.
+      # Enabled via -Dowasp.skip=false. The Maven configuration uses
+      # Dependency-Check's nightly NVD cache, which is available to fork PRs.
       - name: mvn verify with dependency-check
-        run: mvn -B clean verify -DskipTests -Dowasp.skip=false -DnvdApiKey="${NVD_API_KEY}"
-        env:
-          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: mvn -B clean verify -DskipTests -Dowasp.skip=false
