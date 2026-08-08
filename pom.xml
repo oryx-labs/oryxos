@@ -23,7 +23,7 @@
         <java.version>21</java.version>
         <spring-ai.version>1.1.8</spring-ai.version>
         <picocli.version>4.7.6</picocli.version>
-        <sqlite-jdbc.version>3.46.1.0</sqlite-jdbc.version>
+        <sqlite-jdbc.version>3.53.2.1</sqlite-jdbc.version>
 
         <!-- Infrastructure libraries -->
         <jackson-bom.version>2.21.5</jackson-bom.version>
@@ -318,7 +318,7 @@
                         <skip>${owasp.skip}</skip>
                         <failBuildOnCVSS>8</failBuildOnCVSS>
                         <!-- Fork PRs do not receive OSS Index credentials; NVD and CISA remain enabled. -->
-                        <ossindexAnalyzerEnabled>false</ossindexAnalyzerEnabled>
+                        <ossIndexAnalyzerEnabled>false</ossIndexAnalyzerEnabled>
                         <suppressionFile>${maven.multiModuleProjectDirectory}/config/dependency-check-suppressions.xml</suppressionFile>
                         <formats>
                             <format>HTML</format>
