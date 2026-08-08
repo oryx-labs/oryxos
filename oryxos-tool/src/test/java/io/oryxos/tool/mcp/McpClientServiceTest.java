@@ -33,10 +33,16 @@ class McpClientServiceTest {
   private static McpSyncClient goodClient() {
     McpSyncClient client = mock(McpSyncClient.class);
     when(client.listTools())
-        .thenReturn(
-            new McpSchema.ListToolsResult(
-                List.of(new McpSchema.Tool("good_mcp_tool", "好工具", "{}")), null));
+        .thenReturn(new McpSchema.ListToolsResult(List.of(mcpTool("good_mcp_tool", "好工具")), null));
     return client;
+  }
+
+  private static McpSchema.Tool mcpTool(String name, String description) {
+    return McpSchema.Tool.builder()
+        .name(name)
+        .description(description)
+        .inputSchema(io.modelcontextprotocol.json.McpJsonDefaults.getMapper(), "{}")
+        .build();
   }
 
   @Test
@@ -76,10 +82,7 @@ class McpClientServiceTest {
     when(client.listTools())
         .thenReturn(
             new McpSchema.ListToolsResult(
-                List.of(
-                    new McpSchema.Tool("tool_a", "a", "{}"),
-                    new McpSchema.Tool("tool_b", "b", "{}")),
-                null));
+                List.of(mcpTool("tool_a", "a"), mcpTool("tool_b", "b")), null));
     McpConfigLoader loader =
         loaderWith("servers:\n  - name: s\n    transport: stdio\n    command: c\n");
     ToolRegistry registry = new ToolRegistry();

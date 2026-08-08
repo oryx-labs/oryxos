@@ -6,7 +6,6 @@ spring:
   # auto-instantiated at startup (which would also demand API keys before any agent runs).
   autoconfigure:
     exclude:
-      - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAutoConfiguration
       # 宪法 II：禁用 Spring AI eager 模型自动装配。deepseek 走 spring-ai-openai starter，
       # OpenAiAutoConfiguration 会急切建 OpenAiChatModel 并索要 spring.ai.openai.api-key；
       # OryxOS 不用它（Provider 由 ProviderChatModelFactory 显式构造），排掉后 serve 只需 DEEPSEEK_API_KEY。
@@ -84,13 +83,6 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
-  health:
-    # Nacos is pulled in transitively by the Spring AI Alibaba starter but OryxOS does not
-    # use it; its health indicator would otherwise report DOWN (no Nacos server).
-    nacos-config:
-      enabled: false
-    nacos-discovery:
-      enabled: false
   endpoint:
     health:
       probes:

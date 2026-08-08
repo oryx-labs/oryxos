@@ -23,15 +23,15 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.tool.ToolCallback;
 
 /**
  * Provider 前台（core {@link ProviderService} 契约的 Spring AI 实现）：按 Profile 显式路由到对应
  * ChatModel，完成一次调用并落审计。
  *
- * <p>宪法 II/III：显式 name→ChatModel 映射、调用方式 {@code chatModel.call(new Prompt(...))}、
- * proxyToolCalls=true 关闭框架自动工具执行——工具 schema 只翻译、tool call 原样透传。
+ * <p>宪法 II/III：显式 name→ChatModel 映射、调用方式 {@code chatModel.call(new Prompt(...))}、 {@code
+ * internalToolExecutionEnabled=false} 关闭框架自动工具执行——工具 schema 只翻译、tool call 原样透传。
  */
 public class SpringAiProviderServiceImpl implements ProviderService {
 
@@ -101,11 +101,11 @@ public class SpringAiProviderServiceImpl implements ProviderService {
     OpenAiChatOptions.Builder options =
         OpenAiChatOptions.builder()
             .model(profile.provider().model())
-            .proxyToolCalls(Boolean.TRUE); // 关闭自动执行：执行权只在 ToolExecutor（17 节）
+            .internalToolExecutionEnabled(Boolean.FALSE); // 执行权只在 ToolExecutor（17 节）
     if (profile.provider().temperature() != null) {
       options.temperature(profile.provider().temperature());
     }
-    List<FunctionCallback> callbacks = adapter.toSpringAiTools(request.availableTools());
+    List<ToolCallback> callbacks = adapter.toSpringAiTools(request.availableTools());
     if (!callbacks.isEmpty()) {
       options.toolCallbacks(callbacks);
     }
@@ -132,8 +132,11 @@ public class SpringAiProviderServiceImpl implements ProviderService {
       if (id == null || id.isBlank()) {
         return new UserMessage("[工具 " + message.toolName() + " 返回] " + message.content());
       }
-      return new ToolResponseMessage(
-          List.of(new ToolResponseMessage.ToolResponse(id, message.toolName(), message.content())));
+      return ToolResponseMessage.builder()
+          .responses(
+              List.of(
+                  new ToolResponseMessage.ToolResponse(id, message.toolName(), message.content())))
+          .build();
     }
     // assistant：带 tool_calls（含 id）才能让下一轮的 tool 结果配上对
     if (message.toolCalls().isEmpty()) {
@@ -146,26 +149,26 @@ public class SpringAiProviderServiceImpl implements ProviderService {
                     new AssistantMessage.ToolCall(
                         tc.id() == null ? "" : tc.id(), "function", tc.name(), tc.argumentsJson()))
             .toList();
-    return new AssistantMessage(message.content(), Map.of(), toolCalls);
+    return AssistantMessage.builder()
+        .content(message.content())
+        .properties(Map.of())
+        .toolCalls(toolCalls)
+        .build();
   }
 
   private static ProviderResponse toProviderResponse(ChatResponse response) {
     Generation generation = response.getResult();
-    String text = null;
-    List<ToolCallRequest> toolCalls = List.of();
-    if (generation != null) {
-      AssistantMessage output = generation.getOutput();
-      text = output.getText();
-      toolCalls =
-          output.getToolCalls().stream()
-              .map(call -> new ToolCallRequest(call.id(), call.name(), call.arguments()))
-              .toList();
-    }
+    AssistantMessage output = generation.getOutput();
+    String text = output.getText();
+    List<ToolCallRequest> toolCalls =
+        output.getToolCalls().stream()
+            .map(call -> new ToolCallRequest(call.id(), call.name(), call.arguments()))
+            .toList();
     return new ProviderResponse(text, toolCalls, extractUsage(response));
   }
 
   private static Usage extractUsage(ChatResponse response) {
-    if (response.getMetadata() == null || response.getMetadata().getUsage() == null) {
+    if (response.getMetadata().getUsage() == null) {
       return null;
     }
     org.springframework.ai.chat.metadata.Usage usage = response.getMetadata().getUsage();

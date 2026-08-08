@@ -21,8 +21,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>1.0.0-M6</spring-ai.version>
-        <spring-ai-alibaba.version>1.0.0-M6.1</spring-ai-alibaba.version>
+        <spring-ai.version>1.1.8</spring-ai.version>
         <picocli.version>4.7.6</picocli.version>
         <sqlite-jdbc.version>3.46.1.0</sqlite-jdbc.version>
 
@@ -134,13 +133,6 @@
                 <artifactId>spotbugs-annotations</artifactId>
                 <version>4.8.6</version>
                 <scope>provided</scope>
-            </dependency>
-
-            <!-- Spring AI Alibaba -->
-            <dependency>
-                <groupId>com.alibaba.cloud.ai</groupId>
-                <artifactId>spring-ai-alibaba-starter</artifactId>
-                <version>${spring-ai-alibaba.version}</version>
             </dependency>
 
             <!-- Structured logging: JSON encoder for Logback -->
@@ -327,6 +319,7 @@
                         <failBuildOnCVSS>8</failBuildOnCVSS>
                         <!-- Fork PRs do not receive OSS Index credentials; NVD and CISA remain enabled. -->
                         <ossindexAnalyzerEnabled>false</ossindexAnalyzerEnabled>
+                        <suppressionFile>${maven.multiModuleProjectDirectory}/config/dependency-check-suppressions.xml</suppressionFile>
                         <formats>
                             <format>HTML</format>
                             <format>JSON</format>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
+    <suppress>
+        <notes><![CDATA[
+        CVE-2023-39022 affects opensymphony:oscore through 2.2.6.
+        io.oryxos:oryxos-core is an unrelated first-party artifact that Dependency-Check
+        matched only because its artifact name is similar to "oscore".
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/io\.oryxos/oryxos-core@.*$</packageUrl>
+        <cve>CVE-2023-39022</cve>
+    </suppress>
+</suppressions>

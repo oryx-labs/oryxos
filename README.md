@@ -273,7 +273,7 @@ All endpoints are prefixed with `/api/v1` and every response is wrapped in a uni
 | --- | --- |
 | Language / Runtime | Java 21 (virtual threads) |
 | Framework | Spring Boot 3.x |
-| LLM Integration | Spring AI Alibaba (protocol translation + `@Tool` schema only) |
+| LLM Integration | Spring AI (OpenAI-compatible protocol translation + `@Tool` schema only) |
 | CLI | Picocli |
 | Config | SnakeYAML |
 | Persistence | SQLite + Spring Data JPA |

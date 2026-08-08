@@ -31,7 +31,14 @@ class McpToolAdapterTest {
     client = mock(McpSyncClient.class);
     adapter =
         new McpToolAdapter(
-            client, new McpSchema.Tool("github_search", "搜 GitHub", "{\"type\":\"object\"}"));
+            client,
+            McpSchema.Tool.builder()
+                .name("github_search")
+                .description("搜 GitHub")
+                .inputSchema(
+                    io.modelcontextprotocol.json.McpJsonDefaults.getMapper(),
+                    "{\"type\":\"object\"}")
+                .build());
   }
 
   @Test
