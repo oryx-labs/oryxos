@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
@@ -871,6 +871,7 @@ const renderedMd = computed(() =>
 )
 // 会话：每个 Agent 一个固定 session，直接作为对话展示（不再是会话列表）
 const chat = reactive({ sessionId: null, messages: [], loading: false, error: null, input: '', sending: false })
+const chatScrollEl = ref(null) // 会话列表滚动容器：回复/重载后自动滚到底部（最新一条）
 
 const CHAT_SEND_MODE_KEY = 'oryxos.admin.chatSendMode'
 const CHAT_SEND_MODES = ['enter', 'modifier']
@@ -1118,6 +1119,15 @@ function resetChat() {
   chat.sending = false
 }
 
+// 会话列表自动滚到底部：新消息到达/历史重载后，把 .chat 容器推到最新一条。
+// nextTick 确保 chatTurns 渲染完再读 scrollHeight，否则还是旧值、滚不到底。
+function scrollChatToBottom() {
+  nextTick(() => {
+    const el = chatScrollEl.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
 async function loadChat() {
   chat.loading = true; chat.error = null
   try {
@@ -1128,6 +1138,7 @@ async function loadChat() {
     chat.sessionId = body.data.sessionId
     chat.messages = body.data.messages || []
   } catch (e) { chat.error = e.message } finally { chat.loading = false }
+  scrollChatToBottom() // 初次进会话看历史、发消息后重载 都走这里，一次覆盖
 }
 
 async function sendChat() {
@@ -1738,7 +1749,7 @@ const outputRows = computed(() =>
                 <p v-else-if="chat.error" class="error">出错：{{ chat.error }}</p>
                 <template v-else>
                   <p v-if="!chat.messages.length" class="empty">（还没有对话，在下面发一条消息开始）</p>
-                  <div v-else class="chat">
+                  <div v-else class="chat" ref="chatScrollEl">
                     <div v-for="(t, i) in chatTurns" :key="i" class="turn">
                       <!-- 用户提问 -->
                       <div v-if="t.user" class="msg user">
