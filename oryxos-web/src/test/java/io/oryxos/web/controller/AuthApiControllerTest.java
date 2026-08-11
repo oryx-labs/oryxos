@@ -112,6 +112,47 @@ class AuthApiControllerTest {
   }
 
   @Test
+  @DisplayName("login_带旧cookie重新登录_旧session被废新session生效")
+  void login_withStaleCookie_deletesOldSession() throws Exception {
+    when(userService.verify("admin", "s3cret-pw")).thenReturn(true);
+    when(sessionService.create("admin")).thenReturn(newSession("admin", "sid-new"));
+
+    mvc.perform(
+            post("/api/v1/auth/login")
+                .cookie(new jakarta.servlet.http.Cookie("oryxos_session", "sid-old"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"admin\",\"password\":\"s3cret-pw\"}"))
+        .andExpect(status().isOk())
+        .andExpect(
+            header()
+                .string(
+                    "Set-Cookie", org.hamcrest.Matchers.containsString("oryxos_session=sid-new")));
+    verify(sessionService).delete("sid-old"); // 旧 session 废掉，不留孤儿行也不给旧 id 续命
+  }
+
+  @Test
+  @DisplayName("login_反代带X-Forwarded-Proto=https_ForwardedHeaderFilter下Set-Cookie含Secure")
+  void login_behindProxy_forwardedProtoYieldsSecureCookie() throws Exception {
+    when(userService.verify("admin", "s3cret-pw")).thenReturn(true);
+    when(sessionService.create("admin")).thenReturn(newSession("admin", "sid-123"));
+    // 镜像 server.forward-headers-strategy=framework 的装配：该策略就是注册 ForwardedHeaderFilter
+    MockMvc proxiedMvc =
+        MockMvcBuilders.standaloneSetup(
+                new AuthApiController(userService, sessionService, properties))
+            .addFilters(new org.springframework.web.filter.ForwardedHeaderFilter())
+            .build();
+
+    proxiedMvc
+        .perform(
+            post("/api/v1/auth/login")
+                .header("X-Forwarded-Proto", "https")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"admin\",\"password\":\"s3cret-pw\"}"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Secure")));
+  }
+
+  @Test
   @DisplayName("login_缺字段_400")
   void login_missingFields_400() throws Exception {
     mvc.perform(

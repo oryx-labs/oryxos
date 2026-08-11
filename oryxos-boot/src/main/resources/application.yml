@@ -32,6 +32,10 @@ spring:
 
 server:
   port: 8080
+  # 反向代理（nginx/caddy 终止 TLS）下识别 X-Forwarded-Proto/Host/Port：
+  # 没有它 request.isSecure() 恒为 false，登录 cookie 不会带 Secure 属性。
+  # 直连部署无副作用（无 X-Forwarded-* 头时行为不变）。
+  forward-headers-strategy: framework
 
 # Sandbox 白名单（第 24 节 WhitelistSandbox；宪法 VI 第一档：应用层校验）。
 # 三块各自独立；**空列表 = 该类什么都不允许（deny-all）**，绝非"不校验"——按最小权限收窄。

@@ -15,6 +15,9 @@
 # ── 服务 ────────────────────────────────────────────────
 server:
   port: 8080                    # HTTP API / 管理台端口（oryxos serve --port 可临时覆盖）
+  # 反向代理（nginx/caddy 终止 TLS）下识别 X-Forwarded-Proto 等头，登录 cookie 才会带 Secure；
+  # 直连部署无副作用（无 X-Forwarded-* 头时行为不变）。从 jar 内置默认继承，列此便于按需关闭。
+  forward-headers-strategy: framework
 
 # ── 持久化 / 并发 ───────────────────────────────────────
 spring:
