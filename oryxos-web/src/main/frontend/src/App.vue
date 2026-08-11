@@ -606,6 +606,7 @@ async function deleteNotifyChannel(name) {
 
 // —— Provider 管理（CRUD /api/v1/providers）：命名的模型 Provider，apiKey 明文返回 ——
 const providers = ref({ loading: false, error: null, data: [] })
+const providerTests = ref({})
 async function loadProviders() {
   providers.value = { loading: true, error: null, data: [] }
   try {
@@ -615,6 +616,33 @@ async function loadProviders() {
     providers.value = { loading: false, error: null, data: body.data || [] }
   } catch (e) {
     providers.value = { loading: false, error: e.message, data: [] }
+  }
+}
+
+async function testProvider(name) {
+  providerTests.value = {
+    ...providerTests.value,
+    [name]: { loading: true, ok: null, message: '测试中…' },
+  }
+  try {
+    const res = await fetch(`/api/v1/providers/${encodeURIComponent(name)}/test`, { method: 'POST' })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '连通测试失败')
+    const data = body.data || {}
+    const samples = (data.sampleModels || []).slice(0, 3).join('、')
+    providerTests.value = {
+      ...providerTests.value,
+      [name]: {
+        loading: false,
+        ok: true,
+        message: samples ? `可用 · ${data.modelCount || 0} 个模型 · ${samples}` : `可用 · ${data.modelCount || 0} 个模型`,
+      },
+    }
+  } catch (e) {
+    providerTests.value = {
+      ...providerTests.value,
+      [name]: { loading: false, ok: false, message: e.message || '连通测试失败' },
+    }
   }
 }
 
@@ -1966,15 +1994,24 @@ const outputRows = computed(() =>
             <p v-if="providers.loading" class="empty">加载中…</p>
             <p v-else-if="providers.error" class="error">出错：{{ providers.error }}</p>
             <table v-else>
-              <thead><tr><th>name</th><th>apiKey</th><th>baseUrl</th><th>description</th><th>操作</th></tr></thead>
+              <thead><tr><th>name</th><th>apiKey</th><th>baseUrl</th><th>description</th><th>连通性</th><th>操作</th></tr></thead>
               <tbody>
-                <tr v-if="!providers.data.length"><td colspan="5" class="empty">（暂无 Provider · 点上面「新建 Provider」）</td></tr>
+                <tr v-if="!providers.data.length"><td colspan="6" class="empty">（暂无 Provider · 点上面「新建 Provider」）</td></tr>
                 <tr v-for="p in providers.data" :key="p.name">
                   <td class="mono">{{ p.name }}</td>
                   <td class="mono">{{ p.apiKey || '—' }}</td>
                   <td class="mono">{{ p.baseUrl || '—' }}</td>
                   <td>{{ p.description || '—' }}</td>
+                  <td>
+                    <span v-if="providerTests[p.name]" :class="providerTests[p.name].ok === false ? 'error' : 'ok'">
+                      {{ providerTests[p.name].message }}
+                    </span>
+                    <span v-else class="empty">未测试</span>
+                  </td>
                   <td class="ops">
+                    <button class="btn" :disabled="providerTests[p.name]?.loading" @click="testProvider(p.name)">
+                      {{ providerTests[p.name]?.loading ? '测试中' : '测试连接' }}
+                    </button>
                     <button class="btn" @click="editProvider(p)">编辑</button>
                     <button class="btn" @click="deleteProvider(p.name)">删除</button>
                   </td>
