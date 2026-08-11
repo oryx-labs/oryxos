@@ -45,7 +45,7 @@ About two dozen tools ship with OryxOS core — a set of **universal primitives*
 | `move_file` | `FileTools` | Move / rename a file | Path whitelist (source + target) |
 | `copy_file` | `FileTools` | Copy a file | Path whitelist (source + target) |
 | `delete_file` | `FileTools` | Delete a file (never a directory) | Path whitelist |
-| `shell` | `ShellTools` | Execute a shell command | Command first-token whitelist + timeout |
+| `shell` | `ShellTools` | Execute an allowed executable | Executable whitelist + timeout |
 | `http_get` / `http_post` | `HttpTools` | HTTP GET / POST | Domain wildcard whitelist |
 | `http_request` | `HttpTools` | HTTP with any method (GET/POST/PUT/PATCH/DELETE) + headers | Domain wildcard whitelist |
 | `fetch_webpage` | `HttpTools` | Fetch a URL and extract readable text (strip HTML) | Domain wildcard whitelist |
@@ -141,7 +141,16 @@ file:
     - /tmp/oryxos
 ```
 
-**Shell command whitelist** — applies to `shell`. Only the first token of the command is checked (the executable name). Arguments are not restricted by the whitelist.
+**Shell executable whitelist** — applies to `shell`. Its input is structured: an allowlisted `executable` and an `arguments` array. `ShellTools` passes the argv directly to `ProcessBuilder`; it does not invoke a shell or interpret pipes, redirects, substitutions, or command separators.
+
+```json
+{
+  "executable": "grep",
+  "arguments": ["-R", "TODO", "src"]
+}
+```
+
+`bash`, `sh`, `cmd`, PowerShell, Python, and Node entry points cannot be added to this whitelist. Use a dedicated tool or MCP server for scripted or multi-step workflows.
 
 ```yaml
 shell:
@@ -149,7 +158,6 @@ shell:
     - ls
     - cat
     - grep
-    - python3
   timeout_seconds: 30
 ```
 

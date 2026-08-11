@@ -45,7 +45,7 @@ OryxOS 核心内置约两打工具——一组精心挑选的**通用原语**，
 | `move_file` | `FileTools` | 移动 / 重命名文件 | 路径白名单（源 + 目标） |
 | `copy_file` | `FileTools` | 复制文件 | 路径白名单（源 + 目标） |
 | `delete_file` | `FileTools` | 删除文件（拒绝删目录） | 路径白名单 |
-| `shell` | `ShellTools` | 执行 Shell 命令 | 命令首 token 白名单 + 超时 |
+| `shell` | `ShellTools` | 执行获准的可执行文件 | 可执行文件白名单 + 超时 |
 | `http_get` / `http_post` | `HttpTools` | HTTP GET / POST | 域名通配符白名单 |
 | `http_request` | `HttpTools` | 任意方法 HTTP（GET/POST/PUT/PATCH/DELETE）+ 请求头 | 域名通配符白名单 |
 | `fetch_webpage` | `HttpTools` | 抓取网页并抽取可读正文（去 HTML） | 域名通配符白名单 |
@@ -141,7 +141,16 @@ file:
     - /tmp/oryxos
 ```
 
-**Shell 命令白名单** — 作用于 `shell`。只检查命令的第一个 token（可执行文件名），参数不受白名单限制。
+**Shell 可执行文件白名单** — 作用于 `shell`。输入为结构化的 `executable` 和 `arguments` 数组；`ShellTools` 将 argv 直接交给 `ProcessBuilder`，不会启动 Shell，也不会解释管道、重定向、命令替换或命令分隔符。
+
+```json
+{
+  "executable": "grep",
+  "arguments": ["-R", "TODO", "src"]
+}
+```
+
+不能把 `bash`、`sh`、`cmd`、PowerShell、Python 或 Node 入口加入该白名单。脚本或多步骤工作流应使用专用工具或 MCP Server。
 
 ```yaml
 shell:
@@ -149,7 +158,6 @@ shell:
     - ls
     - cat
     - grep
-    - python3
   timeout_seconds: 30
 ```
 

@@ -70,9 +70,17 @@ class WhitelistSandboxTest {
     private final WhitelistSandbox sb = sandbox(List.of(), List.of("ls", "cat"), List.of());
 
     @Test
-    @DisplayName("白名单内命令_首token放行")
-    void firstTokenInWhitelistAllowed() {
-      assertDoesNotThrow(() -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "ls -la")));
+    @DisplayName("白名单内可执行文件_放行")
+    void executableInWhitelistAllowed() {
+      assertDoesNotThrow(() -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "ls")));
+    }
+
+    @Test
+    @DisplayName("Shell 控制语法不能作为可执行文件绕过白名单")
+    void shellSyntaxCannotBypassExecutableWhitelist() {
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "ls -la; pwd")));
     }
 
     @Test
@@ -81,6 +89,16 @@ class WhitelistSandboxTest {
       assertThrows(
           SandboxViolationException.class,
           () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "rm -rf /")));
+    }
+
+    @Test
+    @DisplayName("解释器不能被加入 Shell 白名单")
+    void interpretersCannotBeAllowlisted() {
+      for (String interpreter : List.of("bash", "sh", "cmd.exe", "powershell", "python3", "node")) {
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> sandbox(List.of(), List.of(interpreter), List.of()));
+      }
     }
   }
 

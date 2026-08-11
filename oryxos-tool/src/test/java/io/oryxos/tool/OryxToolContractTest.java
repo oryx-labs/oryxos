@@ -16,6 +16,7 @@ import io.oryxos.tool.sandbox.Sandbox;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.web.client.RestClient;
@@ -66,5 +67,19 @@ class OryxToolContractTest {
     assertTrue(
         tool.getInputSchema().contains("properties") || "notify".equals(tool.getName()),
         tool.getName() + " 的 schema 应含参数定义: " + tool.getInputSchema());
+  }
+
+  @Test
+  @DisplayName("shell 的调用契约使用可执行文件和参数数组")
+  void shellSchemaUsesStructuredArguments() {
+    OryxTool shell =
+        allRegisteredTools()
+            .filter(tool -> "shell".equals(tool.getName()))
+            .findFirst()
+            .orElseThrow();
+
+    assertTrue(shell.getInputSchema().contains("executable"), shell.getInputSchema());
+    assertTrue(shell.getInputSchema().contains("arguments"), shell.getInputSchema());
+    assertFalse(shell.getInputSchema().contains("command"), shell.getInputSchema());
   }
 }

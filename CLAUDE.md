@@ -106,7 +106,7 @@ Map<String, ChatModel> providerMap = Map.of(
 
 `SecurityManager` 在 JDK 17 起废弃、JDK 21 已不可用。Sandbox 通过 `SandboxChecker` 的 Path / Pattern 白名单实现：
 - 文件操作：路径白名单（`file.allowed_paths`）
-- Shell：命令首 token 白名单（`shell.allowed_commands`）
+- Shell：可执行文件精确白名单（`shell.allowed_commands`）；参数以 argv 直传，不解释 Shell 语法
 - HTTP：域名通配符白名单（`http.allowed_domains`）
 
 ### 原则七：同步执行模型

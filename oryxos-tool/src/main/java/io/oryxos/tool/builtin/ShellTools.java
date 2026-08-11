@@ -7,45 +7,58 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
 /**
- * 内置 Shell 工具：执行 bash 命令，带超时兜底——命令挂死不能拖死整个 ReAct 循环。
+ * 内置命令工具：直接执行获准的可执行文件，带超时兜底——命令挂死不能拖死整个 ReAct 循环。
  *
- * <p>命令首词白名单归 24 节（SHELL_COMMAND 检查位已过 enforce）；超时默认 30 秒 （课件未给数值的推定默认，配置化随 24 节 shell 白名单配置一并处理）。
+ * <p>白名单校验可执行文件名（SHELL_COMMAND 检查位已过 enforce）；参数作为 argv 直接传给进程，不经 Shell 解释。超时默认 30 秒。
  */
 public class ShellTools {
 
-  /** 默认超时：30 秒（clarify 既定默认）。 */
+  /** 默认超时：30 秒。 */
   static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
 
   private final Sandbox sandbox;
   private final Duration timeout;
+  private final ProcessStarter processStarter;
 
   public ShellTools(Sandbox sandbox) {
     this(sandbox, DEFAULT_TIMEOUT);
   }
 
   ShellTools(Sandbox sandbox, Duration timeout) {
-    this.sandbox = sandbox;
-    this.timeout = timeout;
+    this(sandbox, timeout, command -> new ProcessBuilder(command).start());
   }
 
-  @Tool(name = "shell", description = "执行一条 bash 命令，返回标准输出")
+  ShellTools(Sandbox sandbox, Duration timeout, ProcessStarter processStarter) {
+    this.sandbox = Objects.requireNonNull(sandbox, "sandbox 不能为空");
+    this.timeout = Objects.requireNonNull(timeout, "timeout 不能为空");
+    this.processStarter = Objects.requireNonNull(processStarter, "processStarter 不能为空");
+  }
+
+  @Tool(name = "shell", description = "执行一个已获许可的可执行文件，返回标准输出")
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "COMMAND_INJECTION",
-      justification =
-          "shell 工具的功能本质就是执行 LLM 给出的命令；命令白名单由首行 Sandbox.enforce 前置校验（24 节 WhitelistSandbox）")
-  public String shell(@ToolParam(description = "要执行的 bash 命令") String command) {
-    sandbox.enforce(new SandboxAction(ActionType.SHELL_COMMAND, command));
+      justification = "参数以 ProcessBuilder 的 argv 直接执行，不经 shell 解释；可执行文件在启动前经 Sandbox 精确白名单校验")
+  public String shell(
+      @ToolParam(description = "要执行的、已在白名单中的可执行文件") String executable,
+      @ToolParam(description = "传给可执行文件的独立参数数组，不支持 shell 语法") List<String> arguments) {
+    String commandExecutable = requireExecutable(executable);
+    List<String> command = command(commandExecutable, arguments);
+    sandbox.enforce(new SandboxAction(ActionType.SHELL_COMMAND, commandExecutable));
     try {
-      Process process = new ProcessBuilder("bash", "-c", command).start();
+      Process process = processStarter.start(command);
       boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
       if (!finished) {
         process.destroyForcibly();
-        throw new IllegalStateException("命令超时（" + timeout.toSeconds() + "s）被终止: " + command);
+        throw new IllegalStateException(
+            "命令超时（" + timeout.toSeconds() + "s）被终止: " + commandExecutable);
       }
       String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
       if (process.exitValue() != 0) {
@@ -54,10 +67,36 @@ public class ShellTools {
       }
       return stdout;
     } catch (IOException e) {
-      throw new UncheckedIOException("命令启动失败: " + command, e);
+      throw new UncheckedIOException("命令启动失败: " + commandExecutable, e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new IllegalStateException("命令执行被中断: " + command, e);
+      throw new IllegalStateException("命令执行被中断: " + commandExecutable, e);
     }
+  }
+
+  private static String requireExecutable(String executable) {
+    if (executable == null || executable.isBlank()) {
+      throw new IllegalArgumentException("可执行文件不能为空");
+    }
+    return executable.strip();
+  }
+
+  private static List<String> command(String executable, List<String> arguments) {
+    List<String> command = new ArrayList<>();
+    command.add(executable);
+    if (arguments != null) {
+      for (String argument : arguments) {
+        if (argument == null) {
+          throw new IllegalArgumentException("命令参数不能为 null");
+        }
+        command.add(argument);
+      }
+    }
+    return List.copyOf(command);
+  }
+
+  @FunctionalInterface
+  interface ProcessStarter {
+    Process start(List<String> command) throws IOException;
   }
 }

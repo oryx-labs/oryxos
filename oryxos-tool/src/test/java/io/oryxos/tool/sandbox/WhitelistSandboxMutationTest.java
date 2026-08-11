@@ -65,6 +65,15 @@ class WhitelistSandboxMutationTest {
   }
 
   @Test
+  @DisplayName("运行时管理不允许把解释器加入 Shell 白名单")
+  void addInterpreterIsRejected() {
+    WhitelistSandbox sb = emptySandbox();
+
+    assertThrows(IllegalArgumentException.class, () -> sb.add(Category.SHELL, "bash"));
+    assertTrue(sb.list(Category.SHELL).isEmpty());
+  }
+
+  @Test
   @DisplayName("删除不存在条目_返回 false 不报错")
   void removeNonexistentReturnsFalse() {
     WhitelistSandbox sb = emptySandbox();
