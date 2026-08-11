@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oryxos.storage.WebSessionService;
 import io.oryxos.storage.WebUserService;
 import io.oryxos.web.security.BasicAuthFilter;
+import io.oryxos.web.security.LoginAttemptService;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,5 +33,11 @@ public class AuthFilterConfig {
     registration.addUrlPatterns("/admin/*");
     registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
     return registration;
+  }
+
+  /** 登录暴力破解防护计数器（进程级单例，供 {@code AuthApiController} 构造注入）。 */
+  @Bean
+  LoginAttemptService loginAttemptService() {
+    return new LoginAttemptService();
   }
 }

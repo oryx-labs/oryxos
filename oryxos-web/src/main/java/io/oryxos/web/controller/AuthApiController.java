@@ -7,6 +7,7 @@ import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.config.WebAuthProperties;
 import io.oryxos.web.controller.dto.AuthMeView;
 import io.oryxos.web.controller.dto.LoginRequest;
+import io.oryxos.web.security.LoginAttemptService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -43,15 +44,24 @@ public class AuthApiController {
   /** cookie 名。 */
   static final String SESSION_COOKIE = "oryxos_session";
 
+  /** 锁定期内的 429 文案：不透露阀值/剩余次数，不区分账号存否。 */
+  private static final String TOO_MANY_ATTEMPTS_MESSAGE =
+      "Too many failed login attempts, try again later";
+
   private final WebUserService userService;
   private final WebSessionService sessionService;
   private final WebAuthProperties properties;
+  private final LoginAttemptService loginAttemptService;
 
   public AuthApiController(
-      WebUserService userService, WebSessionService sessionService, WebAuthProperties properties) {
+      WebUserService userService,
+      WebSessionService sessionService,
+      WebAuthProperties properties,
+      LoginAttemptService loginAttemptService) {
     this.userService = userService;
     this.sessionService = sessionService;
     this.properties = properties;
+    this.loginAttemptService = loginAttemptService;
   }
 
   /** 登录：验账密 → 建 session → 设 cookie。失败 401（"Invalid username or password"，不区分原因防枚举）。 */
@@ -69,10 +79,18 @@ public class AuthApiController {
       return ApiResponse.error(
           HttpStatus.BAD_REQUEST.value(), "username and password are required");
     }
+    // 暴力破解防护：同「用户名|来源 IP」连续失败超限即 429，不碰密码校验（锁定期内也不给密码探针）。
+    String attemptKey = loginRequest.username() + "|" + request.getRemoteAddr();
+    if (loginAttemptService.isBlocked(attemptKey)) {
+      response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+      return ApiResponse.error(HttpStatus.TOO_MANY_REQUESTS.value(), TOO_MANY_ATTEMPTS_MESSAGE);
+    }
     if (!userService.verify(loginRequest.username(), loginRequest.password())) {
+      loginAttemptService.onFailure(attemptKey);
       response.setStatus(HttpStatus.UNAUTHORIZED.value());
       return ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Invalid username or password");
     }
+    loginAttemptService.onSuccess(attemptKey);
     WebSession session = sessionService.create(loginRequest.username());
     response.addHeader(
         HttpHeaders.SET_COOKIE, buildCookie(session.getSessionId(), -1, request.isSecure()));
