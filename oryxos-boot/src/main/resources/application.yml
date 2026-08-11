@@ -72,7 +72,7 @@ oryxos:
   # model 留空则生成端点返回可读的 503（不向 OpenAI 兼容端点发 model=null）。
   author:
     provider: deepseek
-    model: deepseek-chat
+    model: deepseek-v4-flash
   # 管理台 Basic Auth（012-web-auth）。默认关=假设内网现状不变（SC-001）；
   # 开启后 /admin/** 需账密，/api/v1/** 不受影响（REST 不做 Basic Auth）。
   # 开启前先 oryxos user add <username> 建账号，否则启动阻断（FR-006）。
