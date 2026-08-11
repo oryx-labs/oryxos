@@ -220,4 +220,39 @@ class ProviderServiceTest {
     assertEquals("http_get", response.toolCalls().get(0).name());
     assertEquals("{\"url\":\"x\"}", response.toolCalls().get(0).argumentsJson()); // 原样，未执行
   }
+
+  @Test
+  void provider配置变更_ChatModel缓存原地替换不累积() {
+    io.oryxos.core.provider.ProviderRegistry registry =
+        mock(io.oryxos.core.provider.ProviderRegistry.class);
+    java.util.concurrent.atomic.AtomicReference<io.oryxos.core.provider.ProviderDef> current =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            new io.oryxos.core.provider.ProviderDef("deepseek", "key-1", "https://a", null));
+    when(registry.find("deepseek")).thenAnswer(inv -> java.util.Optional.of(current.get()));
+    java.util.concurrent.atomic.AtomicInteger builds =
+        new java.util.concurrent.atomic.AtomicInteger();
+    ChatModel model = mock(ChatModel.class);
+    when(model.call(any(Prompt.class))).thenReturn(textResponse("ok"));
+    ProviderService cachedService =
+        new SpringAiProviderServiceImpl(
+            registry,
+            def -> {
+              builds.incrementAndGet();
+              return model;
+            },
+            new ToolSchemaAdapter(),
+            audit);
+
+    cachedService.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
+    cachedService.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
+    assertEquals(1, builds.get()); // 同配置复用，不重建
+
+    current.set(new io.oryxos.core.provider.ProviderDef("deepseek", "key-2", "https://b", null));
+    cachedService.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
+    assertEquals(2, builds.get()); // 改了 key/url → 重建
+
+    current.set(new io.oryxos.core.provider.ProviderDef("deepseek", "key-1", "https://a", null));
+    cachedService.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
+    assertEquals(3, builds.get()); // 换回旧配置也重建——旧条目已被替换而非累积保留
+  }
 }

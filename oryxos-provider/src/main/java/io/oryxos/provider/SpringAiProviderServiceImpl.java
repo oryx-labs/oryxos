@@ -39,8 +39,12 @@ public class SpringAiProviderServiceImpl implements ProviderService {
   private final Function<ProviderDef, ChatModel> chatModelBuilder;
   private final ToolSchemaAdapter adapter;
   private final LlmCallAuditor audit;
-  // 已建的 ChatModel 缓存：key = name|apiKey|baseUrl；provider 改了 key/url（缓存键变）→ 下次自动重建（31 节动态 provider）
-  private final Map<String, ChatModel> cache = new ConcurrentHashMap<>();
+  // 已建的 ChatModel 缓存：key = provider name，值携带配置指纹（apiKey|baseUrl）。指纹变了原地替换旧条目——
+  // 缓存大小恒等于 provider 数，反复改 key/url 不再累积不可回收的旧实例（31 节动态 provider）。
+  private final Map<String, CachedModel> cache = new ConcurrentHashMap<>();
+
+  /** 缓存条目：配置指纹 + 已建实例，指纹不变则复用。 */
+  private record CachedModel(String fingerprint, ChatModel model) {}
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
@@ -98,10 +102,17 @@ public class SpringAiProviderServiceImpl implements ProviderService {
     return result;
   }
 
-  /** 按 name+key+url 缓存构建好的 ChatModel；参数变化即换缓存键、下次重建（provider CRUD 改了配置立即生效）。 */
+  /** 按 provider 名缓存已建的 ChatModel；同名下 key/url 变化即原地重建替换（provider CRUD 改了配置立即生效，旧实例可回收）。 */
   private ChatModel resolveModel(ProviderDef def) {
-    String cacheKey = def.name() + "|" + def.apiKey() + "|" + def.baseUrl();
-    return cache.computeIfAbsent(cacheKey, k -> chatModelBuilder.apply(def));
+    String fingerprint = def.apiKey() + "|" + def.baseUrl();
+    return cache
+        .compute(
+            def.name(),
+            (name, cached) ->
+                cached != null && cached.fingerprint().equals(fingerprint)
+                    ? cached
+                    : new CachedModel(fingerprint, chatModelBuilder.apply(def)))
+        .model();
   }
 
   private Prompt buildPrompt(Profile profile, ProviderRequest request) {
