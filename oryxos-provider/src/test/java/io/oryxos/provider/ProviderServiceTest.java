@@ -181,21 +181,40 @@ class ProviderServiceTest {
   }
 
   @Test
-  void 成功调用的审计失败_向上抛出且不伪装成模型失败() {
+  void 成功调用的审计失败_结果照常返回不当模型失败() {
     when(deepseek.call(any(Prompt.class))).thenReturn(textResponse("你好"));
     doThrow(new IllegalStateException("audit unavailable"))
         .when(audit)
         .record(eq("s-1"), eq("deepseek"), eq("model-x"), any(), eq(true), isNull(), anyLong());
 
-    IllegalStateException error =
-        assertThrows(
-            IllegalStateException.class,
-            () -> service.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi")));
+    // LLM 已成功、token 已消耗：审计存储抖动不能让调用方丢掉这次完整回答（fail-open + ERROR 日志）
+    ProviderResponse response =
+        service.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
 
-    assertEquals("audit unavailable", error.getMessage());
-    verify(deepseek, times(1)).call(any(Prompt.class));
+    assertEquals("你好", response.text());
+    verify(deepseek, times(1)).call(any(Prompt.class)); // 不重试模型
     verify(audit, never())
         .record(eq("s-1"), eq("deepseek"), eq("model-x"), isNull(), eq(false), any(), anyLong());
+  }
+
+  @Test
+  void 调用失败且审计也失败_上抛的是模型异常审计异常挂suppressed() {
+    RuntimeException modelFailure = new RuntimeException("LLM 调 400");
+    when(deepseek.call(any(Prompt.class))).thenThrow(modelFailure);
+    IllegalStateException auditFailure = new IllegalStateException("audit unavailable");
+    doThrow(auditFailure)
+        .when(audit)
+        .record(eq("s-1"), eq("deepseek"), eq("model-x"), isNull(), eq(false), any(), anyLong());
+
+    RuntimeException thrown =
+        assertThrows(
+            RuntimeException.class,
+            () -> service.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi")));
+
+    // 排障首先看到的必须是模型的真实错误，审计抖动只是附带信息
+    assertEquals(modelFailure, thrown);
+    assertEquals(1, thrown.getSuppressed().length);
+    assertEquals(auditFailure, thrown.getSuppressed()[0]);
   }
 
   @Test
