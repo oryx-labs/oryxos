@@ -173,12 +173,15 @@ class WhitelistSandboxTest {
     }
 
     @Test
-    @DisplayName("解释器不能被加入 Shell 白名单")
-    void interpretersCannotBeAllowlisted() {
+    @DisplayName("管理员显式配置的解释器可被 Shell 白名单允许")
+    void explicitlyAllowlistedInterpretersAreAllowed() {
       for (String interpreter : List.of("bash", "sh", "cmd.exe", "powershell", "python3", "node")) {
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> sandbox(List.of(), List.of(interpreter), List.of()));
+        WhitelistSandbox interpreterSandbox = sandbox(List.of(), List.of(interpreter), List.of());
+
+        assertDoesNotThrow(
+            () ->
+                interpreterSandbox.enforce(
+                    new SandboxAction(ActionType.SHELL_COMMAND, interpreter)));
       }
     }
   }

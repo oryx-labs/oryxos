@@ -804,7 +804,7 @@ async function submitEnable() {
 // —— Sandbox 白名单管理（CRUD /api/v1/sandbox/whitelist）：三类 file/shell/http 的白名单条目 ——
 const WL_CATS = [
   { key: 'file', label: '文件路径', ph: '允许访问的路径，如 /data 或 /tmp/*' },
-  { key: 'shell', label: '可执行文件', ph: '允许执行的可执行文件，如 ls（不允许解释器）' },
+  { key: 'shell', label: '可执行文件', ph: '允许执行的可执行文件，如 python3（授予本机代码执行权限）' },
   { key: 'http', label: 'HTTP 域名', ph: '允许访问的域名，如 *.example.com' },
 ]
 const wl = ref({ loading: false, error: null, file: [], shell: [], http: [] })

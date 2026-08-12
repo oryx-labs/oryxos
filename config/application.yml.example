@@ -43,7 +43,7 @@ file:
   allowed_paths:
     - .oryxos                   # Agent 工作区（Profile / 记忆 / 技能 / 日志）
 shell:
-  allowed_commands:             # 只放最小只读命令集；写 / 删类默认不在内
+  allowed_commands:             # 解释器条目授予模型当前系统用户的代码执行权限，不提供隔离
     - ls
     - cat
     - echo

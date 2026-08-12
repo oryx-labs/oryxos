@@ -150,7 +150,7 @@ file:
 }
 ```
 
-`bash`, `sh`, `cmd`, PowerShell, Python, and Node entry points cannot be added to this whitelist. Use a dedicated tool or MCP server for scripted or multi-step workflows.
+Adding a shell interpreter or language runtime is an explicit administrator grant of code-execution authority: the model can run code with the OS identity of the OryxOS process. Direct argv execution prevents shell-syntax injection, but it does not isolate the interpreter's file or network effects. Use a container/MicroVM-backed `execute_code` runner for untrusted or multi-tenant code; that runner is planned, not implemented yet.
 
 ```yaml
 shell:
@@ -159,6 +159,7 @@ shell:
     - cat
     - echo
     - grep
+    - python3 # trusted-local code execution; not an isolation boundary
   timeout_seconds: 30
 ```
 

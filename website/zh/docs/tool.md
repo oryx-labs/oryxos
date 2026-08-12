@@ -150,7 +150,7 @@ file:
 }
 ```
 
-不能把 `bash`、`sh`、`cmd`、PowerShell、Python 或 Node 入口加入该白名单。脚本或多步骤工作流应使用专用工具或 MCP Server。
+将 Shell 解释器或语言运行时加入白名单，是管理员对代码执行权限的显式授予：模型可按 OryxOS 进程所属的操作系统身份运行代码。argv 直传能防止 Shell 语法注入，但不隔离解释器的文件或网络影响。对不可信或多租户代码，应使用基于容器/MicroVM 的 `execute_code` Runner；该 Runner 仍处于规划阶段，尚未实现。
 
 ```yaml
 shell:
@@ -159,6 +159,7 @@ shell:
     - cat
     - echo
     - grep
+    - python3 # 可信单机代码执行；不是隔离边界
   timeout_seconds: 30
 ```
 

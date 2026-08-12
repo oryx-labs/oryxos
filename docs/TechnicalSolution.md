@@ -333,7 +333,7 @@ ActionType     = FILE_READ | FILE_WRITE | SHELL_COMMAND | HTTP_REQUEST
 **`WhitelistSandbox`（核心阶段唯一实现）。** 配置在 `application.yaml`（`file.allowed_paths`、`shell.allowed_commands`、`http.allowed_domains`），内部按 `ActionType` 路由到三个私有校验方法：
 
 - `checkFilePath`（路径标准化后比对白名单，需处理 `../` 路径穿越）
-- `checkShellCommand`（精确比对可执行文件白名单，拒绝解释器入口）
+- `checkShellCommand`（精确比对可执行文件白名单；解释器仅在管理员显式列入时允许，并授予宿主机进程权限）
 - `checkHttpUrl`（解析 host 后做通配符匹配）
 
 任意校验失败抛 `SandboxViolationException`，Tool 执行终止；异常信息直接复用 `ToolExecutor` 已有的失败审计路径写入 `tool_invocations`（`success=false`、`error_message`），不需要为 Sandbox 单独新增审计逻辑。
@@ -689,7 +689,7 @@ mvn clean package
 
 **派生 Profile**：底座（第 1~10 章的一切）都吃 `Profile`，所以 `AgentLoader.deriveProfile(agentDir)` 把 `AGENT.md` 的 frontmatter 映射成一个 `Profile`，让 Agent 目录**零改动复用整台底座**。
 
-**渐进式披露（收进一个 Agent 内部）**：Agent 的**正文**在被触发时进 system prompt（它就是这个 Agent 的"人格 + 干什么"）；目录里的**子指令 / 参考 / 脚本不预载**，按正文指引**用底座既有能力按需取**——读子指令 / 参考用 `read_file`；脚本工作流通过有独立输入契约的 MCP 或专用 Tool 暴露。`shell` 仅运行白名单内的直接可执行文件，不能调用 Python 或其他解释器。没有新工具、没有能力库、没有全局索引。
+**渐进式披露（收进一个 Agent 内部）**：Agent 的**正文**在被触发时进 system prompt（它就是这个 Agent 的"人格 + 干什么"）；目录里的**子指令 / 参考 / 脚本不预载**，按正文指引**用底座既有能力按需取**——读子指令 / 参考用 `read_file`；在可信单机部署中，脚本可通过 `shell` 调用管理员显式白名单内的解释器。该操作以 OryxOS 进程的操作系统权限运行，不构成文件或网络隔离；不可信或多租户代码应使用未来基于容器/MicroVM 的 `execute_code` Runner。没有新工具、没有能力库、没有全局索引。
 
 > **底线不变（宪法原则四）**：`AGENT.md` 正文由 `ContextLoader` 注入 system prompt（与 Bootstrap 文件同层）；**一个 Agent 目录不是一个可执行 Tool**——它的子资源经底座既有的 `read_file`/`shell` 取用，不新造机制。
 
@@ -776,7 +776,7 @@ mvn clean package
 3. LLM 按正文调 `github_daily` 获取 JSON；该 MCP 或专用 Tool 自己定义输入、脚本访问范围和网络策略，并通过 `ToolExecutor` 写 `tool_invocations`。**脚本产出的 JSON 进上下文、脚本代码不进**。
 4. LLM 用 JSON + 记忆偏好组织三段日报（今日 / 本月 / AI 重点），调 `notify` 推送
 
-> **脚本的信任边界（呼应 11.1 与宪法原则四）**：通用 `shell` 不再是脚本启动器，不能通过白名单放行 Python、Bash、Node 等解释器。脚本必须封装在 MCP 或专用 Tool 中，并由该集成显式声明脚本来源、网络范围与审计策略；这条信任边界不能再靠“解释器 + 脚本目录”的通用白名单假装隔离。
+> **脚本的信任边界（呼应 11.1 与宪法原则四）**：通用 `shell` 可调用管理员显式白名单内的 Python、Bash、Node 等解释器，但这等于授予模型 OryxOS 进程所属操作系统用户的代码执行权限。argv 直传只阻止 Shell 语法拼接，不会隔离解释器的文件或网络行为。对不可信或多租户代码，应使用未来基于容器/MicroVM 的 `execute_code` Runner；在此之前，只能在可信单机部署中启用解释器。
 
 **验收要点：** `tool_invocations` 里有 `github_daily` 调用；脚本产出进上下文、代码不进；AI 段体现记忆偏好；改一下 `AGENT.md` 正文即时生效。
 

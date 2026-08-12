@@ -66,12 +66,14 @@ class WhitelistSandboxMutationTest {
   }
 
   @Test
-  @DisplayName("运行时管理不允许把解释器加入 Shell 白名单")
-  void addInterpreterIsRejected() {
+  @DisplayName("运行时管理可显式授予解释器 Shell 执行权限")
+  void addInterpreterAllowsExecution() {
     WhitelistSandbox sb = emptySandbox();
 
-    assertThrows(IllegalArgumentException.class, () -> sb.add(Category.SHELL, "bash"));
-    assertTrue(sb.list(Category.SHELL).isEmpty());
+    assertTrue(sb.add(Category.SHELL, "python3"));
+    assertTrue(sb.list(Category.SHELL).contains("python3"));
+    assertDoesNotThrow(
+        () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "python3")));
   }
 
   @Test

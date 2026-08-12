@@ -37,26 +37,6 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   /** 域名白名单里的通配前缀；命中后转成"以 . 之后部分结尾"的点号边界匹配。 */
   private static final String WILDCARD_PREFIX = "*.";
 
-  /** 解释器可接收任意源码或命令字符串，不能作为通用 shell 工具的白名单条目。 */
-  private static final Set<String> DISALLOWED_SHELL_INTERPRETERS =
-      Set.of(
-          "bash",
-          "bash.exe",
-          "sh",
-          "sh.exe",
-          "cmd",
-          "cmd.exe",
-          "powershell",
-          "powershell.exe",
-          "pwsh",
-          "pwsh.exe",
-          "python",
-          "python.exe",
-          "python3",
-          "python3.exe",
-          "node",
-          "node.exe");
-
   // 具体类型 CopyOnWriteArrayList（而非 List 接口）：需要 addIfAbsent 的原子"不存在才加"语义
   private final CopyOnWriteArrayList<Path> allowedRoots = new CopyOnWriteArrayList<>();
   private final Set<String> allowedCommands = ConcurrentHashMap.newKeySet();
@@ -98,7 +78,7 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
     if (category == Category.FILE) {
       allowedRoots.addIfAbsent(normalizeRoot(value));
     } else if (category == Category.SHELL) {
-      allowedCommands.add(requireAllowedShellExecutable(value));
+      allowedCommands.add(requireNonBlank(value));
     } else {
       allowedDomainPatterns.addIfAbsent(value);
     }
@@ -165,23 +145,9 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   private void checkShellCommand(String command) {
-    if (isDisallowedShellInterpreter(command) || !allowedCommands.contains(command)) {
+    if (!allowedCommands.contains(command)) {
       throw new SandboxViolationException("可执行文件不在白名单内: " + command);
     }
-  }
-
-  private static String requireAllowedShellExecutable(String value) {
-    String executable = requireNonBlank(value);
-    if (isDisallowedShellInterpreter(executable)) {
-      throw new IllegalArgumentException("shell 白名单不允许解释器: " + executable);
-    }
-    return executable;
-  }
-
-  private static boolean isDisallowedShellInterpreter(String executable) {
-    int separator = Math.max(executable.lastIndexOf('/'), executable.lastIndexOf('\\'));
-    String name = separator < 0 ? executable : executable.substring(separator + 1);
-    return DISALLOWED_SHELL_INTERPRETERS.contains(name.toLowerCase(Locale.ROOT));
   }
 
   /** HTTP 读（GET 类）：默认放行，只挡内网/回环/云元数据等 SSRF 目标。无主机的伪目标（如 web_search）放行。 */
@@ -342,7 +308,7 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
         changed = allowedRoots.addIfAbsent(root);
       }
     } else if (category == Category.SHELL) {
-      canonical = requireAllowedShellExecutable(entry);
+      canonical = entry;
       changed = allowedCommands.add(canonical);
     } else {
       canonical = entry;
