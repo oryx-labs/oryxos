@@ -21,6 +21,9 @@ import java.util.Map;
  * 消息及其后全部消息）④可用工具——不进文本， 经 {@link ProviderRequest#availableTools()} 传递，schema 挂载由 16 节
  * ToolSchemaAdapter 单点负责。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "contextLoader 是 Spring 注入的共享单例，构造注入共享同一引用正是意图。")
 public class PromptBuilder {
 
   private static final DateTimeFormatter DATE_TIME =
@@ -64,25 +67,9 @@ public class PromptBuilder {
     }
     // ③ 会话历史：结构化透传（不再拍平成文本），保留 assistant tool_calls / tool tool_call_id 配对——
     //    多步 ReAct 里模型才能看出工具已调过、继续下一步（31 节修复）；仍只留最近 N 轮（坑二）
-    List<Message> history = recentTurns(session, profile.settings().maxHistoryTurns());
+    List<Message> history = session.recentTurns(profile.settings().maxHistoryTurns());
     // ④ 工具列表经 availableTools 传递，Provider 侧翻译成 Function Calling 格式
     return new ProviderRequest(system.toString(), history, resolveTools(profile));
-  }
-
-  /** 截断以轮为界整体保留/丢弃：一轮 = 一条 user 消息及其后到下一条 user 消息前的全部消息。 */
-  private static List<Message> recentTurns(Session session, int maxHistoryTurns) {
-    List<Message> messages = session.messages();
-    List<Integer> turnStarts = new ArrayList<>();
-    for (int i = 0; i < messages.size(); i++) {
-      if (Message.ROLE_USER.equals(messages.get(i).role())) {
-        turnStarts.add(i);
-      }
-    }
-    if (turnStarts.size() <= maxHistoryTurns) {
-      return messages;
-    }
-    int from = turnStarts.get(turnStarts.size() - maxHistoryTurns);
-    return messages.subList(from, messages.size());
   }
 
   private List<OryxTool> resolveTools(Profile profile) {

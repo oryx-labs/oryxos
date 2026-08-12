@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.oryxos.core.profile.Profile;
+import io.oryxos.core.skill.AgentSkillBindingService;
+import io.oryxos.core.skill.SkillLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,7 +31,11 @@ class ProgressiveDisclosureTest {
   void setUp() throws IOException {
     agentDir = oryxosRoot.resolve("agents").resolve("reconcile");
     Files.createDirectories(agentDir);
-    loader = new ContextLoader(oryxosRoot, new io.oryxos.core.skill.SkillRegistry());
+    loader =
+        new ContextLoader(
+            oryxosRoot,
+            new AgentSkillBindingService(
+                oryxosRoot, new SkillLoader(oryxosRoot.resolve("skills"))));
   }
 
   private Profile profile() {
@@ -82,5 +88,58 @@ class ProgressiveDisclosureTest {
     String reloaded = loader.load(p);
     assertTrue(reloaded.contains("v2-instruction"), "改正文下一次触发即生效");
     assertEquals(-1, reloaded.indexOf("v1-instruction"));
+  }
+
+  @Test
+  @DisplayName("绑定 Skill 每轮只注入 name/description/本地路径，不注入正文或未绑定 Skill")
+  void boundSkillOnlyDisclosesMetadata() throws IOException {
+    writeBody("按需使用 Skill");
+    Path report = oryxosRoot.resolve("skills/report");
+    Path hidden = oryxosRoot.resolve("skills/hidden");
+    Files.createDirectories(report);
+    Files.createDirectories(hidden);
+    Files.writeString(
+        report.resolve("SKILL.md"), "---\nname: report\ndescription: 报告格式\n---\nBOUND_BODY_SECRET");
+    Files.writeString(
+        hidden.resolve("SKILL.md"),
+        "---\nname: hidden\ndescription: 不可见\n---\nUNBOUND_BODY_SECRET");
+    Files.createDirectories(agentDir.resolve("skills"));
+    Files.createSymbolicLink(agentDir.resolve("skills/report"), Path.of("../../../skills/report"));
+
+    String context = loader.load(profile());
+
+    assertTrue(context.contains("report"));
+    assertTrue(context.contains("报告格式"));
+    assertTrue(
+        context.contains(
+            agentDir.resolve("skills/report/SKILL.md").toAbsolutePath().normalize().toString()));
+    assertFalse(context.contains("BOUND_BODY_SECRET"));
+    assertFalse(context.contains("hidden"));
+    assertFalse(context.contains("UNBOUND_BODY_SECRET"));
+  }
+
+  @Test
+  @DisplayName("零绑定不输出 Skill 标题，多绑定按名称稳定排序并跳过坏链接")
+  void zeroAndMultipleBindingsHaveStableMinimalCatalog() throws IOException {
+    writeBody("正文");
+    assertFalse(loader.load(profile()).contains("你可以按需使用以下 Skill"));
+
+    for (String name : List.of("zeta", "alpha")) {
+      Path skill = Files.createDirectories(oryxosRoot.resolve("skills").resolve(name));
+      Files.writeString(
+          skill.resolve("SKILL.md"),
+          "---\nname: " + name + "\ndescription: " + name + "-description\n---\n" + name + "-body");
+    }
+    Path links = Files.createDirectories(agentDir.resolve("skills"));
+    Files.createSymbolicLink(links.resolve("zeta"), Path.of("../../../skills/zeta"));
+    Files.createSymbolicLink(links.resolve("alpha"), Path.of("../../../skills/alpha"));
+    Files.createSymbolicLink(links.resolve("broken"), Path.of("../../../skills/missing"));
+
+    String context = loader.load(profile());
+
+    assertTrue(context.indexOf("- alpha：") < context.indexOf("- zeta："));
+    assertFalse(context.contains("alpha-body"));
+    assertFalse(context.contains("zeta-body"));
+    assertFalse(context.contains("broken"));
   }
 }

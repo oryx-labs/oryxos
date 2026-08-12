@@ -3,27 +3,46 @@
 </p>
 
 <p align="center">
-  <strong>Distributed Agent Harness OS — a production-grade harness for every agent, run like processes on an OS</strong>
+  <strong>Say it in plain language. A team of agents delivers.</strong><br/>
+  <em>The self-hosted Agent Operating System for the enterprise.</em>
 </p>
 
 <p align="center">
-  <a href="https://github.com/oryx-labs/oryxos/releases"><img src="https://img.shields.io/badge/version-1.0.0--SNAPSHOT-orange?style=flat-square" alt="version"/></a>
-  <a href="https://www.java.com"><img src="https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white" alt="Java 21"/></a>
-  <a href="https://spring.io/projects/spring-boot"><img src="https://img.shields.io/badge/Spring%20Boot-3.x-6DB33F?style=flat-square&logo=springboot&logoColor=white" alt="Spring Boot 3"/></a>
+  <a href="https://github.com/oryx-labs/oryxos/releases"><img src="https://img.shields.io/badge/version-0.1.2-orange?style=flat-square" alt="version"/></a>
+  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-native-8A2BE2?style=flat-square" alt="MCP native"/></a>
   <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache 2.0"/></a>
 </p>
 
 ---
 
-OryxOS is an open-source **Agent Harness OS** built on Java 21. It gives every agent a production-grade *harness* — the scaffolding that turns a model into a working agent — and runs a fleet of them like an operating system runs processes. One directory defines one Agent; one platform harnesses and runs them all. Deploy privately on your own K8s or servers — agents share channels, LLM routing, tools, memory, and sandboxed execution.
+**OryxOS is the self-hosted Agent OS for the enterprise.** Describe a task in one sentence of natural language — OryxOS breaks it down, assembles a team of agents, and they collaborate to deliver the result:
+
+<p align="center">
+  <img src="website/public/images/pipeline-en.svg" alt="one sentence → decompose → assemble an agent team → collaborate → deliver the result" width="100%"/>
+</p>
+
+**So every company can run its own agents — in plain language.** No code to define an agent, no data leaving your infrastructure, every step audited.
+
+- **Today, shipped**: define an agent in one sentence (or one markdown directory) and it goes live instantly — with memory, 24 built-in tools, MCP connectors, skills, notifications, and cron scheduling, all on your own servers.
+- **The north star**: publish a task in one sentence and an agent *team* self-organizes to deliver it — planner, specialists, reviewer — fully audited, with humans approving the dangerous steps. See the [roadmap](docs/VisionAndRoadmap.md).
 
 > Long-term vision: enter the Apache Software Foundation as a top-level project.
 
-## What is an agent harness
+## The Agent formula
+
+Everything an agent needs is **built into the OS** — an agent just references what it wants:
+
+<p align="center">
+  <img src="website/public/images/agent-formula-en.svg" alt="natural language (md) + Memory + Tools + MCP + Skills + Knowledge + Notify = a working Agent" width="100%"/>
+</p>
+
+This is the whole point: **drive the cost of defining an agent toward zero.** You write intent; the OS supplies the capabilities, the safety rails, and the audit trail.
+
+## What is an agent harness (and why an OS)
 
 **An agent harness is the scaffolding around a model that turns it into a working agent:** the loop that drives reason → act → observe, the tools it can call and the execution that runs them, the context assembled before every call, the memory it accumulates, the sandbox that contains it, and the audit trail that records what it did. A bare model only generates text — the harness is what lets it *do* things, reliably and safely.
 
-**The bottleneck for reliable agents in production is not the model — it's the harness around it.** Most Agent frameworks give you one harness, in Python, coupled to a cloud. For enterprises where Java is the backend standard and private deployment is a compliance requirement, there is no native, production-ready harness — let alone a platform that hands the same one to a whole fleet. OryxOS fills this gap.
+**The bottleneck for reliable agents in production is not the model — it's the harness around it.** And an enterprise never runs just one agent. OryxOS gives every agent the same production-grade harness, and runs the whole fleet like an operating system runs processes — that's the **Agent Harness OS**.
 
 ## Model → Harness → OS
 
@@ -38,13 +57,13 @@ OryxOS is the third column — and it ships the second one for every agent it ru
 ## Features
 
 **🤖 One Directory = One Agent**
-An Agent is a directory: `.oryxos/agents/<name>/AGENT.md` — YAML frontmatter (the Agent's profile: model, tools, channels, schedules) plus a body of task instructions. Optional `skills/`, `scripts/`, and `REFERENCE.md` are loaded on demand. Multiple agents co-exist on one instance.
+An Agent is a directory: `.oryxos/agents/<name>/AGENT.md` — YAML frontmatter plus task instructions. Its optional `skills/` directory contains relative symlinks to shared Skill entities. Every prompt receives only each bound Skill's name, description, and local path; bodies and resources load on demand. Multiple agents co-exist on one instance.
 
 **⚡ Dynamic Agent Management**
 Create an agent via REST, generate a draft `AGENT.md` from one sentence with an LLM, or just drop a directory into the workspace — a `WorkspaceWatcher` picks it up and the agent goes live with no restart.
 
-**☕ Java Native**
-Built on Java 21 with virtual threads and a self-implemented ReAct loop (Spring AI is used only for protocol translation and `@Tool` schema generation). Single executable JAR, single binary deployment — no Python runtime.
+**📦 One Binary, Zero Ceremony**
+A single executable artifact with a self-implemented, fully inspectable ReAct loop and synchronous execution on virtual threads. `bin/oryx-server start` and you're live — REST API, web console, scheduler, and sandbox in one process. No extra runtimes, no sidecars.
 
 **🔒 Private & Compliant**
 Runs on your own K8s, VM, or bare metal. Data never leaves your environment. No cloud lock-in. Credentials go through environment variables and your enterprise key management.
@@ -53,7 +72,7 @@ Runs on your own K8s, VM, or bare metal. Data never leaves your environment. No 
 LLM providers and notify channels are stored in SQLite with full CRUD — add, edit, or remove them at runtime. Explicit `name → ChatModel` routing is preserved; the model is rebuilt and cached when its key or base URL changes.
 
 **🛡️ Security as Foundation**
-Tool calls pass through file-path, command, and domain whitelists (no Java `SecurityManager`). Full audit trail from day one — every tool invocation and LLM call is persisted to SQLite, not just logged.
+Tool calls pass through file-path, command, and domain whitelists. Full audit trail from day one — every tool invocation and LLM call is persisted to the audit tables, not just logged.
 
 **🔌 Open Standards**
 Tools via MCP with a three-tier plugin model (zero-code SKILL.md → custom MCP server → native `@Tool`). Notify channels addressed by name. Agent-to-agent collaboration via A2A on the roadmap.
@@ -68,24 +87,28 @@ Tools via MCP with a three-tier plugin model (zero-code SKILL.md → custom MCP 
 
 | Capability | Description |
 | --- | --- |
-| **LLM Routing** | Dynamic, SQLite-backed provider registry with CRUD. Agents are provider-agnostic; explicit `name → ChatModel` routing keeps multi-provider dispatch correct. Switch or add providers at runtime. Local inference supported. |
-| **ReAct Loop** | Self-implemented reasoning engine — no external framework. LLM decides whether and which tool to call; OryxOS executes, feeds the result back; LLM decides the next step. Sync execution on Java 21 virtual threads; loop fully controllable. |
+| **LLM Routing** | Dynamic, SQLite-backed provider registry with CRUD. Agents are provider-agnostic; explicit name → model routing keeps multi-provider dispatch correct. Switch or add providers at runtime. Local inference supported. |
+| **ReAct Loop** | Self-implemented reasoning engine — no external framework. LLM decides whether and which tool to call; OryxOS executes, feeds the result back; LLM decides the next step. Synchronous execution on virtual threads; loop fully controllable. |
 | **Memory** | Per-agent long-term memory (`.oryxos/agents/<name>/MEMORY.md`, keyword search, timestamped entries; global fallback when no agent context). Auto-injected into every system prompt, with a vector-retrieval upgrade path. |
 | **Tool System** | Built-in file, shell, and HTTP tools. Three-tier extension: zero-code SKILL.md + community MCP server → light-code custom MCP server → heavy-code native `@Tool` method. |
 | **REST API** | All capabilities exposed via REST. Any language can integrate. Business systems connect via HTTP. |
 
 ## Roadmap
 
-**Phase 1 — Single-node Runtime Kernel** *(current)*
-Five core capabilities operational: config-as-agent, multi-agent coexistence, REST API, MCP integration. Goal: single-node running and managing a fleet of agents — actually usable.
+**Phase 1 — Single-node Runtime Kernel** ✅ *(shipped)*
+Define an agent in one sentence or one directory; it goes live with no restart. Memory, 24 built-in tools, MCP, skills, notify, cron, sandbox, full audit, REST API, and a web console — all working on a single node.
 
-**Phase 2 — Distributed Foundation** *(planned)*
-Stateless instances, externalized state, multi-replica deployment. Supports larger scale and high availability.
+**Next — parallel tracks, pick one and start** *(see [Vision & Roadmap](docs/VisionAndRoadmap.md))*
 
-**Phase 3 — Cross-node Agent Collaboration** *(vision)*
-Introduce agent communication infrastructure. Integrate A2A protocol. Cross-node agent discovery, delegation, and reliable async coordination.
-
-*Horizontal capabilities added across phases: multi-tenancy, SSO, full audit, tool policies, observability, web management console.*
+- **A · Distributed foundation** — pluggable storage (SQLite → MySQL/PostgreSQL), stateless instances, DB-based cluster scheduling (xxl-job style)
+- **B · Knowledge & memory** — built-in knowledge base + semantic memory on a shared vector subsystem
+- **C · Flow orchestration** — declarative markdown flows, sub-agent delegation, A2A protocol
+- **D · Self-improving agents** — auto-distill skills from successful runs
+- **E · Omni-channel & multimodal** — Feishu / WeCom / DingTalk / Slack / Telegram, voice, browser, vision
+- **F · Container-grade sandboxing** — Docker / SSH execution backends
+- **G · Enterprise governance** — multi-tenancy, SSO/RBAC, cost dashboards, capability marketplace
+- **H · Enterprise-only powers** — human-in-the-loop approval, audit-to-data-flywheel, cost governance, smart model routing
+- **I · The north star** — publish a task in one sentence; an agent team self-organizes and delivers the result
 
 ## Module Structure
 
@@ -180,7 +203,7 @@ The dev server runs on port **5173** with base `/admin/` and proxies `/api` → 
 
 ## Agent Definition
 
-**One directory = one Agent.** Each agent lives in `.oryxos/agents/<name>/` with an `AGENT.md` — YAML frontmatter (its profile) plus a body of task instructions injected into the system prompt. Optional `skills/*.md`, `scripts/`, and `REFERENCE.md` in the same directory are loaded on demand via `read_file` / `shell`. There is no `.oryxos/profiles/` directory.
+**One directory = one Agent.** Each agent lives in `.oryxos/agents/<name>/` with an `AGENT.md`, optional scripts/references, and a `skills/` binding view. Shared Skill entities live under `.oryxos/skills/<name>/`; an Agent binds one through a relative symlink at `agents/<agent>/skills/<name>`. Each prompt receives only bound Skill names, descriptions, and local paths. Bodies and resources load on demand through `read_file` / `shell`; there is no `use_skill` tool or `.oryxos/profiles/` directory.
 
 ```markdown
 ---
@@ -238,7 +261,7 @@ All endpoints are prefixed with `/api/v1` and every response is wrapped in a uni
 
 - **Platform before Agent** — the most important deliverable is not a powerful Agent, but the environment that lets any Agent run reliably
 - **Self-implement the core** — reasoning loop is self-implemented; protocol adapters reuse mature libraries; no reinventing the wheel
-- **One directory = one Agent** — an Agent is a directory (`AGENT.md` + optional skills/scripts), not code
+- **One directory = one Agent** — `AGENT.md` + Agent-local Skill symlinks + optional scripts, not code
 - **Open standards** — MCP for tools, A2A for collaboration, open formats for skills
 - **Stateless instances** — state externalized from the start; the prerequisite for scaling to distributed
 - **Security as foundation** — controlled tool sources, least privilege, mandatory sandbox, credentials never persisted, full audit trail from day one
@@ -250,12 +273,16 @@ All endpoints are prefixed with `/api/v1` and every response is wrapped in a uni
 | --- | --- |
 | Language / Runtime | Java 21 (virtual threads) |
 | Framework | Spring Boot 3.x |
-| LLM Integration | Spring AI Alibaba (protocol translation + `@Tool` schema only) |
+| LLM Integration | Spring AI (OpenAI-compatible protocol translation + `@Tool` schema only) |
 | CLI | Picocli |
 | Config | SnakeYAML |
 | Persistence | SQLite + Spring Data JPA |
 | Logging | Logback + SLF4J (structured JSON) |
 | Build | Maven multi-module |
+
+## Contributing
+
+First PRs are welcome — see the [Contributing Guide](https://oryx-labs.github.io/oryxos/docs/contributing) and the [GitHub workflow primer](https://oryx-labs.github.io/oryxos/docs/github-workflow).
 
 ## License
 

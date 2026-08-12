@@ -1,8 +1,11 @@
 package io.oryxos.core.skill;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,13 +54,71 @@ class SkillImportFilesTest {
 
   @Test
   @DisplayName("importFiles：nameOverride 优先于 frontmatter 的 name")
-  void importFiles_nameOverrideTakesPriority() {
-    Map<String, String> files = Map.of("SKILL.md", "---\nname: ignored\n---\n正文");
+  void importFiles_nameOverrideTakesPriority() throws Exception {
+    Map<String, String> files =
+        Map.of("SKILL.md", "---\n\"name\": ignored\ndescription: 覆盖名\n---\n正文");
 
     Skill s = service.importFiles("myname", files, "fb");
 
     assertEquals("myname", s.name());
     assertTrue(Files.isRegularFile(oryxosRoot.resolve("skills/myname/SKILL.md")));
+    assertTrue(
+        Files.readString(oryxosRoot.resolve("skills/myname/SKILL.md")).contains("name: myname"));
+  }
+
+  @Test
+  @DisplayName("importFiles：落盘后校验失败会删除完整残留目录")
+  void importFiles_validationFailureRollsBackDirectory() {
+    SkillLoader failingLoader =
+        new SkillLoader(oryxosRoot.resolve("skills")) {
+          @Override
+          public Skill deriveSkill(Path skillDir) {
+            throw new IllegalArgumentException("forced validation failure");
+          }
+        };
+    SkillService failingService = new SkillService(store, new SkillRegistry(), failingLoader);
+    Map<String, String> files =
+        Map.of(
+            "SKILL.md", "---\nname: rollback\ndescription: 回滚\n---\n正文",
+            "scripts/run.sh", "echo bad");
+
+    assertThrows(
+        IllegalArgumentException.class, () -> failingService.importFiles(null, files, "fallback"));
+
+    assertFalse(Files.exists(oryxosRoot.resolve("skills/rollback")));
+  }
+
+  @Test
+  @DisplayName("importFiles：检测无 SKILL.md 的同名残留且不删除已有文件")
+  void importFiles_rejectsResidueWithoutDeletingIt() throws Exception {
+    Path residue = Files.createDirectories(oryxosRoot.resolve("skills/residue/scripts"));
+    Path existing = Files.writeString(residue.resolve("keep.sh"), "keep");
+    Map<String, String> files = Map.of("SKILL.md", "---\nname: residue\ndescription: 新导入\n---\n正文");
+
+    assertThrows(
+        IllegalArgumentException.class, () -> service.importFiles(null, files, "fallback"));
+
+    assertEquals("keep", Files.readString(existing));
+    assertFalse(Files.exists(oryxosRoot.resolve("skills/residue/SKILL.md")));
+  }
+
+  @Test
+  @DisplayName("importFiles：注册后的失败同时回滚磁盘与内存索引")
+  void importFiles_postRegistrationFailureRollsBackRegistry() {
+    AgentSkillBindingService bindings = mock(AgentSkillBindingService.class);
+    doThrow(new IllegalStateException("forced reconcile failure"))
+        .when(bindings)
+        .logCurrentIssues();
+    SkillLoader loader = new SkillLoader(oryxosRoot.resolve("skills"));
+    SkillService failingService = new SkillService(store, registry, loader, bindings);
+    Map<String, String> files =
+        Map.of("SKILL.md", "---\nname: rollback-registry\ndescription: 回滚\n---\n正文");
+
+    assertThrows(
+        IllegalStateException.class, () -> failingService.importFiles(null, files, "fallback"));
+
+    assertFalse(registry.exists("rollback-registry"));
+    assertFalse(Files.exists(oryxosRoot.resolve("skills/rollback-registry")));
   }
 
   @Test

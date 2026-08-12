@@ -94,7 +94,10 @@ class MockProviderFlowTest {
 
     PromptBuilder promptBuilder =
         new PromptBuilder(
-            new ContextLoader(root, new io.oryxos.core.skill.SkillRegistry()),
+            new ContextLoader(
+                root,
+                new io.oryxos.core.skill.AgentSkillBindingService(
+                    root, new io.oryxos.core.skill.SkillLoader(root.resolve("skills")))),
             tools,
             memory,
             Clock.systemDefaultZone());

@@ -237,9 +237,9 @@ OryxOS 既然是 Java/Spring 实现、跑在企业自己基础设施上，它就
 
 ### 5.7 OryxOS 跟业界其他项目的关系
 
-OryxOS 借鉴了开源 Agent OS 领域已经被验证的设计哲学。Agent 配置和生命周期、Channel 抽象、三层记忆、Skill 体系（**SKILL.md** 兼容 agentskills.io 开放标准）、Tool 调用通过 **MCP** 协议、单二进制部署这些设计，在 OpenClaw 和 Hermes 上都验证过能撑住真实场景。OryxOS 把这套设计在 Java 生态里重新实现，并补齐企业级 Agent OS 必需的多租户、SSO、RBAC、审计、合规、Web 管理台、深度集成这些能力。
+OryxOS 借鉴了开源 Agent OS 领域已经被验证的设计哲学。Agent 配置和生命周期、Channel 抽象、三层记忆、目录形态的 Agent 定义（借 **Anthropic Agent Skills** 的目录 + 渐进式披露形态，在 OryxOS 里一个目录定义的是一个 Agent）、Tool 调用通过 **MCP** 协议、单二进制部署这些设计，在 OpenClaw 和 Hermes 上都验证过能撑住真实场景。OryxOS 把这套设计在 Java 生态里重新实现，并补齐企业级 Agent OS 必需的多租户、SSO、RBAC、审计、合规、Web 管理台、深度集成这些能力。
 
-- **OryxOS 跟 OpenClaw、Hermes 的关系**是同类不同定位。三者都是 Agent OS，OpenClaw 偏个人、Hermes 偏个人到小团队，OryxOS 直接定位严监管企业场景。Skill 体系上通过 SKILL.md 跟两者兼容，社区的优质 Skill 经过企业审查后理论上可以导入 OryxOS。
+- **OryxOS 跟 OpenClaw、Hermes 的关系**是同类不同定位。三者都是 Agent OS，OpenClaw 偏个人、Hermes 偏个人到小团队，OryxOS 直接定位严监管企业场景。三者都采用 markdown + frontmatter 的目录形态，社区的优质 Skill 经过企业审查后理论上可以导入 OryxOS 的全局 Skill 库（`.oryxos/skills/`）。
 - **OryxOS 跟 Dify、Coze 这类编排平台的关系**是互补。两者甚至可以组合（Dify 作应用层，OryxOS 作基础设施层）。
 - **OryxOS 跟 Spring AI、Spring AI Alibaba、LangChain4j 这些 Java AI 框架的关系**是复用。OryxOS 的 LLM Provider 抽象直接基于 Spring AI Alibaba 的主流 LLM connector，不重复造轮子。
 
@@ -312,7 +312,7 @@ OryxOS 的远期图景：OryxOS 是单个节点上的 Agent 运行时，而连�
 
 1. **Agent OS**：Agent Operating System，运行和管理 AI Agent 的基础设施层，装在用户（或企业）自己的机器上，提供多渠道、多 LLM 路由、记忆、工具、隔离等完整运行环境。
 2. **Agent**：具象的智能体，有具体的工种、人格设定和任务范围。一个 Agent 由 prompt、Skills、Tools、Memory 几部分组合而成，在 Agent OS 上配置出来，不是写代码写出来的。
-3. **Skill**：可复用的 Agent 能力模板，用 `SKILL.md` 文件格式描述，兼容 agentskills.io 开放标准。OpenClaw 和 Hermes 都用这个格式。
+3. **Skill**：可复用的 Agent 能力模板，用 `SKILL.md` 文件格式描述，兼容 agentskills.io 开放标准。OpenClaw 和 Hermes 都用这个格式。在 OryxOS 里 Skill 是**全局共享能力库**（`.oryxos/skills/<name>/SKILL.md`），Agent 按名引用、正文注入 system prompt；Agent 本身的定义本体则是 `.oryxos/agents/<name>/AGENT.md`。
 4. **Tool**：Agent 可以调用的外部能力，通常通过 MCP 协议暴露。业务方用任何语言写 Tool，注册到 Agent OS 供 Agent 使用。
 5. **Channel**：Agent 对外接入的渠道，包括企业微信、飞书、钉钉、Slack、邮件、HTTP API、Web 等。
 6. **LLM Provider**：大模型的提供方抽象，实现统一接口让 Agent 不感知具体调的是哪家模型。

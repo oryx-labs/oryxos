@@ -2,8 +2,10 @@ package io.oryxos.core.context;
 
 import io.oryxos.core.agent.AgentMarkdown;
 import io.oryxos.core.profile.Profile;
-import io.oryxos.core.skill.Skill;
-import io.oryxos.core.skill.SkillRegistry;
+import io.oryxos.core.skill.AgentSkillBindingReader;
+import io.oryxos.core.skill.BindingInspection;
+import io.oryxos.core.skill.BoundSkillDescriptor;
+import io.oryxos.core.skill.SkillBindingIssue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,16 +14,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * system prompt 上下文供给者：把 identity.prompt、这个 Agent 自己 {@code AGENT.md} 的正文、 Agent 引用的全局 Skill 正文、与
- * Profile 的 bootstrap 文件按序拼接（宪法 IV 修订：Agent 目录是 prompt 输入；Skill 是 Agent 按名引用的全局能力库）。
+ * system prompt 上下文供给者：把 identity.prompt、这个 Agent 自己 {@code AGENT.md} 的正文、当前 Agent 绑定的 Skill 元数据目录与
+ * Profile 的 bootstrap 文件按序拼接。
  *
  * <p>一个目录 = 一个 Agent（第 29 节）：正文现读自 {@code .oryxos/agents/<name>/AGENT.md}，去掉 frontmatter 后注入。
  * 两条铁律（TechSol §8.3）：每次调用重新读文件、无任何缓存（用户改完正文下一次触发立即生效）； Bootstrap 缺失 WARN——静默跳过会造成"人格悄悄丢了"这类最难查的软故障。
  *
- * <p>Skill 注入（第 32 节）：{@code AGENT.md} frontmatter 声明的 {@code skills:[名]} 按名从全局 {@link
- * SkillRegistry} 解析，把 Skill 正文注入 system prompt——这样 Skill 才能"强约束"Agent 产出（而非靠模型自觉 read_file）。引用了不存在的
- * Skill 记 WARN 跳过，同 Bootstrap 缺失的处理。
+ * <p>Skill 渐进披露：每次只扫描 {@code agents/<name>/skills/} 的有效相对软连接，注入 name、description 和 Agent 本地
+ * SKILL.md 绝对路径；正文/脚本/参考绝不预载，由模型用既有 read_file/shell 按需加载并进入工具审计。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "skillRegistry 是 Spring 注入的共享单例，构造注入共享同一引用正是意图。")
 public class ContextLoader {
 
   private static final Logger LOG = LoggerFactory.getLogger(ContextLoader.class);
@@ -35,11 +39,11 @@ public class ContextLoader {
       Set.of("write_file", "append_file", "edit_file", "make_dir", "download_file");
 
   private final Path oryxosRoot;
-  private final SkillRegistry skillRegistry;
+  private final AgentSkillBindingReader skillBindings;
 
-  public ContextLoader(Path oryxosRoot, SkillRegistry skillRegistry) {
+  public ContextLoader(Path oryxosRoot, AgentSkillBindingReader skillBindings) {
     this.oryxosRoot = oryxosRoot;
-    this.skillRegistry = skillRegistry;
+    this.skillBindings = skillBindings;
   }
 
   public String load(Profile profile) {
@@ -55,7 +59,7 @@ public class ContextLoader {
         context.append(body).append('\n');
       }
     }
-    // 引用的全局 Skill：按名解析并注入正文（约束产出）；库里没有的记 WARN 跳过，不阻断
+    // 当前 Agent 的有效 Skill：只注入目录元数据与读取路径，正文由 read_file 按需加载
     appendSkills(context, profile);
     // 告知会写盘的 Agent 它的绝对产出目录（已在文件白名单内），落盘文件有确定去处，避免它猜 ./output 撞沙箱
     appendOutputDir(context, profile);
@@ -70,20 +74,38 @@ public class ContextLoader {
     return context.toString();
   }
 
-  /** 把 Profile 引用的全局 Skill 正文按序注入；skillRegistry 未装配或引用不存在均安全跳过。 */
+  /** 每轮重扫 Agent 本地绑定；问题项记录 WARN 并跳过，合法项只注入元数据。 */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "Every untrusted issue string is passed through sanitize before logging.")
   private void appendSkills(StringBuilder context, Profile profile) {
-    if (skillRegistry == null) {
+    if (skillBindings == null) {
       return;
     }
-    for (String name : profile.skills()) {
-      Skill skill = skillRegistry.get(name).orElse(null);
-      if (skill == null) {
-        LOG.warn("Agent 引用了不存在的 Skill，跳过: {}", sanitize(name));
-        continue;
-      }
-      if (!skill.body().isBlank()) {
-        context.append(skill.body()).append('\n');
-      }
+    BindingInspection inspection = skillBindings.inspect(profile.name());
+    for (SkillBindingIssue issue : inspection.issues()) {
+      LOG.warn(
+          "Agent Skill 绑定异常 [{}]，跳过 {}/{}: {}",
+          issue.type(),
+          sanitize(issue.agentName()),
+          sanitize(issue.entryName()),
+          sanitize(issue.message()));
+    }
+    if (inspection.bindings().isEmpty()) {
+      return;
+    }
+    context.append(
+        "你可以按需使用以下 Skill。仅在当前任务需要时，用 read_file 读取给出的 SKILL.md；"
+            + "其中的相对资源路径以该 SKILL.md 所在目录为基准并转换成绝对路径，不要猜测未读取的内容：\n");
+    for (BoundSkillDescriptor binding : inspection.bindings()) {
+      context
+          .append("- ")
+          .append(binding.name())
+          .append("：")
+          .append(binding.description())
+          .append("\n  SKILL.md：")
+          .append(binding.skillFile())
+          .append('\n');
     }
   }
 

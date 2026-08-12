@@ -24,6 +24,10 @@ public class ShellTools {
   /** 默认超时：30 秒。 */
   static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
 
+  /** 排空子进程输出的虚拟线程执行器（宪法 VII）：流读取是 IO 等待，虚拟线程天然适配。 */
+  @SuppressWarnings("PMD.ThreadPoolCreationRule") // Java 21 虚拟线程无池参数可配，非 P3C 针对的固定线程池反模式。
+  private static final ExecutorService DRAINER = Executors.newVirtualThreadPerTaskExecutor();
+
   private final Sandbox sandbox;
   private final Duration timeout;
   private final ProcessStarter processStarter;
@@ -98,5 +102,11 @@ public class ShellTools {
   @FunctionalInterface
   interface ProcessStarter {
     Process start(List<String> command) throws IOException;
+  }
+
+  /** 先递归杀 bash 派生的子孙进程，再杀 bash 本身（只 destroyForcibly(bash) 会留孤儿继续执行）。 */
+  private static void killTree(Process process) {
+    process.toHandle().descendants().forEach(ProcessHandle::destroyForcibly);
+    process.destroyForcibly();
   }
 }

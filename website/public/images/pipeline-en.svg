@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 240" width="1080" height="240">
+  <defs>
+    <filter id="pg" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="rgba(249,115,22,0.35)"/>
+    </filter>
+    <marker id="pa" markerWidth="8" markerHeight="8" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L8,3.5 Z" fill="#f97316"/>
+    </marker>
+  </defs>
+
+  <rect width="1080" height="240" fill="#0a0a0a" rx="14"/>
+
+  <text x="540" y="34" font-family="'SF Mono','Fira Code',monospace" font-size="13" fill="#f97316" text-anchor="middle" letter-spacing="3" font-weight="bold">ONE SENTENCE → ONE AGENT TEAM → ONE RESULT</text>
+
+  <!-- Step 1 -->
+  <rect x="35" y="66" width="170" height="88" rx="10" fill="#111" stroke="#f97316" stroke-width="1.5" filter="url(#pg)"/>
+  <text x="120" y="88" font-family="'SF Mono',monospace" font-size="9" fill="#f97316" text-anchor="middle" letter-spacing="1">01</text>
+  <text x="120" y="114" font-family="'SF Mono',monospace" font-size="14" fill="#f5f5f5" text-anchor="middle" font-weight="bold">One sentence</text>
+  <text x="120" y="138" font-family="'SF Mono',monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">a task in plain language</text>
+
+  <line x1="205" y1="110" x2="243" y2="110" stroke="#f97316" stroke-width="1.5" marker-end="url(#pa)"/>
+
+  <!-- Step 2 -->
+  <rect x="247" y="66" width="170" height="88" rx="10" fill="#111" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="332" y="88" font-family="'SF Mono',monospace" font-size="9" fill="#3b82f6" text-anchor="middle" letter-spacing="1">02</text>
+  <text x="332" y="114" font-family="'SF Mono',monospace" font-size="14" fill="#f5f5f5" text-anchor="middle" font-weight="bold">Decompose</text>
+  <text x="332" y="138" font-family="'SF Mono',monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">the OS breaks it down</text>
+
+  <line x1="417" y1="110" x2="455" y2="110" stroke="#f97316" stroke-width="1.5" marker-end="url(#pa)"/>
+
+  <!-- Step 3 -->
+  <rect x="459" y="66" width="170" height="88" rx="10" fill="#111" stroke="#a855f7" stroke-width="1.5"/>
+  <text x="544" y="88" font-family="'SF Mono',monospace" font-size="9" fill="#a855f7" text-anchor="middle" letter-spacing="1">03</text>
+  <text x="544" y="114" font-family="'SF Mono',monospace" font-size="14" fill="#f5f5f5" text-anchor="middle" font-weight="bold">Assemble a team</text>
+  <text x="544" y="138" font-family="'SF Mono',monospace" font-size="8.5" fill="#9ca3af" text-anchor="middle">planner · experts · reviewer</text>
+
+  <line x1="629" y1="110" x2="667" y2="110" stroke="#f97316" stroke-width="1.5" marker-end="url(#pa)"/>
+
+  <!-- Step 4 -->
+  <rect x="671" y="66" width="170" height="88" rx="10" fill="#111" stroke="#ec4899" stroke-width="1.5"/>
+  <text x="756" y="88" font-family="'SF Mono',monospace" font-size="9" fill="#ec4899" text-anchor="middle" letter-spacing="1">04</text>
+  <text x="756" y="114" font-family="'SF Mono',monospace" font-size="14" fill="#f5f5f5" text-anchor="middle" font-weight="bold">Collaborate</text>
+  <text x="756" y="138" font-family="'SF Mono',monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">parallel · fully audited</text>
+
+  <line x1="841" y1="110" x2="879" y2="110" stroke="#f97316" stroke-width="1.5" marker-end="url(#pa)"/>
+
+  <!-- Step 5 -->
+  <rect x="883" y="66" width="170" height="88" rx="10" fill="#111" stroke="#22c55e" stroke-width="1.5" filter="url(#pg)"/>
+  <text x="968" y="88" font-family="'SF Mono',monospace" font-size="9" fill="#22c55e" text-anchor="middle" letter-spacing="1">05</text>
+  <text x="968" y="114" font-family="'SF Mono',monospace" font-size="14" fill="#f5f5f5" text-anchor="middle" font-weight="bold">Deliver</text>
+  <text x="968" y="138" font-family="'SF Mono',monospace" font-size="8.5" fill="#9ca3af" text-anchor="middle">output lands · you get pinged</text>
+
+  <text x="540" y="204" font-family="'SF Mono',monospace" font-size="10.5" fill="#6b7280" text-anchor="middle">self-hosted · data stays home · every step audited · humans approve the dangerous ones</text>
+</svg>

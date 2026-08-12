@@ -86,9 +86,11 @@ OryxOS 在 `.oryxos/agents/` 下自带三个 Demo Agent 演示这套模型：
 | --- | --- |
 | `weather-daily` | 从 open-meteo 拿北京天气，通过 `notify` 推送穿搭建议 |
 | `daily-tech-digest` | 从 `hn.algolia.com` 拉头条，按需读取 skill 文件，推送科技日报 |
-| `github-daily` | 用 `shell` 跑 `python3 scripts/github_trending.py`，推送 GitHub 热门日报 |
+| `github-daily` | 用 `shell` 跑受信任的本地 Python 脚本，推送 GitHub 热门日报（需显式允许 `python3`） |
 
 三者都用 Provider `deepseek` / `deepseek-chat`，并按名引用通知渠道。
+
+> `github-daily` 是需要主动启用的受信任脚本 Demo。默认 shell 白名单刻意不包含 `python3`，因为解释器等同于任意代码执行能力。显式加入前请先审查脚本，不要对不受信任的 Agent 输入开放。
 
 ## 开始对话
 

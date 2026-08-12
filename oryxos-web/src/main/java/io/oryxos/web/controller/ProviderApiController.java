@@ -8,6 +8,7 @@ import io.oryxos.web.controller.dto.CreateProviderRequest;
 import io.oryxos.web.controller.dto.ProviderView;
 import io.oryxos.web.controller.dto.UpdateProviderRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
+import io.oryxos.web.provider.ProviderModelsService;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,9 +36,11 @@ public class ProviderApiController {
   private static final String MOCK = "mock";
 
   private final ProviderRegistry registry;
+  private final ProviderModelsService modelsService;
 
-  public ProviderApiController(ProviderRegistry registry) {
+  public ProviderApiController(ProviderRegistry registry, ProviderModelsService modelsService) {
     this.registry = registry;
+    this.modelsService = modelsService;
   }
 
   @PostMapping
@@ -72,13 +75,28 @@ public class ProviderApiController {
   @PutMapping("/{name}")
   public ApiResponse<ProviderView> update(
       @PathVariable String name, @RequestBody UpdateProviderRequest req) {
-    if (!registry.exists(name)) {
-      throw new ResourceNotFoundException("provider 不存在: " + name); // → 404
-    }
+    ProviderDef existing =
+        registry
+            .find(name)
+            .orElseThrow(() -> new ResourceNotFoundException("provider 不存在: " + name)); // → 404
     validate(name, req.baseUrl());
+    // 前端编辑表单回填的是掩码值；提交掩码 = 未修改，保留原 key——否则打码值会覆盖真实 key
+    String apiKey =
+        ProviderView.mask(existing.apiKey()).equals(req.apiKey())
+            ? existing.apiKey()
+            : req.apiKey();
     ProviderDef saved =
-        registry.save(new ProviderDef(name, req.apiKey(), req.baseUrl(), req.description()));
+        registry.save(new ProviderDef(name, apiKey, req.baseUrl(), req.description()));
     return ApiResponse.ok(ProviderView.from(saved));
+  }
+
+  /**
+   * 列出某 provider 下的模型 id（服务端代理 OpenAI 兼容的 {@code /models} 端点，避免浏览器直连暴露 api-key）。 provider
+   * 不存在→404；端点不可达/缺 base-url→503（统一 ApiResponse 信封）。
+   */
+  @GetMapping("/{name}/models")
+  public ApiResponse<List<String>> models(@PathVariable String name) {
+    return ApiResponse.ok(modelsService.listModels(name));
   }
 
   @DeleteMapping("/{name}")

@@ -132,7 +132,7 @@ OryxOS 刻意让内置工具保持精简。内置工具是**通用原语**——
 
 `SandboxChecker` 在每次工具调用前运行，执行在 `application.yml` 里以顶层键配置的三个独立白名单。空列表表示 **deny-all**——沙箱默认关闭，需按最小权限显式放开。配置的工作区根目录会在运行期自动纳入文件白名单。
 
-**文件路径白名单** — 作用于 `read_file`、`write_file`、`list_dir`。请求的路径必须匹配至少一条白名单项。
+**文件路径白名单** — 作用于 `read_file`、`write_file`、`list_dir`。请求路径的真实目标必须位于至少一条白名单项之下；符号链接不能逃逸到允许根目录之外。
 
 ```yaml
 file:
@@ -157,9 +157,12 @@ shell:
   allowed_commands:
     - ls
     - cat
+    - echo
     - grep
   timeout_seconds: 30
 ```
+
+Shell 白名单是一条独立的能力边界。加入 `python`、`python3`、`sh`、`bash` 等解释器或 Shell，等于授予 Agent 该可执行文件的完整能力，并可能绕过文件与 HTTP 工具策略。因此默认配置刻意不包含它们；只有在脚本可信且确实需要扩大权限时才应显式加入。
 
 **HTTP 域名白名单** — 作用于 `http_get` 和 `http_post`。支持 `*` 作为前缀通配符。
 

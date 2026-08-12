@@ -51,3 +51,6 @@ logs/
 
 # 运行时工作区：Profile / MEMORY.md / SQLite / 会话 / 日志都在这里，随环境生成，不入库
 .oryxos/
+
+# Codex isolated worktrees
+.worktrees/

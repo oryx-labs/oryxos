@@ -56,7 +56,13 @@ class ToolRegistryTest {
 
   private static McpToolAdapter mcpTool(String name) {
     McpSyncClient client = mock(McpSyncClient.class);
-    return new McpToolAdapter(client, new McpSchema.Tool(name, name + " mcp", "{}"));
+    McpSchema.Tool tool =
+        McpSchema.Tool.builder()
+            .name(name)
+            .description(name + " mcp")
+            .inputSchema(io.modelcontextprotocol.json.McpJsonDefaults.getMapper(), "{}")
+            .build();
+    return new McpToolAdapter(client, tool);
   }
 
   @Test

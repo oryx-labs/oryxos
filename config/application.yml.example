@@ -15,11 +15,18 @@
 # ── 服务 ────────────────────────────────────────────────
 server:
   port: 8080                    # HTTP API / 管理台端口（oryxos serve --port 可临时覆盖）
+  # 反向代理（nginx/caddy 终止 TLS）下识别 X-Forwarded-Proto 等头，登录 cookie 才会带 Secure；
+  # 直连部署无副作用（无 X-Forwarded-* 头时行为不变）。从 jar 内置默认继承，列此便于按需关闭。
+  forward-headers-strategy: framework
 
 # ── 持久化 / 并发 ───────────────────────────────────────
 spring:
   datasource:
     url: jdbc:sqlite:oryxos.db  # SQLite 数据文件（会话 + 审计表），相对启动目录
+    hikari:
+      data-source-properties:
+        journal_mode: WAL        # 允许读写并发，避免默认 rollback journal 放大锁竞争
+        busy_timeout: 5000       # 短暂写锁时最多等待 5 秒，而不是立即报 database is locked
   threads:
     virtual:
       enabled: true             # 宪法七：Java 21 虚拟线程扛并发，不引入异步框架
@@ -41,8 +48,8 @@ shell:
     - cat
     - echo
     - grep
-    - python                    # 与 jar 默认对齐（部分环境 python 即 python3）
-    - python3                   # GitHub 日报 Agent 跑 scripts/github_trending.py（31 节 Demo 三）
+    # 解释器（python/python3 等）不入默认白名单：bash -c 执行下是任意代码执行入口。
+    # 确需跑脚本的 Agent 请在此显式加入并自担风险（如 GitHub 日报脚本）。
 http:
   allowed_domains:
     - api.deepseek.com          # Provider 端点（精确匹配）
@@ -71,8 +78,18 @@ oryxos:
     - name: codex
       api-key: ""                # ← 可选：填入 Codex / OpenAI API Key（不用可删掉本条）
       base-url: https://ai.soulecho.cc   # codex 中转代理；OryxOS 运行时走 /v1/chat/completions
-    - name: mock                 # 内置假模型：不连真实模型、无需 key，无 key 自测全链路（生产可删）
+    # 内置 mock provider：不连真实模型、无需 key，用于无 key 自测全链路。
+    # 用它建/配一个 provider: mock 的 Agent，发一条"记住…"消息，即可在管理台看到
+    # 会话/记忆/工具端点被填充（一次 save_memory 工具调用 + 两轮 ReAct）。生产可删。
+    - name: mock
   # 「一句话生成 Agent 草稿」调 LLM 用的作者模型；provider 缺省取 providers 第一个
   author:
     provider: deepseek
-    model: deepseek-chat
+    model: deepseek-v4-flash     # deepseek-chat 已废弃；可选 deepseek-v4-flash（快/省）| deepseek-v4-pro（强）
+  # 管理台 Basic Auth（012-web-auth）。默认关=裸内网现状不变；
+  # 开启后 /admin/** 需账密（/api/v1/** REST 不受影响）。
+  # 开启前先跑 `oryxos user add <username>` 建账号，否则启动阻断。
+  # web:
+  #   auth:
+  #     enabled: true
+  #     realm: OryxOS

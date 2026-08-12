@@ -645,7 +645,7 @@ null
 // data —— ToolView[]
 [
   { "name": "read_file", "description": "读取文件内容，路径受白名单限制" },
-  { "name": "shell",     "description": "执行 shell 命令，命令首 token 受白名单限制" },
+  { "name": "shell",     "description": "执行 shell 命令，受命令白名单与元字符校验限制" },
   { "name": "notify",    "description": "按名字把消息推送到已注册的通知渠道" }
 ]
 ```
@@ -666,7 +666,7 @@ Sandbox 白名单分三类——`FILE`（允许路径）、`SHELL`（允许命�
 // data
 {
   "file": ["/home/user/project/.oryxos"],
-  "shell": ["ls", "cat", "python3"],
+  "shell": ["ls", "cat", "echo", "grep"],
   "http": ["*.open-meteo.com", "hn.algolia.com"]
 }
 ```

@@ -7,11 +7,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.oryxos.core.skill.AgentSkillBindingService;
+import io.oryxos.core.skill.InstalledSkillCatalog;
 import io.oryxos.core.skill.SkillLoader;
 import io.oryxos.core.skill.SkillRegistry;
 import io.oryxos.core.skill.SkillService;
 import io.oryxos.core.skill.SkillStore;
 import io.oryxos.web.GlobalExceptionHandler;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -146,7 +149,38 @@ class SkillApiControllerTest {
                 .content("{\"description\":\"new\",\"body\":\"new body\"}"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.description").value("new"));
-    mvc.perform(delete("/api/v1/skills/s1")).andExpect(status().isOk());
+    mvc.perform(delete("/api/v1/skills/s1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.name").value("s1"))
+        .andExpect(
+            jsonPath("$.data.archivedPath")
+                .value(org.hamcrest.Matchers.startsWith("archive/skills/s1-")));
     mvc.perform(get("/api/v1/skills/s1")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  @DisplayName("活跃或归档 Agent 引用阻止归档并返回结构化 409")
+  void referencedSkillReturnsStructuredConflict() throws Exception {
+    Path agent = Files.createDirectories(oryxosRoot.resolve("agents/ops"));
+    Files.writeString(agent.resolve("AGENT.md"), "---\nname: ops\n---\nbody");
+    SkillStore store = new SkillStore(oryxosRoot);
+    SkillLoader loader = new SkillLoader(oryxosRoot.resolve("skills"));
+    SkillRegistry registry = new SkillRegistry();
+    AgentSkillBindingService bindings = new AgentSkillBindingService(oryxosRoot, loader);
+    SkillService service = new SkillService(store, registry, loader, bindings);
+    service.create("report", "报告", "正文");
+    bindings.bind("ops", "report");
+    mvc =
+        MockMvcBuilders.standaloneSetup(
+                new SkillApiController(service, new InstalledSkillCatalog(registry), bindings))
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .build();
+
+    mvc.perform(delete("/api/v1/skills/report"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value(409))
+        .andExpect(jsonPath("$.data.name").value("report"))
+        .andExpect(jsonPath("$.data.references[0].agentName").value("ops"))
+        .andExpect(jsonPath("$.data.references[0].state").value("ACTIVE"));
   }
 }

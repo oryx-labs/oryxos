@@ -3,6 +3,7 @@ package io.oryxos.core.agent;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -45,5 +46,46 @@ class AgentMarkdownTest {
     AgentMarkdown.Parsed parsed = AgentMarkdown.split(content);
     assertEquals("ops", parsed.frontmatter().get("name"));
     assertTrue(parsed.body().contains("正文里的分隔线"), "首个闭合围栏之后的 --- 属于正文");
+  }
+
+  @Test
+  @DisplayName("legacy 迁移只移除顶层 skills 块并保留 CRLF、其它字段和正文")
+  void removeLegacySkillsPreservesEverythingElse() {
+    String input =
+        "---\r\nname: ops\r\nsettings:\r\n  skills: nested-kept\r\nskills:\r\n  - report\r\n  - web\r\nprovider: mock\r\n---\r\n正文 skills: 不动\r\n";
+
+    String output = AgentMarkdown.removeLegacySkills(input);
+
+    assertEquals(
+        "---\r\nname: ops\r\nsettings:\r\n  skills: nested-kept\r\nprovider: mock\r\n---\r\n正文 skills: 不动\r\n",
+        output);
+    assertEquals(List.of("report", "web"), AgentMarkdown.legacySkills(input));
+    assertTrue(AgentMarkdown.hasLegacySkills(input));
+  }
+
+  @Test
+  @DisplayName("legacy 迁移识别并移除带引号的顶层 skills 键")
+  void removeLegacySkillsAcceptsQuotedKey() {
+    String input = "---\nname: ops\n\"skills\":\n- report\n---\nbody";
+
+    String output = AgentMarkdown.removeLegacySkills(input);
+
+    assertEquals("---\nname: ops\n---\nbody", output);
+    assertTrue(AgentMarkdown.hasLegacySkills(input));
+    assertEquals(
+        "---\nname: renamed\n---\nbody",
+        AgentMarkdown.replaceTopLevelScalar("---\n\"name\": old\n---\nbody", "name", "renamed"));
+  }
+
+  @Test
+  @DisplayName("标量替换会更新重复键并在缺失时插入")
+  void replaceTopLevelScalarUpdatesDuplicatesAndInsertsMissingKey() {
+    assertEquals(
+        "---\nname: next\nname: next\n---\nbody",
+        AgentMarkdown.replaceTopLevelScalar(
+            "---\nname: first\n\"name\": second\n---\nbody", "name", "next"));
+    assertEquals(
+        "---\nname: next\ndescription: d\n---\nbody",
+        AgentMarkdown.replaceTopLevelScalar("---\ndescription: d\n---\nbody", "name", "next"));
   }
 }

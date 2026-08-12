@@ -1,4 +1,15 @@
 package io.oryxos.web.controller.dto;
 
-/** POST /agents 请求体：只需 Agent 名 + 描述；后台按模板脚手架出完整目录。 */
-public record CreateAgentRequest(String name, String description) {}
+import java.util.List;
+
+/** POST /agents request: Agent metadata, selected provider/model, and initial Skill bindings. */
+public record CreateAgentRequest(
+    String name, String description, String provider, String model, List<String> skillBindings) {
+  public CreateAgentRequest {
+    skillBindings = skillBindings == null ? List.of() : List.copyOf(skillBindings);
+  }
+
+  public CreateAgentRequest(String name, String description) {
+    this(name, description, null, null, List.of());
+  }
+}

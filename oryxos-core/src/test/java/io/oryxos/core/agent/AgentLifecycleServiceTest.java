@@ -1,6 +1,5 @@
 package io.oryxos.core.agent;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -24,6 +23,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 
 /** 课件《第30节》验收 harness：AgentLifecycleServiceTest——编排顺序 + 失败回滚 + 删除时序。 */
@@ -150,7 +150,7 @@ class AgentLifecycleServiceTest {
     Profile updated = profile("w", new ScheduleConfig("m", "0 0 10 * * *", "Asia/Shanghai", "新"));
     when(profileRegistry.get("w")).thenReturn(Optional.of(old));
     Path dir = Path.of("agents", "w");
-    when(agentStore.write(eq("w"), any())).thenReturn(dir);
+    when(agentStore.writeAll(eq("w"), any())).thenReturn(dir);
     doReturn(updated).when(agentLoader).deriveProfile(dir);
 
     service.update("w", MD);
@@ -161,31 +161,36 @@ class AgentLifecycleServiceTest {
   }
 
   @Test
-  @DisplayName("ensureRequiredSkills：模型漏写也补齐勾选的 Skill；模型选的保留去重；已全含或空则不动")
-  void ensureRequiredSkills_mergesReliably() {
-    String noSkills = "---\nname: a\nprovider:\n  name: deepseek\n  model: m\n---\n正文内容";
-    String out = AgentLifecycleService.ensureRequiredSkills(noSkills, List.of("report-format"));
-    assertTrue(out.contains("skills:"), "无 skills 块时补出一个");
-    assertTrue(out.contains("- report-format"));
-    assertTrue(out.contains("name: a"), "其余 frontmatter 保留");
-    assertTrue(out.contains("正文内容"), "正文保留");
+  @DisplayName("运行期更新拒绝 legacy skills，迁移职责不会泄漏到普通 CRUD")
+  void update_rejectsLegacySkills() {
+    String legacy = MD.replace("---\n正文", "skills:\n  - report-format\n---\n正文");
 
-    String withSkills =
-        "---\nname: a\nprovider:\n  name: deepseek\n  model: m\nskills:\n  - web-research\n---\n正文";
-    String out2 = AgentLifecycleService.ensureRequiredSkills(withSkills, List.of("report-format"));
-    Object parsed = AgentMarkdown.split(out2).frontmatter().get("skills");
-    assertTrue(parsed instanceof List, "skills 仍是合法列表");
-    assertTrue(
-        ((List<?>) parsed).containsAll(List.of("web-research", "report-format")), "模型选的保留 + 勾选的补上");
-    assertEquals(out2.indexOf("web-research"), out2.lastIndexOf("web-research"), "不重复写入已有项");
+    assertThrows(IllegalArgumentException.class, () -> service.update("w", legacy));
+    verify(agentStore, never()).writeAll(any(), any());
+  }
 
-    assertEquals(
-        withSkills,
-        AgentLifecycleService.ensureRequiredSkills(withSkills, List.of("web-research")),
-        "勾选的已全部在场 → 原样不动");
-    assertEquals(
-        noSkills,
-        AgentLifecycleService.ensureRequiredSkills(noSkills, List.of()),
-        "未勾选任何 Skill → 原样不动");
+  @Test
+  @DisplayName("updateBasicInfo 改 description/provider/model，正文与其它字段保留")
+  void updateBasicInfo_editsFrontmatterPreservesBodyAndOtherKeys() throws Exception {
+    when(agentStore.read("demo")).thenReturn(MD);
+    Path dir = Path.of("agents", "demo");
+    when(agentStore.writeAll(eq("demo"), any())).thenReturn(dir);
+    Profile updated = profile("demo");
+    doReturn(updated).when(agentLoader).parse(any(), eq("demo"));
+    doReturn(updated).when(agentLoader).deriveProfile(dir);
+
+    service.updateBasicInfo("demo", "新描述", "openai", "gpt-4o");
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<java.util.Map<String, String>> filesCaptor =
+        ArgumentCaptor.forClass(java.util.Map.class);
+    verify(agentStore).writeAll(eq("demo"), filesCaptor.capture());
+    String written = filesCaptor.getValue().get("AGENT.md");
+    assertTrue(written.contains("description: 新描述"), "description 被更新");
+    assertTrue(written.contains("name: openai"), "provider.name 被更新");
+    assertTrue(written.contains("model: gpt-4o"), "provider.model 被更新");
+    assertTrue(!written.contains("skills:"), "Skill 绑定不写回 AGENT.md");
+    assertTrue(written.contains("name: demo"), "name 保留");
+    assertTrue(written.contains("正文"), "正文保留");
   }
 }

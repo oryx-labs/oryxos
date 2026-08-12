@@ -1,27 +1,37 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.1.0
-- Bump rationale: MINOR — 技术栈与架构约束新增「模块结构可按需演进」条款（用户在第17节
-  tasks 停点批准）：模块划分跟随 Agent 能力域，不锁死 9 模块，可新建（如 oryxos-sandbox）
-  或调整模块；新建/改名须在对应特性 plan 中声明并同步 CLAUDE.md 与 TechnicalSolution §10。
-- Previous version change: (none) → 1.0.0  (initial ratification)
-- Bump rationale (1.0.0): First formal adoption of the OryxOS constitution. MAJOR baseline.
+- Version change: 1.1.0 → 2.0.0
+- Bump rationale: MAJOR — 原则 IV 从「禁止跨 Agent 共享 Skill」重定义为「公共 Skill 实体库 +
+  Agent 本地相对软连接绑定 + 分层渐进式披露」，并移除 AGENT.md frontmatter skills 引用这一
+  旧绑定方式；原则 VI 同步新增软连接真实路径安全门禁。
 - Principles defined (8):
     I.   自实现 ReAct 循环 (NON-NEGOTIABLE)
     II.  Spring AI 仅做协议转换与 Schema 生成 (NON-NEGOTIABLE)
     III. Provider 显式映射
-    IV.  一个目录 = 一个 Agent；AGENT.md 由 ContextLoader 加载，不作为 Tool
+    IV.  一个目录 = 一个 Agent；Skill 以本地软连接绑定并渐进披露
     V.   审计 Day One 落库 (NON-NEGOTIABLE)
-    VI.  安全是地基：强制沙箱白名单，不用 SecurityManager (NON-NEGOTIABLE)
+    VI.  安全是地基：强制沙箱与真实路径校验，不用 SecurityManager (NON-NEGOTIABLE)
     VII. 同步执行 + 虚拟线程，不引入异步编程模型
-    VIII.配置即 Agent，实例无状态、状态外置
-- Added sections: 技术栈与架构约束; 开发流程与质量门禁; Governance
-- Removed sections: none (initial)
+    VIII.目录配置即 Agent，实例无状态、状态外置
+- Modified principles:
+    IV.  禁止共享 Skill → 公共实体库 + Agent 本地软连接绑定 + 元数据常驻/正文按需
+    VI.  路径白名单 → 软连接感知的真实路径白名单
+    VIII.YAML Profile 定义 Agent → Agent 目录（frontmatter + 本地 Skill 绑定）定义 Agent
+- Added sections: none
+- Removed sections: none
 - Templates checked:
-    ✅ .specify/templates/plan-template.md   (Constitution Check gate is dynamic; no edit needed)
-    ✅ .specify/templates/spec-template.md    (no constitution-specific tokens)
-    ✅ .specify/templates/tasks-template.md   (no constitution-specific tokens)
-- Follow-up TODOs: none
+    ✅ .specify/templates/plan-template.md (Constitution Check gate is dynamic; no edit needed)
+    ✅ .specify/templates/spec-template.md (现有安全/边界 Edge Cases 可承载软连接约束)
+    ✅ .specify/templates/tasks-template.md (已有 Tests + Security hardening 阶段，无需改模板)
+    ✅ .specify/templates/constitution-template.md (通用模板，无项目语义)
+    ✅ .specify/templates/commands/ (目录不存在，无命令模板待同步)
+- Runtime guidance requiring sync in this amendment:
+    ✅ CLAUDE.md
+    ✅ README.md
+    ✅ docs/DemandAnalysis.md
+    ✅ docs/TechnicalSolution.md
+    ⚠ AGENTS.md（未纳入当前 Git worktree；外部工作区指南需由维护者同步）
+- Follow-up items: none（本特性的 spec/plan/tasks、实现与端到端验收已同步完成）。
 -->
 
 # OryxOS Constitution
@@ -57,19 +67,31 @@ Spring 容器中的 `ChatModel` Bean 类型来区分 Provider（类型相同会�
 
 **Rationale**: 显式映射是多模型可预测路由的唯一可靠方式。
 
-### IV. 一个目录 = 一个 Agent；AGENT.md 由 ContextLoader 加载，不作为 Tool
+### IV. 一个目录 = 一个 Agent；Skill 以本地软连接绑定并渐进披露
 
-一个 Agent MUST 是 `.oryxos/agents/<name>/` 一个目录（借 Anthropic Agent Skills 的目录形态，
-但定义的是 Agent）：`AGENT.md` = frontmatter（这个 Agent 自己的 profile）+ 正文（任务指令），
-外加可选 `skills/*.md` 子指令、`scripts/` 脚本、`REFERENCE.md`。`AgentLoader.deriveProfile`
-MUST 把 frontmatter 派生成 `Profile` 复用底座。`AGENT.md` **正文** MUST 由 `oryxos-core` 的
-`ContextLoader` 注入 system prompt，与 Bootstrap 文件（`AGENTS.md`、`SOUL.md`、`USER.md`）同类；
-目录里的子指令 / 脚本经底座既有 `read_file`/`shell` 按需取用。MUST NOT 建跨 Agent 的共享能力库、
-`use_skill` 工具或全局能力索引；一个 Agent 目录 MUST NOT 注册进 `ToolRegistry` 或放入 `oryxos-tool`
-模块。内置 Tool 与 MCP Client MUST 合并在单一 `oryxos-tool` 模块，不拆分。
+一个 Agent MUST 是 `.oryxos/agents/<name>/` 一个目录：`AGENT.md` 的 frontmatter 定义运行配置，
+正文定义任务指令；可选 `scripts/`、`REFERENCE.md` 与 `skills/` 构成该 Agent 的本地资源视图。
+`AgentLoader.deriveProfile` MUST 从 frontmatter 派生 `Profile`，`ContextLoader` MUST 每次现读
+`AGENT.md` 正文并注入 system prompt，不得缓存。
 
-**Rationale**: Agent 目录是上下文来源而非可执行工具；每个 Agent 自足独立，只调用底座系统基础能力，
-混淆两者会在执行期报错、并让模块依赖混乱。
+公共 Skill 实体 MUST 存在 `.oryxos/skills/<name>/`，至少包含带 `name`、`description`
+frontmatter 的 `SKILL.md`。Agent 可见的 Skill MUST 且只能由
+`.oryxos/agents/<agent>/skills/<name>` 下指向公共实体的受控相对软连接表达；这组本地软连接是
+绑定关系的唯一真相源，MUST NOT 再用 `AGENT.md` frontmatter `skills:` 或其它并行索引表达同一关系。
+
+`ContextLoader` MUST 在每次 prompt 组装时重新扫描当前 Agent 的 `skills/`，稳定排序并验证软连接，
+只注入每个有效绑定的 `name`、`description` 与 Agent 本地绝对读取路径。MUST NOT 预载
+`SKILL.md` 正文、references、模板或脚本；模型需要某项能力时，MUST 复用底座既有 `read_file` /
+`shell` 按需读取或运行，使内容仅以工具结果进入后续 ReAct 上下文。MUST NOT 新增 `use_skill`
+工具；Skill 是上下文资源，不是可执行 Tool，不得进入 `ToolRegistry`。
+
+Skill create/import/update/delete、Agent bind/unbind/archive/delete 与启动恢复 MUST 执行一致性检查，
+识别 dangling、escaped、invalid-target、name-mismatch 与 stale-reference。删除仍被 Agent 引用的
+公共 Skill MUST 默认拒绝并返回引用 Agent 列表，不得制造悬空软连接。Skill 加载、绑定与协调实现
+归 `oryxos-core`，内置 Tool 与 MCP Client 仍合并在单一 `oryxos-tool` 模块。
+
+**Rationale**: 公共实体消除 Skill 内容复制，Agent 本地软连接明确能力边界；元数据常驻、正文按需
+兼顾发现能力与上下文成本。唯一绑定真相源与强制一致性检查避免 frontmatter/目录漂移和悬空引用。
 
 ### V. 审计 Day One 落库 (NON-NEGOTIABLE)
 
@@ -78,14 +100,20 @@ MUST 把 frontmatter 派生成 `Profile` 复用底座。`AGENT.md` **正文** MU
 
 **Rationale**: 可审计是 OryxOS 的核心差异化能力；事后从日志反解析代价高且不可靠。
 
-### VI. 安全是地基：强制沙箱白名单，不用 SecurityManager (NON-NEGOTIABLE)
+### VI. 安全是地基：强制沙箱与真实路径校验，不用 SecurityManager (NON-NEGOTIABLE)
 
 工具调用 MUST 经 `SandboxChecker` 白名单校验：文件走路径白名单、Shell 走命令首 token 白名单、
 HTTP 走域名通配白名单。MUST NOT 使用 `SecurityManager`（JDK 21 已不可用）。凭证 MUST 走
 环境变量 / 企业密钥体系，MUST NOT 明文写入代码、配置、日志或提交历史。最小权限、来源受控、
 全链路可审计从第一天就在架构里，不是补丁。
 
-**Rationale**: 企业私有部署对安全零容忍；安全若非地基，后期无法补齐。
+任何允许软连接的文件访问 MUST 校验真实路径：已存在目标经 `toRealPath()` 解析后仍须位于允许根；
+创建新路径时须解析最近已存在父目录的真实路径后再校验。Agent Skill 绑定 MUST 拒绝绝对软连接、
+链式越界以及指向 `.oryxos/skills/` 之外的目标。字符串形式的 `normalize()+startsWith()` 不足以
+作为软连接场景的安全判定。
+
+**Rationale**: 企业私有部署对安全零容忍；软连接可绕过纯字符串路径白名单，若不校验真实路径，
+公共 Skill 绑定会成为读取工作区外文件的通道。
 
 ### VII. 同步执行 + 虚拟线程，不引入异步编程模型
 
@@ -94,13 +122,15 @@ HTTP 走域名通配白名单。MUST NOT 使用 `SecurityManager`（JDK 21 已�
 
 **Rationale**: 虚拟线程已让同步代码扛住高并发；异步会让复杂度激增、调试困难。
 
-### VIII. 配置即 Agent，实例无状态、状态外置
+### VIII. 目录配置即 Agent，实例无状态、状态外置
 
-一个 Agent MUST 完全由一份 YAML Profile 定义，不需要写代码。运行实例 MUST 无状态，会话与
-记忆等状态 MUST 外置（SQLite / 文件），为走向分布式预留路径。表结构变更 MUST NOT 依赖
+一个 Agent MUST 完全由一个目录定义：`AGENT.md` frontmatter/正文给出配置与任务，本地 `skills/`
+软连接给出可见 Skill，附属脚本/参考按需存在；定义 Agent 不需要写 Java 代码。运行实例 MUST 无状态，
+会话与记忆等状态 MUST 外置（SQLite / 文件），为走向分布式预留路径。表结构变更 MUST NOT 依赖
 Hibernate 自动迁移（SQLite `ALTER TABLE` 支持弱），需手工建表脚本或 Flyway。
 
-**Rationale**: 「配置即 Agent」降低接入门槛；「状态外置」是未来分布式化不大改设计的前提。
+**Rationale**: 「目录配置即 Agent」降低接入门槛并容纳渐进式资源；「状态外置」是未来分布式化
+不大改设计的前提。
 
 ## 技术栈与架构约束
 
@@ -114,6 +144,8 @@ Hibernate 自动迁移（SQLite `ALTER TABLE` 支持弱），需手工建表脚�
 - HTTP：Spring MVC + 虚拟线程；持久化：SQLite + Spring Data JPA；日志：Logback + SLF4J
   （生产 JSON 结构化，禁用 `System.out`）。
 - 开放标准优先：工具用 MCP、Agent 协作用 A2A、Agent 目录借 Anthropic Agent Skills 的形态，不另立协议。
+- Skill 绑定：公共实体在 `.oryxos/skills/`，Agent 以本地相对软连接选择可见集合；元数据每轮注入，
+  正文与附属资源按需读取，禁止复制内容或维护第二份绑定索引。
 - 模块解耦：新增 Channel 或 Tool 只加新模块，不改 `oryxos-core`。
 - 底座优先于 Agent：最重要的交付是让任意 Agent 可靠运行的环境，而非某个强大的 Agent。
 
@@ -139,4 +171,4 @@ Hibernate 自动迁移（SQLite `ALTER TABLE` 支持弱），需手工建表脚�
   优先选择更简单、更符合原则的方案。
 - 运行时开发指南以 `CLAUDE.md` 为准，其内容 MUST 与本宪法保持一致。
 
-**Version**: 1.1.0 | **Ratified**: 2026-07-01 | **Last Amended**: 2026-07-10
+**Version**: 2.0.0 | **Ratified**: 2026-07-01 | **Last Amended**: 2026-07-26

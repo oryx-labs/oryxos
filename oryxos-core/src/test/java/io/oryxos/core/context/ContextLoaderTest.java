@@ -8,6 +8,8 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import io.oryxos.core.profile.Profile;
+import io.oryxos.core.skill.AgentSkillBindingService;
+import io.oryxos.core.skill.SkillLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,7 +34,7 @@ class ContextLoaderTest {
   void setUp() throws IOException {
     agentDir = oryxosRoot.resolve("agents").resolve("ops-agent");
     Files.createDirectories(agentDir);
-    loader = new ContextLoader(oryxosRoot, new io.oryxos.core.skill.SkillRegistry());
+    loader = new ContextLoader(oryxosRoot, bindingService());
     logAppender = new ListAppender<>();
     logAppender.start();
     ((Logger) LoggerFactory.getLogger(ContextLoader.class)).addAppender(logAppender);
@@ -109,12 +111,18 @@ class ContextLoaderTest {
   }
 
   @Test
-  @DisplayName("第32节：引用的全局 Skill 正文注入 system prompt；引用不存在的记 WARN 跳过")
-  void referencedGlobalSkillBodyIsInjected() throws IOException {
+  @DisplayName("绑定 Skill 只披露元数据，正文和未绑定项不注入")
+  void boundSkillMetadataIsInjectedWithoutBody() throws IOException {
     writeAgentBody("agent-body");
-    io.oryxos.core.skill.SkillRegistry reg = new io.oryxos.core.skill.SkillRegistry();
-    reg.register(new io.oryxos.core.skill.Skill("report-format", "研报格式", "SKILL-BODY-约束正文"));
-    ContextLoader withSkill = new ContextLoader(oryxosRoot, reg);
+    Path skill = oryxosRoot.resolve("skills/report-format");
+    Files.createDirectories(skill);
+    Files.writeString(
+        skill.resolve("SKILL.md"),
+        "---\nname: report-format\ndescription: 研报格式\n---\nSKILL-BODY-约束正文");
+    Files.createDirectories(agentDir.resolve("skills"));
+    Files.createSymbolicLink(
+        agentDir.resolve("skills/report-format"), Path.of("../../../skills/report-format"));
+    ContextLoader withSkill = new ContextLoader(oryxosRoot, bindingService());
     Profile p =
         new Profile(
             "ops-agent",
@@ -127,19 +135,38 @@ class ContextLoaderTest {
             List.of(),
             List.of(),
             List.of(),
-            List.of("report-format", "no-such-skill"),
             Profile.Settings.defaults());
 
     String context = withSkill.load(p);
 
-    assertTrue(context.contains("SKILL-BODY-约束正文"), "引用到的 Skill 正文应注入 system prompt");
-    boolean warned =
-        logAppender.list.stream()
-            .anyMatch(
-                e ->
-                    "WARN".equals(e.getLevel().toString())
-                        && e.getFormattedMessage().contains("no-such-skill"));
-    assertTrue(warned, "引用不存在的 Skill 记 WARN 跳过");
+    assertTrue(context.contains("report-format"));
+    assertTrue(context.contains("研报格式"));
+    assertFalse(context.contains("SKILL-BODY-约束正文"));
+  }
+
+  @Test
+  @DisplayName("Skill 描述、解绑和链接修复在下一次 load 立即生效")
+  void skillBindingChangesAreReadWithoutCache() throws IOException {
+    writeAgentBody("agent-body");
+    Path skill = Files.createDirectories(oryxosRoot.resolve("skills/report-format"));
+    Path skillFile = skill.resolve("SKILL.md");
+    Files.writeString(skillFile, "---\nname: report-format\ndescription: 版本一\n---\n正文");
+    Path links = Files.createDirectories(agentDir.resolve("skills"));
+    Path link = links.resolve("report-format");
+    Files.createSymbolicLink(link, Path.of("../../../skills/report-format"));
+    Profile profile = profileWith(List.of());
+
+    assertTrue(loader.load(profile).contains("版本一"));
+    Files.writeString(skillFile, "---\nname: report-format\ndescription: 版本二\n---\n正文");
+    assertTrue(loader.load(profile).contains("版本二"));
+
+    Files.delete(link);
+    assertFalse(loader.load(profile).contains("版本二"));
+    Files.createSymbolicLink(link, Path.of("../../outside"));
+    assertFalse(loader.load(profile).contains("版本二"));
+    Files.delete(link);
+    Files.createSymbolicLink(link, Path.of("../../../skills/report-format"));
+    assertTrue(loader.load(profile).contains("版本二"));
   }
 
   @Test
@@ -182,5 +209,9 @@ class ContextLoaderTest {
                     "WARN".equals(e.getLevel().toString())
                         && e.getFormattedMessage().contains("USER.md"));
     assertTrue(warned, "Bootstrap 缺失至少 WARN——静默跳过会造成人格悄悄丢失");
+  }
+
+  private AgentSkillBindingService bindingService() {
+    return new AgentSkillBindingService(oryxosRoot, new SkillLoader(oryxosRoot.resolve("skills")));
   }
 }

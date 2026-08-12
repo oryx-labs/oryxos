@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 300" width="1080" height="300">
+  <defs>
+    <filter id="fg" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="rgba(249,115,22,0.4)"/>
+    </filter>
+  </defs>
+
+  <rect width="1080" height="300" fill="#0a0a0a" rx="14"/>
+
+  <text x="540" y="34" font-family="'SF Mono','Fira Code',monospace" font-size="13" fill="#f97316" text-anchor="middle" letter-spacing="3" font-weight="bold">THE AGENT FORMULA</text>
+
+  <!-- md document -->
+  <path d="M 48 78 L 188 78 L 212 102 L 212 202 L 48 202 Z" fill="#111" stroke="#3b82f6" stroke-width="1.5"/>
+  <path d="M 188 78 L 188 102 L 212 102" fill="none" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="128" y="118" font-family="'SF Mono',monospace" font-size="11" fill="#3b82f6" text-anchor="middle">AGENT.md</text>
+  <text x="128" y="146" font-family="'SF Mono',monospace" font-size="13" fill="#f5f5f5" text-anchor="middle" font-weight="bold">Natural language</text>
+  <text x="128" y="168" font-family="'SF Mono',monospace" font-size="9" fill="#9ca3af" text-anchor="middle">one sentence · one md dir</text>
+  <line x1="70" y1="182" x2="186" y2="182" stroke="#374151" stroke-width="1"/>
+
+  <!-- plus -->
+  <text x="252" y="150" font-family="'SF Mono',monospace" font-size="30" fill="#f97316" text-anchor="middle" font-weight="bold">+</text>
+
+  <!-- capability chips 2x3 -->
+  <rect x="292" y="86" width="148" height="48" rx="24" fill="#111" stroke="#a855f7" stroke-width="1.2"/>
+  <text x="366" y="115" font-family="'SF Mono',monospace" font-size="13" fill="#e5e7eb" text-anchor="middle">Memory</text>
+
+  <rect x="452" y="86" width="148" height="48" rx="24" fill="#111" stroke="#a855f7" stroke-width="1.2"/>
+  <text x="526" y="115" font-family="'SF Mono',monospace" font-size="13" fill="#e5e7eb" text-anchor="middle">Tools</text>
+
+  <rect x="612" y="86" width="148" height="48" rx="24" fill="#111" stroke="#a855f7" stroke-width="1.2"/>
+  <text x="686" y="115" font-family="'SF Mono',monospace" font-size="13" fill="#e5e7eb" text-anchor="middle">MCP</text>
+
+  <rect x="292" y="146" width="148" height="48" rx="24" fill="#111" stroke="#a855f7" stroke-width="1.2"/>
+  <text x="366" y="175" font-family="'SF Mono',monospace" font-size="13" fill="#e5e7eb" text-anchor="middle">Skills</text>
+
+  <rect x="452" y="146" width="148" height="48" rx="24" fill="#111" stroke="#a855f7" stroke-width="1.2"/>
+  <text x="526" y="175" font-family="'SF Mono',monospace" font-size="13" fill="#e5e7eb" text-anchor="middle">Knowledge</text>
+
+  <rect x="612" y="146" width="148" height="48" rx="24" fill="#111" stroke="#a855f7" stroke-width="1.2"/>
+  <text x="686" y="175" font-family="'SF Mono',monospace" font-size="13" fill="#e5e7eb" text-anchor="middle">Notify</text>
+
+  <text x="526" y="222" font-family="'SF Mono',monospace" font-size="9.5" fill="#6b7280" text-anchor="middle">all built into the OS · an agent references them by name</text>
+
+  <!-- equals -->
+  <text x="800" y="150" font-family="'SF Mono',monospace" font-size="30" fill="#f97316" text-anchor="middle" font-weight="bold">=</text>
+
+  <!-- Agent -->
+  <rect x="840" y="82" width="204" height="116" rx="12" fill="#1a0f06" stroke="#f97316" stroke-width="2" filter="url(#fg)"/>
+  <text x="942" y="126" font-family="'SF Mono',monospace" font-size="13" fill="#f97316" text-anchor="middle" font-weight="bold">A working</text>
+  <text x="942" y="152" font-family="'SF Mono',monospace" font-size="20" fill="#f5f5f5" text-anchor="middle" font-weight="bold">Agent</text>
+  <text x="942" y="178" font-family="'SF Mono',monospace" font-size="9" fill="#9ca3af" text-anchor="middle">drop it in · live, no restart</text>
+
+  <text x="540" y="272" font-family="'SF Mono',monospace" font-size="11" fill="#9ca3af" text-anchor="middle">drive the cost of defining an agent toward zero</text>
+</svg>

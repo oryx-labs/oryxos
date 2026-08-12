@@ -23,15 +23,15 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
-import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.tool.ToolCallback;
 
 /**
  * Provider 前台（core {@link ProviderService} 契约的 Spring AI 实现）：按 Profile 显式路由到对应
  * ChatModel，完成一次调用并落审计。
  *
- * <p>宪法 II/III：显式 name→ChatModel 映射、调用方式 {@code chatModel.call(new Prompt(...))}、
- * proxyToolCalls=true 关闭框架自动工具执行——工具 schema 只翻译、tool call 原样透传。
+ * <p>宪法 II/III：显式 name→ChatModel 映射、调用方式 {@code chatModel.call(new Prompt(...))}、 {@code
+ * internalToolExecutionEnabled=false} 关闭框架自动工具执行——工具 schema 只翻译、tool call 原样透传。
  */
 public class SpringAiProviderServiceImpl implements ProviderService {
 
@@ -39,8 +39,12 @@ public class SpringAiProviderServiceImpl implements ProviderService {
   private final Function<ProviderDef, ChatModel> chatModelBuilder;
   private final ToolSchemaAdapter adapter;
   private final LlmCallAuditor audit;
-  // 已建的 ChatModel 缓存：key = name|apiKey|baseUrl；provider 改了 key/url（缓存键变）→ 下次自动重建（31 节动态 provider）
-  private final Map<String, ChatModel> cache = new ConcurrentHashMap<>();
+  // 已建的 ChatModel 缓存：key = provider name，值携带配置指纹（apiKey|baseUrl）。指纹变了原地替换旧条目——
+  // 缓存大小恒等于 provider 数，反复改 key/url 不再累积不可回收的旧实例（31 节动态 provider）。
+  private final Map<String, CachedModel> cache = new ConcurrentHashMap<>();
+
+  /** 缓存条目：配置指纹 + 已建实例，指纹不变则复用。 */
+  private record CachedModel(String fingerprint, ChatModel model) {}
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
@@ -65,47 +69,61 @@ public class SpringAiProviderServiceImpl implements ProviderService {
     ChatModel model = resolveModel(def);
     Prompt prompt = buildPrompt(profile, request);
     long startedAt = System.currentTimeMillis();
+    ProviderResponse result;
     try {
       ChatResponse response = model.call(prompt);
-      ProviderResponse result = toProviderResponse(response);
-      audit.record(
-          sessionId,
-          providerName,
-          profile.provider().model(),
-          result.usage(),
-          true,
-          null,
-          System.currentTimeMillis() - startedAt);
-      return result;
+      result = toProviderResponse(response);
     } catch (RuntimeException e) {
       // 失败也留痕（宪法 V）：先落审计再上抛——只记成功不记失败，一次真实事故就没有痕迹
-      audit.record(
-          sessionId,
-          providerName,
-          profile.provider().model(),
-          null,
-          false,
-          e.getMessage(),
-          System.currentTimeMillis() - startedAt);
+      try {
+        audit.record(
+            sessionId,
+            providerName,
+            profile.provider().model(),
+            null,
+            false,
+            e.getMessage(),
+            System.currentTimeMillis() - startedAt);
+      } catch (RuntimeException auditFailure) {
+        auditFailure.addSuppressed(e);
+        throw auditFailure;
+      }
       throw e;
     }
+    // 成功审计放在模型异常边界之外，避免审计失败被误记成一次模型调用失败。
+    audit.record(
+        sessionId,
+        providerName,
+        profile.provider().model(),
+        result.usage(),
+        true,
+        null,
+        System.currentTimeMillis() - startedAt);
+    return result;
   }
 
-  /** 按 name+key+url 缓存构建好的 ChatModel；参数变化即换缓存键、下次重建（provider CRUD 改了配置立即生效）。 */
+  /** 按 provider 名缓存已建的 ChatModel；同名下 key/url 变化即原地重建替换（provider CRUD 改了配置立即生效，旧实例可回收）。 */
   private ChatModel resolveModel(ProviderDef def) {
-    String cacheKey = def.name() + "|" + def.apiKey() + "|" + def.baseUrl();
-    return cache.computeIfAbsent(cacheKey, k -> chatModelBuilder.apply(def));
+    String fingerprint = def.apiKey() + "|" + def.baseUrl();
+    return cache
+        .compute(
+            def.name(),
+            (name, cached) ->
+                cached != null && cached.fingerprint().equals(fingerprint)
+                    ? cached
+                    : new CachedModel(fingerprint, chatModelBuilder.apply(def)))
+        .model();
   }
 
   private Prompt buildPrompt(Profile profile, ProviderRequest request) {
     OpenAiChatOptions.Builder options =
         OpenAiChatOptions.builder()
             .model(profile.provider().model())
-            .proxyToolCalls(Boolean.TRUE); // 关闭自动执行：执行权只在 ToolExecutor（17 节）
+            .internalToolExecutionEnabled(Boolean.FALSE); // 执行权只在 ToolExecutor（17 节）
     if (profile.provider().temperature() != null) {
       options.temperature(profile.provider().temperature());
     }
-    List<FunctionCallback> callbacks = adapter.toSpringAiTools(request.availableTools());
+    List<ToolCallback> callbacks = adapter.toSpringAiTools(request.availableTools());
     if (!callbacks.isEmpty()) {
       options.toolCallbacks(callbacks);
     }
@@ -132,8 +150,11 @@ public class SpringAiProviderServiceImpl implements ProviderService {
       if (id == null || id.isBlank()) {
         return new UserMessage("[工具 " + message.toolName() + " 返回] " + message.content());
       }
-      return new ToolResponseMessage(
-          List.of(new ToolResponseMessage.ToolResponse(id, message.toolName(), message.content())));
+      return ToolResponseMessage.builder()
+          .responses(
+              List.of(
+                  new ToolResponseMessage.ToolResponse(id, message.toolName(), message.content())))
+          .build();
     }
     // assistant：带 tool_calls（含 id）才能让下一轮的 tool 结果配上对
     if (message.toolCalls().isEmpty()) {
@@ -146,26 +167,26 @@ public class SpringAiProviderServiceImpl implements ProviderService {
                     new AssistantMessage.ToolCall(
                         tc.id() == null ? "" : tc.id(), "function", tc.name(), tc.argumentsJson()))
             .toList();
-    return new AssistantMessage(message.content(), Map.of(), toolCalls);
+    return AssistantMessage.builder()
+        .content(message.content())
+        .properties(Map.of())
+        .toolCalls(toolCalls)
+        .build();
   }
 
   private static ProviderResponse toProviderResponse(ChatResponse response) {
     Generation generation = response.getResult();
-    String text = null;
-    List<ToolCallRequest> toolCalls = List.of();
-    if (generation != null) {
-      AssistantMessage output = generation.getOutput();
-      text = output.getText();
-      toolCalls =
-          output.getToolCalls().stream()
-              .map(call -> new ToolCallRequest(call.id(), call.name(), call.arguments()))
-              .toList();
-    }
+    AssistantMessage output = generation.getOutput();
+    String text = output.getText();
+    List<ToolCallRequest> toolCalls =
+        output.getToolCalls().stream()
+            .map(call -> new ToolCallRequest(call.id(), call.name(), call.arguments()))
+            .toList();
     return new ProviderResponse(text, toolCalls, extractUsage(response));
   }
 
   private static Usage extractUsage(ChatResponse response) {
-    if (response.getMetadata() == null || response.getMetadata().getUsage() == null) {
+    if (response.getMetadata().getUsage() == null) {
       return null;
     }
     org.springframework.ai.chat.metadata.Usage usage = response.getMetadata().getUsage();

@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Package OryxOS changed files into a tar.gz and sync to remote server.
 # Usage: ./scripts/package.sh [output_dir]
+#
+# Deploy target is read from the environment (never hardcode server
+# addresses / credentials in version control):
+#   ORYXOS_DEPLOY_HOST  (required) SSH target, e.g. "deploy@example.com" or an ssh-config alias
+#   ORYXOS_DEPLOY_DIR   (optional) remote checkout directory, default "/opt/oryxos"
 
 set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-REMOTE_HOST="root@117.72.92.117"
-REMOTE_DIR="/root/oryxos"
+REMOTE_HOST="${ORYXOS_DEPLOY_HOST:-}"
+REMOTE_DIR="${ORYXOS_DEPLOY_DIR:-/opt/oryxos}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -16,6 +21,15 @@ OUTPUT_DIR="${1:-$PROJECT_ROOT}"
 info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; }
+
+# ── Validate deploy target ───────────────────────────────────────────────────────
+if [[ -z "$REMOTE_HOST" ]]; then
+  error "ORYXOS_DEPLOY_HOST is not set."
+  error "Set the deploy target first, e.g.:"
+  error "  export ORYXOS_DEPLOY_HOST=deploy@your-server"
+  error "  export ORYXOS_DEPLOY_DIR=/opt/oryxos   # optional, this is the default"
+  exit 1
+fi
 
 # ── Commit message builder ──────────────────────────────────────────────────────
 # Derive a meaningful commit message from the changed / deleted file lists:

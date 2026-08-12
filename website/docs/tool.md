@@ -132,7 +132,7 @@ Each entry carries comments on prerequisites (Node.js/`npx` or `uv`/`uvx` on the
 
 `SandboxChecker` runs before every tool invocation. It enforces three independent whitelists configured as top-level keys in `application.yml`. An empty list means **deny-all** — the sandbox is closed by default and you widen it explicitly, following least privilege. The configured workspace root is added to the file whitelist automatically at runtime.
 
-**File path whitelist** — applies to `read_file`, `write_file`, `list_dir`. The requested path must match at least one entry.
+**File path whitelist** — applies to `read_file`, `write_file`, `list_dir`. The requested path's real target must remain under at least one entry; symlinks cannot escape an allowed root.
 
 ```yaml
 file:
@@ -157,9 +157,12 @@ shell:
   allowed_commands:
     - ls
     - cat
+    - echo
     - grep
   timeout_seconds: 30
 ```
+
+The shell whitelist is an independent capability boundary. Adding an interpreter or shell such as `python`, `python3`, `sh`, or `bash` grants the agent the capabilities of that executable and can bypass the file and HTTP tool policies. They are deliberately excluded from the default configuration. Add such entries only for trusted scripts and only when that broader authority is intentional.
 
 **HTTP domain whitelist** — applies to `http_get` and `http_post`. Supports `*` as a prefix wildcard.
 

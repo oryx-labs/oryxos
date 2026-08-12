@@ -20,6 +20,10 @@ public record AgentView(
   }
 
   public static AgentView from(Profile p) {
+    return from(p, List.of());
+  }
+
+  public static AgentView from(Profile p, List<String> liveSkills) {
     Profile.ProviderRef pr = p.provider();
     List<ScheduleView> scheds =
         p.schedules().stream()
@@ -31,7 +35,7 @@ public record AgentView(
         pr == null ? null : pr.name(),
         pr == null ? null : pr.model(),
         p.tools(),
-        p.skills(),
+        liveSkills,
         scheds);
   }
 

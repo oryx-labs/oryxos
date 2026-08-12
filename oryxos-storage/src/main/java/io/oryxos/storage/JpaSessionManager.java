@@ -5,7 +5,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oryxos.core.session.Message;
 import io.oryxos.core.session.SessionManager;
+import io.oryxos.core.session.SessionStats;
 import io.oryxos.core.session.SessionSummary;
+import io.oryxos.core.session.SessionUpdateConflictException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -63,6 +65,19 @@ public class JpaSessionManager implements SessionManager {
   }
 
   @Override
+  public void saveIfUnchanged(
+      io.oryxos.core.session.Session session, List<Message> expectedMessages) {
+    String expectedJson = writeMessages(expectedMessages == null ? List.of() : expectedMessages);
+    String messagesJson = writeMessages(session.messages());
+    int updated =
+        repository.updateMessagesIfUnchanged(
+            session.sessionId(), expectedJson, messagesJson, Instant.now());
+    if (updated != 1) {
+      throw new SessionUpdateConflictException(safeId(session));
+    }
+  }
+
+  @Override
   public boolean archive(String sessionId) {
     Optional<Session> found = repository.findById(sessionId);
     if (found.isEmpty()) {
@@ -73,6 +88,13 @@ public class JpaSessionManager implements SessionManager {
     entity.setArchivedAt(Instant.now());
     repository.save(entity);
     return true;
+  }
+
+  @Override
+  public SessionStats stats() {
+    int active = (int) repository.countByStatus("active");
+    int archived = (int) repository.countByStatus("archived");
+    return new SessionStats(active, archived);
   }
 
   @Override

@@ -12,6 +12,9 @@ import org.slf4j.LoggerFactory;
  * <p>异步触发（{@link #triggerAsync}）先落一条"运行中"记录、立即返回 id（HTTP 请求不再干等整轮 ReAct，杜绝浏览器 Failed to fetch），真正的
  * ReAct 在虚拟线程后台跑，结束回填状态——符合宪法 VII（虚拟线程处理并发，非 Reactor/WebFlux）。成功失败都留痕（宪法 V）。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "CRLF_INJECTION_LOGS",
+    justification = "日志消息中唯一动态部分是 agentName，已通过 sanitize() 去除 CRLF——不存在注入风险。")
 public class AgentExecutionService {
 
   private static final Logger LOG = LoggerFactory.getLogger(AgentExecutionService.class);
@@ -41,7 +44,7 @@ public class AgentExecutionService {
             ok = true;
           } catch (RuntimeException e) {
             error = e.getMessage();
-            LOG.error("Agent {} 后台执行失败", sanitize(agentName), e);
+            LOG.error("Agent " + sanitize(agentName) + " 后台执行失败", e);
           } finally {
             safeFinish(id, sessionId, ok, error);
           }

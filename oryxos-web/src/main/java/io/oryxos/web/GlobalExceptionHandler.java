@@ -1,7 +1,10 @@
 package io.oryxos.web;
 
 import io.oryxos.core.profile.ProfileValidationException;
+import io.oryxos.core.session.SessionUpdateConflictException;
+import io.oryxos.core.skill.SkillReferencedException;
 import io.oryxos.web.common.ApiResponse;
+import io.oryxos.web.controller.dto.SkillReferenceConflictView;
 import io.oryxos.web.error.AgentTimeoutException;
 import io.oryxos.web.error.ProviderUnavailableException;
 import io.oryxos.web.error.ResourceNotFoundException;
@@ -53,6 +56,25 @@ public class GlobalExceptionHandler {
     LOG.error("Service unavailable: {}", sanitize(ex.getMessage()));
     return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
         .body(ApiResponse.error(HttpStatus.SERVICE_UNAVAILABLE.value(), ex.getMessage()));
+  }
+
+  /** 409 — Skill archive is blocked by active or archived Agent references. */
+  @ExceptionHandler(SkillReferencedException.class)
+  public ResponseEntity<ApiResponse<SkillReferenceConflictView>> handleSkillReferenced(
+      SkillReferencedException ex) {
+    SkillReferenceConflictView data =
+        SkillReferenceConflictView.from(ex.skillName(), ex.references());
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(new ApiResponse<>(HttpStatus.CONFLICT.value(), ex.getMessage(), data));
+  }
+
+  /** 409 — 会话在执行期间已被另一请求更新，拒绝旧快照覆盖新历史。 */
+  @ExceptionHandler(SessionUpdateConflictException.class)
+  public ResponseEntity<ApiResponse<Void>> handleSessionUpdateConflict(
+      SessionUpdateConflictException ex) {
+    LOG.warn("Session update conflict: {}", sanitize(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ApiResponse.error(HttpStatus.CONFLICT.value(), ex.getMessage()));
   }
 
   /** 504 — Agent 调用超过 60 秒上限。 */

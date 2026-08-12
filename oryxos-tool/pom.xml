@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.oryxos</groupId>
         <artifactId>oryxos</artifactId>
-        <version>0.1.1-RELEASE</version>
+        <version>0.1.2-RELEASE</version>
     </parent>
 
     <artifactId>oryxos-tool</artifactId>
@@ -22,7 +22,7 @@
         <!-- @Tool schema 生成管道（宪法 II 第二件事）与 MCP 协议接入——版本由 Spring AI BOM 管理 -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-core</artifactId>
+            <artifactId>spring-ai-model</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>

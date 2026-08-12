@@ -30,6 +30,7 @@ public class GithubFolderFetcher {
 
   private static final int MAX_FILES = 100;
   private static final int MAX_TOTAL_BYTES = 5 * 1024 * 1024;
+  private static final String PATH_SEPARATOR = "/";
 
   private final Function<URI, String> httpGet;
 
@@ -112,7 +113,7 @@ public class GithubFolderFetcher {
   private static String encodePath(String path) {
     // Contents API 的 path 段允许 '/'，逐段做 URL 编码后再拼回去
     StringBuilder sb = new StringBuilder();
-    for (String seg : path.split("/")) {
+    for (String seg : path.split(PATH_SEPARATOR)) {
       if (!sb.isEmpty()) {
         sb.append('/');
       }

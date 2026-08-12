@@ -1,49 +1,62 @@
 # Why OryxOS
 
-## The Java gap
+## Agents shouldn't belong only to big tech
 
-Java is the backend standard for the majority of enterprises. The JVM ecosystem — Spring Boot, Maven, Gradle, the established monitoring and deployment toolchain — is what most enterprise engineering teams run in production. It is not going away.
+Every company has work an agent should be doing right now: the daily report someone compiles by hand, the alert that needs triaging at 3am, the PR digest, the customer question answered for the hundredth time. The models are ready. Yet in most companies, agents are still demos.
 
-The AI Agent ecosystem, however, is almost entirely Python-based or tightly coupled to managed cloud platforms. LangChain, AutoGen, CrewAI, OpenClaw, Hermes Agent — useful projects, but built for a different runtime and a different deployment model. Cloud-coupled platforms (Azure AI Foundry, AWS Bedrock Agents, Google Vertex AI Agents) solve the infrastructure problem by owning your data and locking you into a vendor.
+Why? Four barriers, none of which is the model:
 
-For a Java shop with compliance requirements — data residency mandates, network perimeter restrictions, internal audit requirements — neither category works. Python frameworks require a separate runtime, separate ops tooling, and separate security review. Cloud platforms ship your data to someone else's infrastructure.
+**Defining an agent requires engineers.** Today's mainstream path is code — a framework, a runtime, glue logic, a deployment. The people who best understand the work (ops, support, HR, finance) can describe it perfectly in one sentence, and can't ship an agent at all.
 
-The result: in the Java ecosystem, there is no mature, open-source, privately-deployable Agent Harness OS. OryxOS fills this gap. It is a standard Spring Boot application, deployable as a fat JAR, runnable on any JVM, operable with existing Java toolchains, and compatible with any infrastructure Java runs on today.
+**The data has to leave.** Cloud agent platforms solve infrastructure by taking your data with it. For any company with data-residency, network-perimeter, or audit obligations, that's a non-starter.
 
-## The harness bottleneck
+**It's a black box.** An agent that can run shell commands, write files, and call external APIs — with no record of what it did, no allowlist on what it *can* do, and no one approving the dangerous steps — is not something an enterprise can put into production.
 
-The common assumption is that better agents need better models. That is often wrong.
+**One agent is easy. A fleet is not.** A single wrapped LLM loop is a script. Running dozens of agents — with shared providers, shared tools, schedules, lifecycle, and governance — is an operating-systems problem, and almost nobody hands you that layer.
 
-In practice, the bottleneck for reliable production agents is the **harness** — the scaffolding between the model and the real world. Whether an agent can actually complete a task depends on four things that have nothing to do with model quality, and everything to do with the harness around it:
+## Our answer
 
-**Right context.** The agent needs the right background information assembled correctly before each LLM call — conversation history, long-term memory, skill instructions, available tools. Assembling this badly produces confident-sounding wrong answers.
+OryxOS removes all four barriers at once:
 
-**Controlled tools.** Every tool an agent can call is a potential blast radius. File access, shell execution, and outbound HTTP calls need explicit allowlists. An agent that can write arbitrary files or call arbitrary URLs is not a production system.
+![natural language + Memory + Tools + MCP + Skills + Knowledge + Notify = a working Agent](/images/agent-formula-en.svg)
 
-**Isolated and auditable execution.** Every tool call and every LLM call needs a record: what was invoked, with what arguments, what came back, how long it took, whether it succeeded. Without this, debugging production failures is archaeology. Compliance requirements make auditability non-negotiable.
+- **Plain language instead of code.** One sentence — or one markdown directory — defines an agent. The OS supplies everything else: memory, 24 built-in tools, MCP connectors, skills, notifications, scheduling. The cost of defining an agent trends toward zero.
+- **Your infrastructure, your data.** One self-hosted binary on your own servers or K8s. No managed service, no telemetry, no cloud lock-in.
+- **Glass box, not black box.** Every tool call and every LLM call is persisted to the audit tables from day one — what was invoked, with what arguments, what came back, how long it took. Sandbox allowlists gate files, shell, and HTTP. Governance is the foundation, not a bolt-on.
+- **An OS for the fleet.** Agents are processes; OryxOS is the operating system — lifecycle, routing, shared registries, scheduling, console, and API for all of them at once.
 
-**Reliable message delivery.** Inputs need to reach the agent, and responses need to reach the caller. For event-driven use cases — alert webhooks, CI/CD triggers, scheduled tasks — this needs to work without message loss.
+**So every company can run its own agents — in plain language.**
 
-These four requirements *are* the harness. OryxOS is designed around them, not around making any particular agent smarter — and then it hands the same harness to every agent in the fleet. The model is a component. The harness is the product.
+## Why a team of agents, not one super-agent
+
+Real work is rarely one skill. "Research the market, draft the report, have someone check the numbers, send it to the team" is a *team's* job — decompose, parallelize, review, deliver. That's why our north star is not a smarter single agent but this:
+
+> **You publish a task in one sentence → OryxOS decomposes it → assembles a team of agents → they collaborate → the result is delivered.**
+
+![How an agent team delivers a task](/images/agent-team-en.svg)
+
+The industry has proven the pattern works (planner–worker–reviewer crews, agent-to-agent protocols). What's missing is the version an enterprise can actually trust: every sub-agent auditable, every dangerous action gated by human approval, cost attributed per task, iterations bounded. That trustworthy version is precisely what an Agent *OS* — and only an OS layer — can provide. See the [Roadmap](./roadmap).
+
+## Why an OS, not another framework
+
+The common assumption is that better agents need better models. In production, the bottleneck is the **harness** — the scaffolding between the model and the real world: the right context assembled before every call, tools that are allowlisted rather than open-ended, execution that is isolated and audited, and messages that reliably reach their destination.
+
+A framework gives you one harness inside your own code. OryxOS ships the harness *as infrastructure* and runs a fleet on top of it — which is what changes who can use it: with a framework, engineers build agents; with an OS, **anyone who can describe the work** runs agents.
 
 ## What OryxOS is not
 
-**Not a Python framework.** OryxOS is a Java application. If your team runs Python and has no compliance restrictions, use LangChain or LangGraph. They are good at what they do.
+**Not a cloud platform.** No managed offering, no telemetry collection, no dependency on any external cloud service. It's a binary on your infrastructure.
 
-**Not another LangChain port.** OryxOS does not attempt to replicate LangChain's abstractions in Java. It makes different architectural bets: synchronous execution with virtual threads instead of async/reactive, explicit provider mapping instead of auto-wiring, a self-implemented ReAct loop instead of a framework-managed one, and SQLite persistence over an in-memory graph.
+**Not a single-agent tool.** A tool that wraps one LLM call in a loop is a script — one harness, hard-coded. OryxOS hands a reusable harness to a whole fleet: many agents, one directory each, created and managed at runtime, shared capabilities across all of them.
 
-**Not a cloud platform.** OryxOS has no managed offering, no telemetry collection, and no dependency on any external cloud service. It is a binary that runs on your infrastructure.
+**Not another framework port.** OryxOS makes its own architectural bets: a self-implemented, fully inspectable ReAct loop instead of a framework-managed one; synchronous execution on virtual threads instead of async/reactive; explicit provider routing instead of auto-wiring; durable persistence over in-memory state.
 
-**Not a single-agent tool.** A tool that wraps one LLM call in a loop is a script — one harness, hard-coded. OryxOS is designed from the start to hand a reusable harness to a whole fleet: multiple Agents (one directory each) running simultaneously, created and managed at runtime, shared capabilities (channels, memory, tools, sandbox) across all of them, REST API exposure so any business system can call any agent.
-
-**Not production-complete on day one.** The current release is the runtime kernel: five core capabilities implemented and tested. Multi-tenancy, SSO, Role-based tool policy, full Sandbox isolation, and the governance layer that makes OryxOS a true enterprise Agent Harness OS are extension-phase work. The documentation is explicit about this boundary.
+**Not production-complete on day one.** What's shipped is the runtime kernel — the five core capabilities, working and tested. Multi-tenancy, SSO, role-based tool policy, container-grade isolation, and the multi-agent team are roadmap work, and the docs are explicit about that boundary.
 
 ## Why now
 
-**AI coding changes build economics.** A solo developer or small team can now build and maintain a system that previously required a larger engineering organization. OryxOS is built under this assumption — the four-week implementation timeline for the core kernel is deliberate. The scope is chosen to match what a small focused team can ship and maintain.
+**AI programming changed the economics.** A small, focused team can now build and maintain what used to take an engineering organization — and OryxOS itself is built that way, with AI, by contributors who own the result.
 
-**The Java ecosystem gap is a real opportunity.** The absence of a mature Java Agent Harness OS is not because the problem is hard — it is because most AI infrastructure investment has gone into Python and cloud. The gap exists. Enterprise Java teams are building agent-adjacent things awkwardly on top of Spring AI without a coherent runtime layer. OryxOS is the missing layer.
+**Open standards just matured.** MCP has become the de facto standard for tool interoperability; A2A is emerging for cross-agent coordination. OryxOS builds on both from the start, so what plugs into OryxOS works in the broader ecosystem and vice versa.
 
-**Open standards are maturing.** MCP (Model Context Protocol) has become the de facto standard for tool interoperability. A2A (Agent-to-Agent protocol) is emerging for cross-agent coordination. OryxOS is built against these standards from the start — MCP for tool integration, A2A as the planned coordination layer. This means tool servers and agent integrations built for OryxOS work in the broader ecosystem and vice versa.
-
-**The alternative is worse.** The alternative to a purpose-built Agent Harness OS is ad hoc: teams bolt together Spring Boot controllers, manual prompt assembly, home-grown tool dispatch, log-only audit trails, and no shared memory. This works until it doesn't, and debugging it in production is expensive. A purpose-built runtime with clear contracts, persistent audit records, and a defined extension model is the better foundation.
+**The alternative is worse.** Without a purpose-built agent OS, teams bolt together controllers, hand-rolled prompt assembly, home-grown tool dispatch, log-only audit, and no shared memory. It works until it doesn't — and debugging it in production is archaeology. A runtime with clear contracts, persistent audit, and a defined extension model is the better foundation.

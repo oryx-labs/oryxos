@@ -3,6 +3,8 @@ package io.oryxos.tool.sandbox;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -61,13 +63,92 @@ class WhitelistSandboxTest {
           SandboxViolationException.class,
           () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, traversal)));
     }
+
+    @Test
+    @DisplayName("白名单内软连接指向外部时，读与不存在目标写均拒绝")
+    void symlinkEscapeIsBlocked(@TempDir Path allowed) throws IOException {
+      Path outside = Files.createTempDirectory("oryxos-sandbox-outside-");
+      Files.writeString(outside.resolve("secret.txt"), "secret");
+      Files.createSymbolicLink(allowed.resolve("escape"), outside);
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+
+      assertThrows(
+          SandboxViolationException.class,
+          () ->
+              sb.enforce(
+                  new SandboxAction(
+                      ActionType.FILE_READ, allowed.resolve("escape/secret.txt").toString())));
+      assertThrows(
+          SandboxViolationException.class,
+          () ->
+              sb.enforce(
+                  new SandboxAction(
+                      ActionType.FILE_WRITE, allowed.resolve("escape/new.txt").toString())));
+    }
+
+    @Test
+    @DisplayName("合法 Agent Skill 软连接指向同一白名单根时可读")
+    void controlledSkillSymlinkIsAllowed(@TempDir Path allowed) throws IOException {
+      Path shared = allowed.resolve("skills/report");
+      Path local = allowed.resolve("agents/ops/skills");
+      Files.createDirectories(shared);
+      Files.createDirectories(local);
+      Files.writeString(shared.resolve("SKILL.md"), "body");
+      Files.createSymbolicLink(local.resolve("report"), Path.of("../../../skills/report"));
+      WhitelistSandbox sb = sandbox(List.of(allowed.toString()), List.of(), List.of());
+
+      assertDoesNotThrow(
+          () ->
+              sb.enforce(
+                  new SandboxAction(
+                      ActionType.FILE_READ, local.resolve("report/SKILL.md").toString())));
+    }
+
+    @Test
+    @DisplayName("dangling、多跳逃逸和链接环全部失败关闭")
+    void unresolvableLinkShapesAreBlocked(@TempDir Path temp) throws IOException {
+      SandboxPathFixture paths = new SandboxPathFixture(temp);
+      Path dangling = paths.dangling();
+      Path multiHop = paths.multiHopEscape();
+      Path cycle = paths.cycle()[0];
+      WhitelistSandbox sb = sandbox(List.of(paths.allowed().toString()), List.of(), List.of());
+
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, dangling.toString())));
+      assertThrows(
+          SandboxViolationException.class,
+          () ->
+              sb.enforce(
+                  new SandboxAction(ActionType.FILE_WRITE, multiHop.resolve("x").toString())));
+      assertThrows(
+          SandboxViolationException.class,
+          () -> sb.enforce(new SandboxAction(ActionType.FILE_READ, cycle.toString())));
+    }
+
+    @Test
+    @DisplayName("白名单按真实最小根判断，链接的 lexical 位置不能扩大授权")
+    void symlinkUsesRealTargetRoot(@TempDir Path workspace) throws IOException {
+      Path shared = Files.createDirectories(workspace.resolve("skills/report"));
+      Path local = Files.createDirectories(workspace.resolve("agents/ops/skills"));
+      Files.writeString(shared.resolve("SKILL.md"), "body");
+      Files.createSymbolicLink(local.resolve("report"), Path.of("../../../skills/report"));
+      WhitelistSandbox agentOnly = sandbox(List.of(local.toString()), List.of(), List.of());
+
+      assertThrows(
+          SandboxViolationException.class,
+          () ->
+              agentOnly.enforce(
+                  new SandboxAction(
+                      ActionType.FILE_READ, local.resolve("report/SKILL.md").toString())));
+    }
   }
 
   @Nested
   @DisplayName("Shell 命令白名单")
   class ShellCommandWhitelist {
 
-    private final WhitelistSandbox sb = sandbox(List.of(), List.of("ls", "cat"), List.of());
+    private final WhitelistSandbox sb = sandbox(List.of(), List.of("ls", "cat", "echo"), List.of());
 
     @Test
     @DisplayName("白名单内可执行文件_放行")

@@ -1,9 +1,16 @@
 package io.oryxos.core.skill;
 
+import io.oryxos.core.fs.RealPathBoundary;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -12,23 +19,37 @@ import java.util.stream.Stream;
 /**
  * 全局 Skill 库的文件读写，限定在 {@code .oryxos/skills/} 内（第 32 节）。
  *
- * <p>write：把一段 {@code SKILL.md} 写进 {@code .oryxos/skills/<name>/}；delete：递归删整个 Skill 目录。 name
- * 必须是安全目录段（只允许字母/数字/下划线/连字符，防路径穿越）。与 {@code AgentStore} 同构，但 Skill 是纯共享资产、删除即物理删（无 archive）。
+ * <p>write：把一段 {@code SKILL.md} 写进 {@code .oryxos/skills/<name>/}；archive：把完整目录移动到 {@code
+ * .oryxos/archive/skills/}。name 必须是安全目录段（只允许字母/数字/下划线/连字符，防路径穿越）。
  */
 public class SkillStore {
 
   private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]+");
   private static final String SKILL_FILE = "SKILL.md";
 
+  private static final DateTimeFormatter ARCHIVE_TIME =
+      DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC);
+
+  private final Path root;
   private final Path skillsDir;
+  private final Path archiveDir;
+  private final Clock clock;
 
   public SkillStore(Path oryxosRoot) {
-    this.skillsDir = oryxosRoot.resolve("skills");
+    this(oryxosRoot, Clock.systemUTC());
+  }
+
+  SkillStore(Path oryxosRoot, Clock clock) {
+    this.root = oryxosRoot.toAbsolutePath().normalize();
+    this.skillsDir = root.resolve("skills");
+    this.archiveDir = root.resolve("archive");
+    this.clock = clock;
   }
 
   /** 写 {@code .oryxos/skills/<name>/SKILL.md}，返回该 Skill 目录。 */
   public Path write(String name, String skillMarkdown) {
     Path dir = skillsDir.resolve(safe(name));
+    requireSafe(dir.resolve(SKILL_FILE));
     try {
       Files.createDirectories(dir);
       Files.writeString(dir.resolve(SKILL_FILE), skillMarkdown);
@@ -44,6 +65,7 @@ public class SkillStore {
    */
   public Path writeAll(String name, Map<String, String> files) {
     Path dir = skillsDir.resolve(safe(name)).normalize();
+    requireSafe(dir);
     try {
       Files.createDirectories(dir);
       for (Map.Entry<String, String> entry : files.entrySet()) {
@@ -51,6 +73,7 @@ public class SkillStore {
         if (!target.startsWith(dir)) {
           throw new IllegalArgumentException("非法文件路径: " + entry.getKey());
         }
+        requireSafe(target);
         Path parent = target.getParent();
         if (parent != null) {
           Files.createDirectories(parent);
@@ -63,28 +86,91 @@ public class SkillStore {
     return dir;
   }
 
-  /** 递归删除一个 Skill 目录。 */
-  public void delete(String name) {
-    Path dir = skillsDir.resolve(safe(name));
-    if (!Files.exists(dir)) {
+  public boolean exists(String name) {
+    Path file = skillsDir.resolve(safe(name)).resolve(SKILL_FILE);
+    return RealPathBoundary.isWithin(skillsDir, file) && Files.isRegularFile(file);
+  }
+
+  /** Returns whether any filesystem entry already occupies this Skill name, including residue. */
+  boolean entryExists(String name) {
+    Path directory = skillsDir.resolve(safe(name));
+    return Files.exists(directory, LinkOption.NOFOLLOW_LINKS);
+  }
+
+  /**
+   * Moves the complete installed Skill directory into archive/skills without overwriting history.
+   */
+  public SkillArchive archive(String name) {
+    String safeName = safe(name);
+    Path source = skillsDir.resolve(safeName);
+    requireSafe(source);
+    if (!Files.isDirectory(source, LinkOption.NOFOLLOW_LINKS)) {
+      throw new IllegalArgumentException("Skill 不存在: " + safeName);
+    }
+    Instant archivedAt = clock.instant();
+    try {
+      prepareSkillArchiveNamespace();
+      Path target = uniqueArchivePath(safeName, archivedAt);
+      RealPathBoundary.requireWithin(root, target);
+      Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+      return new SkillArchive(safeName, root.relativize(target), archivedAt);
+    } catch (IOException e) {
+      throw new UncheckedIOException("归档 Skill 目录失败: " + safeName, e);
+    }
+  }
+
+  /** 返回受安全 name 约束的公共 Skill 目录，供加载器在整目录导入后做一致性复验。 */
+  Path directory(String name) {
+    return skillsDir.resolve(safe(name));
+  }
+
+  /** Removes a just-created import directory after validation or registration failed. */
+  void rollbackCreate(String name) {
+    Path directory = skillsDir.resolve(safe(name));
+    requireSafe(directory);
+    if (!Files.exists(directory, LinkOption.NOFOLLOW_LINKS)) {
       return;
     }
-    try (Stream<Path> walk = Files.walk(dir)) {
-      walk.sorted(Comparator.reverseOrder()).forEach(SkillStore::deleteOne);
+    try (Stream<Path> paths = Files.walk(directory)) {
+      paths.sorted(Comparator.reverseOrder()).forEach(SkillStore::deleteRollbackPath);
     } catch (IOException e) {
-      throw new UncheckedIOException("删除 Skill 目录失败: " + name, e);
+      throw new UncheckedIOException("回滚 Skill 导入目录失败: " + name, e);
     }
   }
 
-  public boolean exists(String name) {
-    return Files.isRegularFile(skillsDir.resolve(safe(name)).resolve(SKILL_FILE));
+  private void prepareSkillArchiveNamespace() throws IOException {
+    Path skillArchives = archiveDir.resolve("skills");
+    if (Files.isDirectory(skillArchives, LinkOption.NOFOLLOW_LINKS)
+        && Files.isRegularFile(skillArchives.resolve("AGENT.md"))) {
+      Path migrated = archiveDir.resolve("skills-" + System.currentTimeMillis());
+      while (Files.exists(migrated, LinkOption.NOFOLLOW_LINKS)) {
+        migrated = archiveDir.resolve("skills-" + System.nanoTime());
+      }
+      Files.move(skillArchives, migrated, StandardCopyOption.ATOMIC_MOVE);
+    }
+    Files.createDirectories(skillArchives);
   }
 
-  private static void deleteOne(Path path) {
+  private Path uniqueArchivePath(String name, Instant instant) {
+    Path skillArchives = archiveDir.resolve("skills");
+    String base = name + "-" + ARCHIVE_TIME.format(instant);
+    Path candidate = skillArchives.resolve(base);
+    int suffix = 2;
+    while (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
+      candidate = skillArchives.resolve(base + "-" + suffix++);
+    }
+    return candidate;
+  }
+
+  private void requireSafe(Path path) {
+    RealPathBoundary.requireWithin(skillsDir, path);
+  }
+
+  private static void deleteRollbackPath(Path path) {
     try {
-      Files.delete(path);
+      Files.deleteIfExists(path);
     } catch (IOException e) {
-      throw new UncheckedIOException("删除失败: " + path.getFileName(), e);
+      throw new UncheckedIOException("删除 Skill 导入残留失败: " + path.getFileName(), e);
     }
   }
 

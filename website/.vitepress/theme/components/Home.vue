@@ -43,8 +43,8 @@ provider:
     num: '03',
     title: t('自实现 ReAct 循环', 'Self-implemented ReAct Loop'),
     desc: t(
-      '完整掌控 Reason → Act → Observe 循环，同步执行 + Java 21 虚拟线程，不依赖 Spring AI Agent 抽象。Spring AI 只做协议转换与 @Tool schema 生成。',
-      'Full control over Reason → Act → Observe — sync execution on Java 21 virtual threads, no Spring AI Agent abstractions. Spring AI is used only for protocol translation and @Tool schema generation.'
+      '完整掌控 Reason → Act → Observe 循环，同步执行 + 虚拟线程，不被任何外部 Agent 框架包裹。协议差异交给适配层吸收，工具执行始终由自己掌控，全程透明可查。',
+      'Full control over Reason → Act → Observe — synchronous execution on virtual threads, wrapped by no external agent framework. Vendor protocol differences are absorbed by an adapter layer; tool execution stays fully in-house and inspectable.'
     ),
     code: `User message
   → PromptBuilder: system + memory + history + tools
@@ -65,7 +65,7 @@ provider:
     ),
     code: `# Agent saves a preference
 Tool: save_memory
-Input: {"content": "Prefers Spring Boot over MVC"}
+Input: {"content": "Weekly report goes out every Friday 5pm"}
 
 # Persisted per-agent, auto-injected next turn
 # .oryxos/agents/ops-agent/MEMORY.md
@@ -112,7 +112,7 @@ const scenarios = computed(() => [
   {
     num: '02',
     title: t('零代码 PR 日报', 'Zero-code PR Digest'),
-    desc: t('写一个 SKILL.md 接入 GitHub MCP server，自动生成每日 PR 摘要，零 Java 代码。', 'Write a SKILL.md and connect a GitHub MCP server — daily PR summaries with no Java code.'),
+    desc: t('写一个 SKILL.md 接入 GitHub MCP server，自动生成每日 PR 摘要，零代码。', 'Write a SKILL.md and connect a GitHub MCP server — daily PR summaries with zero code.'),
   },
   {
     num: '03',
@@ -222,15 +222,15 @@ const flowColumns = computed(() => [
         </p>
 
         <h1 class="hero-headline">
-          <span class="headline-tag">{{ t('分布式 Agent Harness OS', 'Distributed Agent Harness OS') }}</span><br>
-          <span class="headline-white">{{ t('给每个 Agent 一套', 'A Production-grade Harness') }}</span><br>
-          <span class="headline-amber">{{ t('生产级运行骨架', 'for Every Agent') }}</span>
+          <span class="headline-tag">{{ t('企业 Agent 操作系统', 'The Enterprise Agent OS') }}</span><br>
+          <span class="headline-white">{{ t('说一句话，', 'Say it in plain language.') }}</span><br>
+          <span class="headline-amber">{{ t('一支 Agent 团队替你交付', 'A team of agents delivers.') }}</span>
         </h1>
 
         <p class="hero-sub">
           {{ t(
-            'OryxOS 是基于 Java 21 构建的 Agent Harness OS。harness（运行骨架）是把模型变成能干活的 Agent 的那层脚手架——循环、工具与执行、上下文、记忆、沙箱、审计。OryxOS 给每个 Agent 同一套生产级 harness，并像操作系统调度进程一样运行一整队 Agent。私有部署在你自己的 K8s 或服务器上。',
-            'OryxOS is an Agent Harness OS built on Java 21. A harness is the scaffolding that turns a model into a working agent — the loop, tools and their execution, context, memory, sandbox, and audit. OryxOS gives every agent the same production-grade harness and runs a fleet of them like an OS runs processes. Deploy privately on your own K8s or servers.'
+            '你用一句自然语言发布任务 → OryxOS 把它拆解 → 组织一支 Agent 团队 → 分工协作 → 交付结果。今天：一句话定义一个 Agent，带记忆、24 个内置工具、MCP、Skill、定时与全链路审计，立刻上线。私有部署在你自己的 K8s 或服务器上，数据不出域——让每一家公司，都能用自然语言跑起来自己的 Agent。',
+            'Describe a task in one sentence → OryxOS decomposes it → assembles a team of agents → they collaborate → the result is delivered. Today: define an agent in one sentence — memory, 24 built-in tools, MCP, skills, scheduling, and a full audit trail included — and it goes live instantly. Self-hosted on your own K8s or servers, data stays home. So every company can run its own agents, in plain language.'
           ) }}
         </p>
 
@@ -295,8 +295,8 @@ const flowColumns = computed(() => [
     <div class="stats-bar">
       <div class="stats-inner">
         <div class="stat">
-          <span class="stat-num">9</span>
-          <span class="stat-label">{{ t('Maven 模块', 'Maven modules') }}</span>
+          <span class="stat-num">1</span>
+          <span class="stat-label">{{ t('句话定义一个 Agent', 'sentence defines an agent') }}</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat">

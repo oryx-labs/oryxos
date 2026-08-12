@@ -45,6 +45,9 @@ public class AgentScheduler {
 
   private static final String SCHEDULER_USER = "scheduler";
 
+  /** 任务句柄复合键分隔符：schedule id 是 Agent 内的，跨 Agent 用 profileName@taskId 区分。 */
+  private static final String KEY_SEP = "@";
+
   private final TaskScheduler taskScheduler;
   private final ProfileRegistry profileRegistry;
   private final AgentService agentService;
@@ -59,7 +62,11 @@ public class AgentScheduler {
   /** 任务 id → 锁：防同一任务重叠执行。进程内锁，核心阶段单实例足够（非分布式锁）。 */
   private final ConcurrentMap<String, Lock> taskLocks = new ConcurrentHashMap<>();
 
-  /** 任务 id → 可注销句柄：为 30 节运行时注销/更新 Agent 铺路（本节只登记、留句柄）。 */
+  /**
+   * 可注销句柄表（为 30 节运行时注销/更新 Agent 铺路）。 键是 {@code profileName@taskId} 复合（review 高危 7）：schedule id 只在
+   * 单个 Agent 内唯一，跨 Agent 撞 id 时若用裸 taskId 作键，后注册覆盖先注册的句柄（旧 future 泄漏、任务双跑）， 删除先注册的 Agent 还会 cancel
+   * 掉另一个 Agent 的任务。
+   */
   private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
 
   public AgentScheduler(
@@ -107,7 +114,7 @@ public class AgentScheduler {
         CronTrigger trigger = new CronTrigger(sc.cron(), resolveZone(sc.zone()));
         ScheduledFuture<?> future = taskScheduler.schedule(() -> runOnce(profile, sc), trigger);
         if (future != null) {
-          scheduledTasks.put(sc.id(), future); // 留可注销句柄（30 节用）
+          scheduledTasks.put(taskKey(sc.id(), profile.name()), future); // 留可注销句柄（30 节用）
         }
         // 28 节：登记任务状态 + 下次触发到 SQLite（重启后可查；已存在则保留启用状态与运行次数）
         taskStore.register(
@@ -119,9 +126,10 @@ public class AgentScheduler {
     }
   }
 
-  /** 某任务是否已留下可注销句柄（30 节注销前提；harness 守点）。 */
+  /** 某任务是否已留下可注销句柄（30 节注销前提；harness 守点）。键为复合键，按 taskId 前缀匹配。 */
   public boolean hasScheduledTask(String taskId) {
-    return scheduledTasks.containsKey(taskId);
+    String suffix = KEY_SEP + taskId;
+    return scheduledTasks.keySet().stream().anyMatch(key -> key.endsWith(suffix));
   }
 
   /**
@@ -133,7 +141,7 @@ public class AgentScheduler {
       justification = "日志里的 sc.id() 来自运营方手写的 AGENT.md 配置（非请求输入），仅用于诊断")
   public void unregisterProfile(Profile profile) {
     for (ScheduleConfig sc : profile.schedules()) {
-      ScheduledFuture<?> future = scheduledTasks.remove(sc.id());
+      ScheduledFuture<?> future = scheduledTasks.remove(taskKey(sc.id(), profile.name()));
       if (future != null) {
         future.cancel(false);
         LOG.info("已注销定时任务 {}", sc.id());
@@ -243,6 +251,11 @@ public class AgentScheduler {
   /** 按任务 id 取同一把锁。public 为可测（harness 占锁模拟"上一次还在跑"）。 */
   public Lock lockFor(String taskId) {
     return taskLocks.computeIfAbsent(taskId, id -> new ReentrantLock());
+  }
+
+  /** 句柄表复合键：profileName@taskId。taskId 来自 AGENT.md，SAFE 名不含 @，不会与分隔符撞。 */
+  private static String taskKey(String taskId, String profileName) {
+    return profileName + KEY_SEP + taskId;
   }
 
   /** 时区显式（坑四）：空/blank 时才退回服务器系统时区，否则按配置解析。 */

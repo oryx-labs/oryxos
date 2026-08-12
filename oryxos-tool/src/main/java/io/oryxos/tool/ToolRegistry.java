@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.ToolCallbacks;
 
 /**
  * 工具注册表：所有来源（内置 @Tool、方式三 @Tool、MCP、直接实现）统一成 {@link OryxTool} 在此汇总， ReAct 循环与 ToolExecutor

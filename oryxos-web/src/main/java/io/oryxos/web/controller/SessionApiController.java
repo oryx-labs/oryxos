@@ -8,6 +8,7 @@ import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.CreateSessionRequest;
 import io.oryxos.web.controller.dto.MessageRequest;
 import io.oryxos.web.controller.dto.MessageResponse;
+import io.oryxos.web.controller.dto.SessionStatsView;
 import io.oryxos.web.controller.dto.SessionSummaryView;
 import io.oryxos.web.controller.dto.SessionView;
 import io.oryxos.web.error.SessionNotFoundException;
@@ -86,6 +87,13 @@ public class SessionApiController {
             .map(SessionSummaryView::from)
             .toList();
     return ApiResponse.ok(views);
+  }
+
+  /** 会话统计：返回活跃、归档、总计数量，供管理台概览页使用。 */
+  @GetMapping("/stats")
+  public ApiResponse<SessionStatsView> stats() {
+    io.oryxos.core.session.SessionStats s = sessionManager.stats();
+    return ApiResponse.ok(new SessionStatsView(s.active(), s.archived(), s.total()));
   }
 
   /** 查历史：返回最近 ≤100 条。 */

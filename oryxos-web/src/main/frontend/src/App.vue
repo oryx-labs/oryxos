@@ -1,8 +1,46 @@
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, nextTick } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
+import LoginView from './views/LoginView.vue'
+
+// —— 012-web-auth US3：登录守卫 —— 未登录先查 /api/v1/auth/me；登录页 LoginView 调 /auth/login
+const auth = reactive({ checking: true, enabled: true, username: null })
+async function checkAuth() {
+  auth.checking = true
+  try {
+    const res = await fetch('/api/v1/auth/me')
+    const body = await res.json()
+    if (res.status === 200 && body.code === 0) {
+      auth.enabled = body.data?.authenticationEnabled !== false
+      auth.username = body.data?.username || null
+    } else {
+      auth.enabled = true
+      auth.username = null
+    }
+  } catch (e) {
+    auth.enabled = true
+    auth.username = null
+  } finally {
+    auth.checking = false
+  }
+}
+checkAuth()
+
+function onLogined(username) {
+  auth.username = username
+}
+
+async function logout() {
+  try {
+    await fetch('/api/v1/auth/logout', { method: 'POST' })
+  } catch (e) {
+    /* 忽略，仍跳登录页 */
+  }
+  auth.username = null
+  active.value = 'overview'
+}
 
 // 顶层：概览 / Agent 列表 / 定时任务。「OS 运行时」下收纳 Provider/Tool/Sandbox/长期记忆/会话——
 // 这些都是底座本身的运行时状态，跟业务 Agent 管理分层展示（31 节：侧边栏重分组）。
@@ -46,20 +84,71 @@ async function loadRuntimeInfo() {
     runtimeInfo.value = { loading: false, error: e.message, data: null }
   }
 }
-loadRuntimeInfo()
+loadRuntimeInfo().then(() => loadOverviewStats())
 
-// 概览页数据：当前为静态预览，后续逐步接入实时端点（TODO 标注了各自的动态来源）
+// 概览页数据：动态接入实时端点，每项统计卡独立 loading/error/value 状态
+const overviewLoading = ref(false)
+const overviewStats = reactive({
+  agents: { value: null, loading: true, error: null },
+  tools: { value: null, loading: true, error: null, toolNames: [] },
+  sessions: { value: null, loading: true, error: null },
+  providers: { value: null, loading: true, error: null, providerNames: [] },
+})
+async function loadOverviewStats() {
+  overviewLoading.value = true
+  // agents ← GET /profiles
+  fetch('/api/v1/profiles')
+    .then(res => res.json())
+    .then(body => {
+      if (body.code !== 0) throw new Error(body.message || '加载失败')
+      const data = body.data || []
+      overviewStats.agents.value = data.length
+      overviewStats.agents.loading = false
+    })
+    .catch(e => { overviewStats.agents.error = e.message; overviewStats.agents.loading = false })
+  // tools ← GET /tools
+  fetch('/api/v1/tools')
+    .then(res => res.json())
+    .then(body => {
+      if (body.code !== 0) throw new Error(body.message || '加载失败')
+      const data = body.data || []
+      overviewStats.tools.value = data.length
+      overviewStats.tools.toolNames = data.slice(0, 3).map(t => t.name)
+      overviewStats.tools.loading = false
+    })
+    .catch(e => { overviewStats.tools.error = e.message; overviewStats.tools.loading = false })
+  // sessions ← GET /sessions/stats
+  fetch('/api/v1/sessions/stats')
+    .then(res => res.json())
+    .then(body => {
+      if (body.code !== 0) throw new Error(body.message || '加载失败')
+      overviewStats.sessions.value = body.data?.active ?? 0
+      overviewStats.sessions.loading = false
+    })
+    .catch(e => { overviewStats.sessions.error = e.message; overviewStats.sessions.loading = false })
+  // providers ← GET /api/v1/providers（已配置的 Provider，非 Profile 引用到的）
+  fetch('/api/v1/providers')
+    .then(res => res.json())
+    .then(body => {
+      if (body.code !== 0) throw new Error(body.message || '加载失败')
+      overviewStats.providers.value = (body.data || []).length
+      overviewStats.providers.providerNames = (body.data || []).map(p => p.name)
+      overviewStats.providers.loading = false
+    })
+    .catch(e => { overviewStats.providers.error = e.message; overviewStats.providers.loading = false })
+  overviewLoading.value = false
+}
+// 衍生为模板用的 cards 数组
+const overviewCards = computed(() => [
+  { label: 'Agent', value: overviewStats.agents.value, loading: overviewStats.agents.loading, error: overviewStats.agents.error, hint: '已配置的 Profile' },
+  { label: '内置 Tool', value: overviewStats.tools.value, loading: overviewStats.tools.loading, error: overviewStats.tools.error, hint: overviewStats.tools.toolNames.length ? overviewStats.tools.toolNames.join(' / ') + ' …' : '文件 / Shell / HTTP / 记忆 …' },
+  { label: '活跃会话', value: overviewStats.sessions.value, loading: overviewStats.sessions.loading, error: overviewStats.sessions.error, hint: '当前活跃' },
+  { label: 'Provider', value: overviewStats.providers.value, loading: overviewStats.providers.loading, error: overviewStats.providers.error, hint: overviewStats.providers.value != null && overviewStats.providers.value > 0 ? '已连通' : '—' },
+])
 const overview = {
   tagline: '装在你自己基础设施上的分布式 AI Agent 操作系统 —— 统一底座运行多个业务 Agent',
   status: '运行中',
   version: 'v0.1.0 · 开发预览',
-  // TODO 动态化：agents←GET /profiles，tools←GET /tools，sessions←会话统计端点，providers←GET /info
-  stats: [
-    { label: 'Agent', value: '3', hint: '已配置的 Profile' },
-    { label: '内置 Tool', value: '14', hint: '文件 / Shell / HTTP / 记忆 …' },
-    { label: '活跃会话', value: '—', hint: '待接入实时统计' },
-    { label: 'Provider', value: '1', hint: 'deepseek 已连通' },
-  ],
   capabilities: [
     { name: '对接 LLM', desc: '显式 Provider 映射，多家协议统一' },
     { name: 'ReAct 循环', desc: '自实现推理–行动循环，完全可控' },
@@ -108,6 +197,7 @@ function select(key) {
   if (key === 'whitelist') { cancelWl(); loadWhitelist() }
   if (key === 'mcp') { cancelMcp(); loadMcp(); loadMcpCatalog() }
   if (key === 'skills') { cancelSkill(); closeSkillDetail(); loadSkills() }
+  if (key === 'overview') { loadOverviewStats() }
 }
 
 // 刷新当前页的列表：各页复用各自的加载函数（agents / notify-channels / 概览 / 其余按 path 的通用列表）
@@ -119,12 +209,29 @@ function refresh() {
   if (key === 'whitelist') { loadWhitelist(); return }
   if (key === 'mcp') { loadMcp(); return }
   if (key === 'skills') { loadSkills(); return }
-  if (key === 'overview') { loadRuntimeInfo(); return }
+  if (key === 'overview') { loadOverviewStats(); return }
   if (NAV.find((n) => n.key === key)?.path) load(key)
 }
 
-// —— Skill 列表（第 32 节）：全局 Skill 库 CRUD。Agent 通过 AGENT.md 的 skills:[名] 引用，运行时注入正文约束产出 ——
+// —— Skill CRUD：.oryxos/skills/<name>/ 存在即已安装，Agent 通过本地相对软连接绑定。——
 const skills = ref({ loading: false, error: null, data: [] })
+// 绑定一致性不在页面常驻展示：只在 Skill 变更（新建/编辑/归档/导入）后回检，
+// 发现残留或损坏绑定才展开告警面板，无问题保持静默；检查本身失败也会展开。
+const skillIssues = ref({ loading: false, error: null, data: [] })
+const skillIssuesOpen = ref(false)
+async function checkSkillIssues() {
+  skillIssues.value = { loading: true, error: null, data: [] }
+  try {
+    const res = await fetch('/api/v1/skills/binding-issues')
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '绑定检查失败')
+    skillIssues.value = { loading: false, error: null, data: body.data || [] }
+    skillIssuesOpen.value = skillIssues.value.data.length > 0
+  } catch (e) {
+    skillIssues.value = { loading: false, error: e.message, data: [] }
+    skillIssuesOpen.value = true
+  }
+}
 async function loadSkills() {
   skills.value = { loading: true, error: null, data: [] }
   try {
@@ -162,16 +269,19 @@ async function saveSkill() {
     })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '保存失败')
-    cancelSkill(); await loadSkills()
+    cancelSkill(); await loadSkills(); await checkSkillIssues()
   } catch (e) { skillForm.error = e.message } finally { skillForm.busy = false }
 }
 async function deleteSkill(name) {
-  if (!confirm(`删除 Skill「${name}」？引用它的 Agent 下次触发将跳过该约束。`)) return
+  if (!confirm(`归档 Skill「${name}」？存在活跃或归档 Agent 引用时会拒绝，实体不会被物理删除。`)) return
   try {
     const res = await fetch(`/api/v1/skills/${encodeURIComponent(name)}`, { method: 'DELETE' })
     const body = await res.json()
-    if (body.code !== 0) throw new Error(body.message || '删除失败')
-    await loadSkills()
+    if (body.code !== 0) {
+      const refs = (body.data?.references || []).map((r) => `${r.agentName}(${r.state})`).join('、')
+      throw new Error(`${body.message || '归档失败'}${refs ? `：${refs}` : ''}`)
+    }
+    await loadSkills(); await checkSkillIssues()
   } catch (e) { skills.value = { ...skills.value, error: e.message } }
 }
 // 从 URL 导入 Skill：后端 GET 拉取该地址的 SKILL.md 文本并建库
@@ -187,7 +297,7 @@ async function importSkill() {
     })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '导入失败')
-    cancelImport(); await loadSkills()
+    cancelImport(); await loadSkills(); await checkSkillIssues()
   } catch (e) { skillImport.error = e.message } finally { skillImport.busy = false }
 }
 // —— Skill 详情：点「详情」→ 拉工作区树里的 skills/<name> 子树，复用同一套文件浏览器（openFile/fileView + md 预览）——
@@ -209,7 +319,7 @@ async function openSkillDetail(row) {
 function closeSkillDetail() { skillDetail.value = null; fileView.value = null }
 // 该 Skill 目录的文件行（扁平带缩进，复用 Agent 工作区同一个 flatten）
 const skillDetailRows = computed(() => (skillDetail.value?.node ? flatten(skillDetail.value.node, 0, []) : []))
-// 回退：旧后端 tree 无 skills 节点时，直接渲染 SKILL.md 正文（body）
+// 回退：工作区树暂不可用时，直接渲染已安装实体返回的 SKILL.md 正文。
 const skillDetailBodyMd = computed(() =>
   skillDetail.value?.body ? DOMPurify.sanitize(marked.parse(skillDetail.value.body)) : ''
 )
@@ -313,20 +423,52 @@ async function loadAgents() {
 
 // 新建 Agent：独立成页（不再是弹框），把「大模型生成」折叠进来。
 // 只填 name + description 可直接按模板脚手架；也可先「用大模型生成」各文件、编辑后再创建。
-const agentCreate = reactive({ open: false, name: '', description: '', notifyChannel: '', skills: [], files: null, busy: false, error: '' })
+const agentCreate = reactive({
+  open: false, name: '', description: '', provider: '', model: '', notifyChannel: '', skills: [],
+  requiredSkills: [], suggestedSkills: [], files: null, busy: false, error: '',
+})
+
+// 新建页用的 provider / model 下拉数据源：provider 来自 GET /providers；model 来自 GET /providers/{name}/models（服务端代理）
+const createProviders = ref({ loading: false, error: null, data: [] })
+const createModels = ref({ loading: false, error: null, data: [] })
+async function loadCreateProviders() {
+  createProviders.value = { loading: true, error: null, data: [] }
+  try {
+    const res = await fetch('/api/v1/providers')
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    createProviders.value = { loading: false, error: null, data: body.data || [] }
+  } catch (e) { createProviders.value = { loading: false, error: e.message, data: [] } }
+}
+async function loadCreateModels(name) {
+  if (!name) { createModels.value = { loading: false, error: null, data: [] }; return }
+  createModels.value = { loading: true, error: null, data: [] }
+  try {
+    const res = await fetch(`/api/v1/providers/${encodeURIComponent(name)}/models`)
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    createModels.value = { loading: false, error: null, data: body.data || [] }
+  } catch (e) { createModels.value = { loading: false, error: e.message, data: [] } }
+}
+function onProviderChange() { agentCreate.model = ''; loadCreateModels(agentCreate.provider) }
 
 // 打开新建页：重置字段 + 拉通知渠道下拉数据
 function openCreate() {
   agentCreate.open = true
   agentCreate.name = ''
   agentCreate.description = ''
+  agentCreate.provider = ''
+  agentCreate.model = ''
   agentCreate.notifyChannel = ''
   agentCreate.skills = []
+  agentCreate.requiredSkills = []
+  agentCreate.suggestedSkills = []
   agentCreate.files = null
   agentCreate.busy = false
   agentCreate.error = ''
   loadNotifyChannels()
   loadSkills() // Skill 选择器的数据源（可手动指定必启用的 Skill；不选则由作者模型自动选）
+  loadCreateProviders() // provider 下拉数据源
 }
 
 function cancelCreate() { agentCreate.open = false }
@@ -338,11 +480,14 @@ async function generateFiles() {
   try {
     const res = await fetch(`/api/v1/agents/${encodeURIComponent(agentCreate.name)}/generate-files`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: agentCreate.description, notifyChannel: agentCreate.notifyChannel, skills: agentCreate.skills }),
+      body: JSON.stringify({ description: agentCreate.description, notifyChannel: agentCreate.notifyChannel, requiredSkills: agentCreate.skills, provider: agentCreate.provider || undefined, model: agentCreate.model || undefined }),
     })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '生成失败')
     agentCreate.files = body.data.files || {}
+    agentCreate.requiredSkills = body.data.requiredSkills || []
+    agentCreate.suggestedSkills = body.data.suggestedSkills || []
+    agentCreate.skills = body.data.bindingSkills || []
   } catch (e) { agentCreate.error = e.message } finally { agentCreate.busy = false }
 }
 
@@ -354,11 +499,11 @@ async function submitCreate() {
     const res = agentCreate.files
       ? await fetch(`/api/v1/agents/${encodeURIComponent(agentCreate.name)}/files`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ files: agentCreate.files }),
+          body: JSON.stringify({ files: agentCreate.files, skillBindings: agentCreate.skills }),
         })
-      : await fetch('/api/v1/agents', {
+        : await fetch('/api/v1/agents', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: agentCreate.name, description: agentCreate.description }),
+          body: JSON.stringify({ name: agentCreate.name, description: agentCreate.description, provider: agentCreate.provider || undefined, model: agentCreate.model || undefined, skillBindings: agentCreate.skills }),
         })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '创建失败')
@@ -706,8 +851,14 @@ async function deleteWhitelist(category, value) {
 }
 
 // —— Agent 详情：Tab 切换（基本信息 / 文件 / 会话 / 记忆）——
-const agentDetail = ref(null) // { name, agent, tab, loading, error, node }
+const agentDetail = ref(null) // { name, agent, tab, loading, error, node, editing }
+const agentBinding = reactive({ selected: [], saving: false, error: null, issues: [] })
 const fileView = ref(null) // { path, loading, error, content, saving, saved }
+// 详情页「编辑基本信息」表单态 + 编辑态的 model 下拉数据源（与新建页的 createModels 分开，避免串台）
+const editBasic = reactive({ description: '', provider: '', model: '' })
+const editModels = ref({ loading: false, error: null, data: [] })
+const editSaving = ref(false)
+const editError = ref(null)
 // .md 文件视图切换：'preview'（渲染，默认）/ 'source'（原文，可编辑）。共享一个 ref——
 // 工作区/输出两个浏览器同时只显示一个，且都复用同一个 fileView。
 const mdView = ref('preview')
@@ -720,6 +871,51 @@ const renderedMd = computed(() =>
 )
 // 会话：每个 Agent 一个固定 session，直接作为对话展示（不再是会话列表）
 const chat = reactive({ sessionId: null, messages: [], loading: false, error: null, input: '', sending: false })
+const chatScrollEl = ref(null) // 会话列表滚动容器：回复/重载后自动滚到底部（最新一条）
+
+const CHAT_SEND_MODE_KEY = 'oryxos.admin.chatSendMode'
+const CHAT_SEND_MODES = ['enter', 'modifier']
+
+function loadChatSendMode() {
+  try {
+    const v = localStorage.getItem(CHAT_SEND_MODE_KEY)
+    return CHAT_SEND_MODES.includes(v) ? v : 'modifier'
+  } catch {
+    return 'modifier'
+  }
+}
+
+const chatSendMode = ref(loadChatSendMode())
+
+const chatSendHint = computed(() => {
+  if (chatSendMode.value === 'enter') return 'Enter 发送，Shift+Enter 换行'
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
+  return isMac ? '⌘+Enter 发送，Enter 换行' : 'Ctrl+Enter 发送，Enter 换行'
+})
+
+function setChatSendMode(mode) {
+  if (!CHAT_SEND_MODES.includes(mode)) return
+  chatSendMode.value = mode
+  try {
+    localStorage.setItem(CHAT_SEND_MODE_KEY, mode)
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+function onChatInputKeydown(e) {
+  if (e.key !== 'Enter') return
+  const canSend = !chat.sending && chat.input.trim()
+  if (chatSendMode.value === 'enter') {
+    if (e.shiftKey || !canSend) return
+    e.preventDefault()
+    sendChat()
+    return
+  }
+  if (!(e.ctrlKey || e.metaKey) || !canSend) return
+  e.preventDefault()
+  sendChat()
+}
 // 把扁平消息按「一轮对话」分组：user 起一轮，中间的助手思考 + 工具调用收进 steps（默认折叠），最后一条助手作为最终答案
 const chatTurns = computed(() => {
   const turns = []
@@ -750,21 +946,52 @@ function toggleTurn(i) {
 const agentMemory = reactive({ text: '', loading: false, error: null })
 
 async function openAgent(agent) {
-  agentDetail.value = { name: agent.name, agent, tab: 'info', loading: true, error: null, node: null }
+  agentDetail.value = { name: agent.name, agent, tab: 'info', loading: true, error: null, node: null, editing: false }
+  agentBinding.selected = [...(agent.skills || [])]
+  agentBinding.error = null
+  agentBinding.issues = []
   fileView.value = null
   resetChat()
   resetAgentMemory()
   try {
-    const res = await fetch('/api/v1/workspace/tree')
-    const body = await res.json()
+    const [treeRes, bindingRes] = await Promise.all([
+      fetch('/api/v1/workspace/tree'),
+      fetch(`/api/v1/agents/${encodeURIComponent(agent.name)}/skills`),
+      loadSkills(), // Skill 绑定选择器的数据源：存在即已安装
+    ])
+    const body = await treeRes.json()
+    const bindingBody = await bindingRes.json()
     if (body.code !== 0) throw new Error(body.message || '加载失败')
+    if (bindingBody.code !== 0) throw new Error(bindingBody.message || '绑定加载失败')
     const agentsNode = (body.data.children || []).find((c) => c.name === 'agents')
     const node = (agentsNode?.children || []).find((c) => c.name === agent.name) || null
     const outputTree = (body.data.children || []).find((c) => c.name === 'output') || null
+    agentBinding.selected = (bindingBody.data.bindings || []).map((b) => b.name)
+    agentBinding.issues = bindingBody.data.issues || []
     agentDetail.value = { ...agentDetail.value, loading: false, node, outputTree }
   } catch (e) {
     agentDetail.value = { ...agentDetail.value, loading: false, error: e.message }
   }
+}
+
+async function saveAgentBindings() {
+  if (!agentDetail.value) return
+  agentBinding.saving = true; agentBinding.error = null
+  try {
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(agentDetail.value.name)}/skills`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skills: agentBinding.selected }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '保存绑定失败')
+    agentBinding.selected = (body.data.bindings || []).map((b) => b.name)
+    agentBinding.issues = body.data.issues || []
+    agentDetail.value = {
+      ...agentDetail.value,
+      agent: { ...agentDetail.value.agent, skills: [...agentBinding.selected] },
+    }
+    await loadAgents()
+  } catch (e) { agentBinding.error = e.message } finally { agentBinding.saving = false }
 }
 
 // 重新拉取当前 Agent 的元数据 + 文件树（保存文件后刷新基本信息）
@@ -809,6 +1036,52 @@ function detailTab(tab) {
   }
 }
 
+// —— 详情页「编辑基本信息」：结构化改 description / provider / model / skills（只动 AGENT.md frontmatter，正文与其它配置不动）——
+function startEditBasic() {
+  const a = agentDetail.value?.agent || {}
+  editBasic.description = a.description || ''
+  editBasic.provider = a.provider || ''
+  editBasic.model = a.model || ''
+  editError.value = null
+  agentDetail.value = { ...agentDetail.value, editing: true }
+  loadCreateProviders() // provider 下拉数据源（与新建页共用）
+  loadEditModels(editBasic.provider) // 拉当前 provider 的模型列表
+}
+function cancelEditBasic() {
+  agentDetail.value = { ...agentDetail.value, editing: false }
+  editError.value = null
+}
+async function loadEditModels(name) {
+  if (!name) { editModels.value = { loading: false, error: null, data: [] }; return }
+  editModels.value = { loading: true, error: null, data: [] }
+  try {
+    const res = await fetch(`/api/v1/providers/${encodeURIComponent(name)}/models`)
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    editModels.value = { loading: false, error: null, data: body.data || [] }
+  } catch (e) { editModels.value = { loading: false, error: e.message, data: [] } }
+}
+function onEditProviderChange() { editBasic.model = ''; loadEditModels(editBasic.provider) }
+async function saveEditBasic() {
+  if (!editBasic.provider || !editBasic.model) { editError.value = 'provider 与 model 必填'; return }
+  editSaving.value = true; editError.value = null
+  const name = agentDetail.value.name
+  try {
+    const res = await fetch(`/api/v1/agents/${encodeURIComponent(name)}/basic`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        description: editBasic.description,
+        provider: editBasic.provider,
+        model: editBasic.model,
+      }),
+    })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '保存失败')
+    agentDetail.value = { ...agentDetail.value, editing: false }
+    await reloadAgent() // 刷新 agent 元数据（provider/model/skills 即时反映）
+  } catch (e) { editError.value = e.message } finally { editSaving.value = false }
+}
+
 // —— 执行历史 tab：该 Agent 每次触发的起止时间 / 状态 / 时长（手动 + 定时）——
 const execHistory = reactive({ loading: false, error: null, data: [] })
 async function loadExecutions() {
@@ -846,6 +1119,15 @@ function resetChat() {
   chat.sending = false
 }
 
+// 会话列表自动滚到底部：新消息到达/历史重载后，把 .chat 容器推到最新一条。
+// nextTick 确保 chatTurns 渲染完再读 scrollHeight，否则还是旧值、滚不到底。
+function scrollChatToBottom() {
+  nextTick(() => {
+    const el = chatScrollEl.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
+
 async function loadChat() {
   chat.loading = true; chat.error = null
   try {
@@ -856,10 +1138,11 @@ async function loadChat() {
     chat.sessionId = body.data.sessionId
     chat.messages = body.data.messages || []
   } catch (e) { chat.error = e.message } finally { chat.loading = false }
+  scrollChatToBottom() // 初次进会话看历史、发消息后重载 都走这里，一次覆盖
 }
 
 async function sendChat() {
-  if (!chat.input.trim()) return
+  if (chat.sending || !chat.input.trim()) return
   chat.sending = true; chat.error = null
   try {
     const name = agentDetail.value.name
@@ -968,7 +1251,12 @@ const outputRows = computed(() =>
 </script>
 
 <template>
-  <div class="layout">
+  <!-- 012-web-auth US3：未登录先显登录页；检查中显骨架屏（避免突兀的"加载中"文字） -->
+  <div v-if="auth.checking" class="boot-splash" aria-busy="true" aria-live="polite">
+    <div class="boot-spinner" aria-hidden="true"></div>
+  </div>
+  <LoginView v-else-if="auth.enabled && !auth.username" @logined="onLogined" />
+  <div v-else class="layout">
     <aside class="nav">
       <div class="brand">
         <img :src="logoUrl" alt="OryxOS" class="logo" />
@@ -1000,7 +1288,10 @@ const outputRows = computed(() =>
         </button>
       </template>
 
-      <div class="readonly">管理台</div>
+      <div class="auth-foot">
+        <span class="mono">{{ auth.username || '认证已关闭' }}</span>
+        <button v-if="auth.enabled" class="btn" @click="logout">登出</button>
+      </div>
     </aside>
 
     <main class="content">
@@ -1018,8 +1309,12 @@ const outputRows = computed(() =>
           </div>
 
           <div class="cards">
-            <div v-for="s in overview.stats" :key="s.label" class="card">
-              <div class="card-val">{{ s.value }}</div>
+            <div v-for="s in overviewCards" :key="s.label" class="card">
+              <div class="card-val">
+                <template v-if="s.loading">...</template>
+                <template v-else-if="s.error">—</template>
+                <template v-else>{{ s.value ?? '—' }}</template>
+              </div>
               <div class="card-label">{{ s.label }}</div>
               <div class="card-hint">{{ s.hint }}</div>
             </div>
@@ -1047,12 +1342,12 @@ const outputRows = computed(() =>
           <div v-else-if="runtimeInfo.data">
             <p>应用：<b>{{ runtimeInfo.data.application }}</b></p>
             <p>Provider：
-              <span v-for="p in runtimeInfo.data.providers" :key="p" class="tag">{{ p }}</span>
-              <span v-if="!runtimeInfo.data.providers?.length" class="empty">（无）</span>
+              <span v-for="p in overviewStats.providers.providerNames" :key="p" class="tag">{{ p }}</span>
+              <span v-if="!overviewStats.providers.providerNames.length" class="empty">（无）</span>
             </p>
           </div>
 
-          <p class="note mono">当前为静态预览数据，将逐步接入实时端点（Agent/Tool/会话/Provider）。</p>
+          <p v-if="overviewLoading" class="note mono">统计卡数据加载中…</p>
         </template>
 
         <template v-else>
@@ -1061,11 +1356,11 @@ const outputRows = computed(() =>
             <button class="btn" @click="refresh()">刷新</button>
           </div>
 
-          <!-- Skill 列表（第 32 节）：全局 Skill 库 CRUD。Agent 按名引用、运行时注入正文约束产出 -->
+          <!-- Skill：纯 CRUD 列表（存在即已安装）；绑定一致性仅在变更后回检发现问题时展示 -->
           <div v-if="active === 'skills'">
             <template v-if="!skillDetail">
             <div class="toolbar">
-              <button class="btn btn-primary" @click="newImport()">从 GitHub 拉取</button>
+              <button class="btn" @click="newImport()">从 GitHub 拉取</button>
               <button class="btn btn-primary" @click="newSkill()">+ 新建 Skill</button>
             </div>
             <!-- 从 GitHub 拉取 Skill 弹出框：导入整个目录（SKILL.md + 附带文件），不是抓网页正文 -->
@@ -1099,7 +1394,7 @@ const outputRows = computed(() =>
                   <input v-model="skillForm.name" class="gen-input" :disabled="!!skillForm.editing"
                          placeholder="Skill 名（字母/数字/下划线/连字符，如 report-format）" />
                   <input v-model="skillForm.description" class="gen-input" placeholder="一句话描述：这个 Skill 约束什么" />
-                  <label class="empty" style="display:block;margin:6px 0 2px">正文（约束指令，会注入引用它的 Agent 的 system prompt）</label>
+                  <label class="empty" style="display:block;margin:6px 0 2px">正文（仅在 Agent 判断任务需要后，经 read_file 按需读取）</label>
                   <textarea v-model="skillForm.body" class="gen-draft" rows="10"
                             placeholder="例如：产出报告时严格遵守——开头一句总览；正文按重要性排序，每条含标题+点评+来源；事实与推断分开；不编造。"></textarea>
                   <p v-if="skillForm.error" class="error">{{ skillForm.error }}</p>
@@ -1127,6 +1422,23 @@ const outputRows = computed(() =>
                 </tr>
               </tbody>
             </table>
+            <!-- 绑定一致性不常驻：Skill 变更后回检，发现残留/损坏绑定（或检查本身失败）才展开 -->
+            <div v-if="skillIssuesOpen" class="issue-banner">
+              <div class="issue-head">
+                <span class="issue-title">绑定一致性问题<template v-if="skillIssues.data.length">（{{ skillIssues.data.length }}）</template></span>
+                <button class="modal-x" @click="skillIssuesOpen = false">✕</button>
+              </div>
+              <p v-if="skillIssues.loading" class="empty">检查中…</p>
+              <p v-else-if="skillIssues.error" class="error">检查失败：{{ skillIssues.error }}</p>
+              <ul v-else class="issue-list">
+                <li v-for="(issue, i) in skillIssues.data" :key="`${issue.path}:${i}`">
+                  <span class="mono">{{ issue.agentName }}（{{ issue.agentState }}）</span>
+                  <span class="issue-type">{{ issue.type }}</span>
+                  <span class="mono">{{ issue.entryName || '—' }}</span>
+                  <span class="empty">{{ issue.message }}</span>
+                </li>
+              </ul>
+            </div>
             </template>
 
             <!-- Skill 详情：文件列表 + 复用同一套文件浏览器（openFile/fileView + md 预览/源码） -->
@@ -1143,7 +1455,8 @@ const outputRows = computed(() =>
                        :class="['ws-node', { file: node.type === 'file', on: fileView && fileView.path === node.path }]"
                        :style="{ paddingLeft: (node.depth * 14) + 'px' }"
                        @click="openFile(node)">
-                    <span class="mono">{{ node.type === 'dir' ? '📁' : '📄' }} {{ node.name }}</span>
+                    <span class="mono">{{ node.type === 'dir' ? '📁' : node.type === 'link' ? '🔗' : '📄' }} {{ node.name }}</span>
+                    <span v-if="node.type === 'link'" class="empty"> → {{ node.linkTarget }} · {{ node.linkStatus }}</span>
                     <a v-if="node.type === 'file'" class="dl" :href="downloadUrl(node.path)"
                        :download="node.name" @click.stop title="下载">⬇</a>
                   </div>
@@ -1234,20 +1547,35 @@ const outputRows = computed(() =>
                 <input v-model="agentCreate.name" class="gen-input" placeholder="例如 pr-digest" />
                 <label class="empty" style="display:block;margin:6px 0 2px">描述这个 Agent 要做什么</label>
                 <textarea v-model="agentCreate.description" class="gen-draft" rows="4" placeholder="例如：每天早上抓取团队仓库的 PR，汇总成一份摘要推送到群里"></textarea>
+                <label class="empty" style="display:block;margin:6px 0 2px">Provider（模型供应商，从已配置的 Provider 里选；不选=默认 provider）</label>
+                <select v-model="agentCreate.provider" class="gen-input" @change="onProviderChange">
+                  <option value="">默认 provider</option>
+                  <option v-for="p in (createProviders.data || [])" :key="p.name" :value="p.name">{{ p.name }}</option>
+                </select>
+                <label class="empty" style="display:block;margin:6px 0 2px">Model（选好 Provider 后从它的模型列表里挑；不选=生成时再填）</label>
+                <select v-model="agentCreate.model" class="gen-input" :disabled="!agentCreate.provider">
+                  <option value="">— 请先选 Provider —</option>
+                  <option v-for="m in (createModels.data || [])" :key="m" :value="m">{{ m }}</option>
+                </select>
+                <p v-if="createProviders.loading" class="empty">加载 Provider 列表…</p>
+                <p v-else-if="createProviders.error" class="error">Provider 列表加载失败：{{ createProviders.error }}</p>
+                <p v-else-if="agentCreate.provider && createModels.loading" class="empty">加载模型列表…</p>
+                <p v-else-if="agentCreate.provider && createModels.error" class="error">模型列表加载失败：{{ createModels.error }}</p>
                 <label class="empty" style="display:block;margin:6px 0 2px">通知渠道（投递目标，由你手动选；不选=本 Agent 不发通知）</label>
                 <select v-model="agentCreate.notifyChannel" class="gen-input">
                   <option value="">不通知</option>
                   <option v-for="c in (notifyChannels.data || [])" :key="c.name" :value="c.name">{{ c.name }}（{{ c.type }}）</option>
                 </select>
-                <label class="empty" style="display:block;margin:6px 0 2px">Skill（约束产出，勾选=生成时必启用；不勾则由大模型按需自动选）</label>
+                <label class="empty" style="display:block;margin:6px 0 2px">Skill 绑定（勾选=required；作者可从已安装 Skill 再建议）</label>
                 <div class="skill-picker">
-                  <span v-if="!(skills.data || []).length" class="empty">（暂无 Skill · 去「Skill 列表」新建）</span>
-                  <label v-for="s in (skills.data || [])" :key="s.name" class="skill-opt" :title="s.description">
+                  <span v-if="!skills.data.length" class="empty">（暂无已安装 Skill，可先到 Skill 页新建或从 GitHub 拉取）</span>
+                  <label v-for="s in skills.data" :key="s.name" class="skill-opt" :title="s.description">
                     <input type="checkbox" :value="s.name" v-model="agentCreate.skills" />
                     <span class="mono">{{ s.name }}</span>
                   </label>
                 </div>
-                <p class="empty">可先「用大模型生成」各文件、编辑后再创建；也可直接「创建」，后台按模板脚手架出完整目录（AGENT.md + scripts/ + skills/ + REFERENCE.md）。</p>
+                <p v-if="agentCreate.suggestedSkills.length" class="empty">作者建议：{{ agentCreate.suggestedSkills.join('、') }}；已合并到最终绑定，可在创建前取消。</p>
+                <p class="empty">绑定保存为 agents/&lt;name&gt;/skills/&lt;skill&gt; 固定相对软连接；AGENT.md 不保存 skills 字段，也不预载正文。</p>
                 <div class="ops">
                   <button class="btn" :disabled="agentCreate.busy || !agentCreate.name.trim()" @click="generateFiles">用大模型生成</button>
                   <button class="btn btn-primary" :disabled="agentCreate.busy || !agentCreate.name.trim()" @click="submitCreate">创建</button>
@@ -1278,13 +1606,59 @@ const outputRows = computed(() =>
 
               <!-- Tab 1：基本信息 -->
               <div v-if="agentDetail.tab === 'info'" class="info-grid">
-                <div class="info-row"><span class="k">name</span><span class="mono">{{ agentDetail.agent.name }}</span></div>
-                <div class="info-row"><span class="k">description</span><span>{{ agentDetail.agent.description || '—' }}</span></div>
-                <div class="info-row"><span class="k">provider</span><span>{{ agentDetail.agent.provider || '—' }}</span></div>
-                <div class="info-row"><span class="k">model</span><span>{{ agentDetail.agent.model || '—' }}</span></div>
-                <div class="info-row"><span class="k">tools</span><span>{{ (agentDetail.agent.tools || []).join(', ') || '—' }}</span></div>
-                <div class="info-row"><span class="k">skills</span><span>{{ (agentDetail.agent.skills || []).join(', ') || '—' }}</span></div>
-                <div class="info-row"><span class="k">定时</span><span class="mono">{{ (agentDetail.agent.schedules || []).map((s) => s.cron + ' (' + s.zone + ')').join('；') || '—' }}</span></div>
+                <div class="info-actions" v-if="!agentDetail.editing">
+                  <button class="btn" @click="startEditBasic">编辑基本信息</button>
+                </div>
+                <template v-if="agentDetail.editing">
+                  <div class="info-row edit">
+                    <label class="k">description</label>
+                    <textarea v-model="editBasic.description" class="gen-input" rows="3" placeholder="这个 Agent 做什么"></textarea>
+                  </div>
+                  <div class="info-row edit">
+                    <label class="k">provider</label>
+                    <select v-model="editBasic.provider" class="gen-input" @change="onEditProviderChange">
+                      <option value="">— 请选择 Provider —</option>
+                      <option v-for="p in (createProviders.data || [])" :key="p.name" :value="p.name">{{ p.name }}</option>
+                    </select>
+                  </div>
+                  <div class="info-row edit">
+                    <label class="k">model</label>
+                    <select v-model="editBasic.model" class="gen-input" :disabled="!editBasic.provider">
+                      <option value="">— 请先选 Provider —</option>
+                      <option v-for="m in (editModels.data || [])" :key="m" :value="m">{{ m }}</option>
+                    </select>
+                    <p v-if="editModels.loading" class="empty">加载模型列表…</p>
+                    <p v-else-if="editModels.error" class="error">模型列表加载失败：{{ editModels.error }}</p>
+                  </div>
+                  <div class="info-actions">
+                    <button class="btn btn-primary" :disabled="editSaving" @click="saveEditBasic">保存</button>
+                    <button class="btn" :disabled="editSaving" @click="cancelEditBasic">取消</button>
+                    <span v-if="editSaving" class="empty">保存中…</span>
+                    <span v-if="editError" class="error">{{ editError }}</span>
+                  </div>
+                  <p class="empty">name 为 Agent 标识，不可改；正文/工具/定时等配置不受影响。</p>
+                </template>
+                <template v-else>
+                  <div class="info-row"><span class="k">name</span><span class="mono">{{ agentDetail.agent.name }}</span></div>
+                  <div class="info-row"><span class="k">description</span><span>{{ agentDetail.agent.description || '—' }}</span></div>
+                  <div class="info-row"><span class="k">provider</span><span>{{ agentDetail.agent.provider || '—' }}</span></div>
+                  <div class="info-row"><span class="k">model</span><span>{{ agentDetail.agent.model || '—' }}</span></div>
+                  <div class="info-row"><span class="k">tools</span><span>{{ (agentDetail.agent.tools || []).join(', ') || '—' }}</span></div>
+                  <div class="info-row"><span class="k">skills</span>
+                    <div>
+                      <div class="skill-picker">
+                        <label v-for="s in skills.data" :key="s.name" class="skill-opt" :title="s.description">
+                          <input type="checkbox" :value="s.name" v-model="agentBinding.selected" />
+                          <span class="mono">{{ s.name }}</span>
+                        </label>
+                      </div>
+                      <div class="ops"><button class="btn" :disabled="agentBinding.saving" @click="saveAgentBindings">{{ agentBinding.saving ? '保存中…' : '保存绑定' }}</button></div>
+                      <p v-if="agentBinding.error" class="error">{{ agentBinding.error }}</p>
+                      <p v-for="(issue, i) in agentBinding.issues" :key="i" class="error">{{ issue.type }}：{{ issue.message }}</p>
+                    </div>
+                  </div>
+                  <div class="info-row"><span class="k">定时</span><span class="mono">{{ (agentDetail.agent.schedules || []).map((s) => s.cron + ' (' + s.zone + ')').join('；') || '—' }}</span></div>
+                </template>
               </div>
 
               <!-- Tab 3：文件浏览器（可编辑） -->
@@ -1298,7 +1672,8 @@ const outputRows = computed(() =>
                          :class="['ws-node', { file: node.type === 'file', on: fileView && fileView.path === node.path }]"
                          :style="{ paddingLeft: (node.depth * 14) + 'px' }"
                          @click="openFile(node)">
-                      <span class="mono">{{ node.type === 'dir' ? '📁' : '📄' }} {{ node.name }}</span>
+                      <span class="mono">{{ node.type === 'dir' ? '📁' : node.type === 'link' ? '🔗' : '📄' }} {{ node.name }}</span>
+                      <span v-if="node.type === 'link'" class="empty"> → {{ node.linkTarget }} · {{ node.linkStatus }}</span>
                       <a v-if="node.type === 'file'" class="dl" :href="downloadUrl(node.path)"
                          :download="node.name" @click.stop title="下载">⬇</a>
                     </div>
@@ -1374,7 +1749,7 @@ const outputRows = computed(() =>
                 <p v-else-if="chat.error" class="error">出错：{{ chat.error }}</p>
                 <template v-else>
                   <p v-if="!chat.messages.length" class="empty">（还没有对话，在下面发一条消息开始）</p>
-                  <div v-else class="chat">
+                  <div v-else class="chat" ref="chatScrollEl">
                     <div v-for="(t, i) in chatTurns" :key="i" class="turn">
                       <!-- 用户提问 -->
                       <div v-if="t.user" class="msg user">
@@ -1402,7 +1777,32 @@ const outputRows = computed(() =>
                   </div>
                 </template>
                 <div class="chat-input">
-                  <textarea v-model="chat.input" class="gen-draft" rows="3" placeholder="给这个 Agent 发条消息…"></textarea>
+                  <textarea
+                    v-model="chat.input"
+                    class="gen-draft"
+                    rows="3"
+                    placeholder="给这个 Agent 发条消息…"
+                    @keydown="onChatInputKeydown"
+                  ></textarea>
+                  <div class="chat-send-bar">
+                    <div class="md-toggle send-mode-toggle">
+                      <button
+                        type="button"
+                        :class="['md-seg', chatSendMode === 'modifier' && 'on']"
+                        @click="setChatSendMode('modifier')"
+                      >
+                        Ctrl+Enter 发送
+                      </button>
+                      <button
+                        type="button"
+                        :class="['md-seg', chatSendMode === 'enter' && 'on']"
+                        @click="setChatSendMode('enter')"
+                      >
+                        Enter 发送
+                      </button>
+                    </div>
+                    <span class="empty chat-send-hint">{{ chatSendHint }}</span>
+                  </div>
                   <div class="ops">
                     <button class="btn" :disabled="chat.sending || !chat.input.trim()" @click="sendChat">发送</button>
                     <span v-if="chat.sending" class="empty">Agent 思考中…（ReAct 可能需要几秒）</span>
@@ -1471,13 +1871,14 @@ const outputRows = computed(() =>
               <p v-if="agents.loading" class="empty">加载中…</p>
               <p v-else-if="agents.error" class="error">出错：{{ agents.error }}</p>
               <table v-else>
-                <thead><tr><th>name</th><th>description</th><th>provider</th><th>tools</th><th>定时</th><th>操作</th></tr></thead>
+                <thead><tr><th>name</th><th>description</th><th>provider</th><th>model</th><th>tools</th><th>定时</th><th>操作</th></tr></thead>
                 <tbody>
-                  <tr v-if="!agents.data.length"><td colspan="6" class="empty">（暂无 Agent · 点上面「新建 Agent」，或往 .oryxos/agents/ 丢一个目录）</td></tr>
+                  <tr v-if="!agents.data.length"><td colspan="7" class="empty">（暂无 Agent · 点上面「新建 Agent」，或往 .oryxos/agents/ 丢一个目录）</td></tr>
                   <tr v-for="a in agents.data" :key="a.name">
                     <td class="mono">{{ a.name }}</td>
                     <td>{{ a.description || '—' }}</td>
                     <td>{{ a.provider }}</td>
+                    <td>{{ a.model || '—' }}</td>
                     <td>{{ (a.tools || []).join(', ') }}</td>
                     <td class="mono">{{ (a.schedules || []).map((s) => s.cron).join('; ') || '—' }}</td>
                     <td class="ops">
@@ -1799,7 +2200,8 @@ const outputRows = computed(() =>
 .nav-group { display: flex; align-items: center; justify-content: space-between; }
 .chevron { color: var(--text-3); font-size: 11px; }
 .nav-sub { padding-left: 22px; font-size: 13px; }
-.readonly { margin-top: auto; color: var(--text-3); font-size: 12px; padding: 8px; }
+.auth-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-3); font-size: 12px; padding: 8px; }
+.auth-foot .mono { color: var(--text-2); }
 .content { flex: 1; padding: 24px 32px; overflow-x: auto; }
 h2 { font-weight: 600; margin: 0 0 16px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1874,6 +2276,18 @@ th { color: var(--text-2); font-weight: 500; }
 .gen-draft { width: 100%; background: var(--bg-mute); color: var(--text-1); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px; margin-bottom: 10px; resize: vertical; }
 /* 列表页新建按钮工具栏：新建类按钮靠右 */
 .toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+/* 键盘焦点可见性：全站交互控件统一的 focus-visible 描边（hover 已有，focus 不能缺） */
+.btn:focus-visible, .md-seg:focus-visible, .gen-input:focus-visible, .gen-draft:focus-visible, .skill-opt:focus-within {
+  outline: 1px solid var(--brand); outline-offset: 1px;
+}
+/* 绑定一致性告警：不常驻，仅变更后回检发现问题时展开，可关闭 */
+.issue-banner { border: 1px solid var(--warn); background: var(--bg-soft); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 14px; }
+.issue-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.issue-title { color: var(--warn); font-size: 13px; font-weight: 600; }
+.issue-list { list-style: none; margin: 0; padding: 0; }
+.issue-list li { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 5px 0; border-top: 1px solid var(--border); font-size: 12px; }
+.issue-list li:first-child { border-top: none; }
+.issue-type { color: var(--warn); }
 .skill-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
 .skill-opt { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; cursor: pointer; }
 .skill-opt:hover { border-color: var(--brand); }
@@ -1937,6 +2351,28 @@ th { color: var(--text-2); font-weight: 500; }
 .md-preview :deep(hr) { border: none; border-top: 1px solid var(--border); margin: 1.4em 0; }
 .md-preview :deep(img) { max-width: 100%; }
 .chat-input { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.chat-send-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 8px; }
+.send-mode-toggle { margin-bottom: 0; }
+.chat-send-hint { font-size: 12px; }
 
 @media (max-width: 640px) { .layout { flex-direction: column; } .nav { width: auto; flex-direction: row; flex-wrap: wrap; } .readonly { display: none; } .ws { flex-direction: column; } .ws-tree { width: auto; } }
+
+/* 启动闪屏：黑底居中 spinner，与登录页/管理台同色调，避免突兀文字 */
+.boot-splash {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.boot-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: boot-spin 0.7s linear infinite;
+}
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .boot-spinner { animation: none; } }
 </style>

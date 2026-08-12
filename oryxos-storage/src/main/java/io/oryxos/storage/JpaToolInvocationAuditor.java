@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory;
 /**
  * ToolInvocationAuditor 的 JPA 实现。
  *
- * <p>审计自身失败只记 ERROR、不上抛——可用性优先，审计故障不阻断工具结果返回（口径同 16 节 D5）。
+ * <p>审计写入失败时 fail-closed：记录错误并抛出异常，防止主链路在没有审计记录的情况下返回工具结果。
  */
 public class JpaToolInvocationAuditor implements ToolInvocationAuditor {
 
@@ -39,7 +39,8 @@ public class JpaToolInvocationAuditor implements ToolInvocationAuditor {
       record.setDurationMs(durationMs);
       repository.save(record);
     } catch (RuntimeException e) {
-      LOG.error("tool_invocations 审计写入失败（不阻断工具结果返回）: {}", sanitize(e.getMessage()));
+      LOG.error("tool_invocations 审计写入失败: {}", sanitize(e.getMessage()));
+      throw new IllegalStateException("tool_invocations 审计写入失败", e);
     }
   }
 

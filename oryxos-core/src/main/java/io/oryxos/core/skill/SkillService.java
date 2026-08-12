@@ -1,6 +1,8 @@
 package io.oryxos.core.skill;
 
+import io.oryxos.core.agent.AgentMarkdown;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -9,10 +11,13 @@ import java.util.Optional;
  * 全局 Skill 库的生命周期编排（第 32 节）：CRUD + 内置 Skill 播种。
  *
  * <p>与 {@code AgentLifecycleService} 同构但更薄：Skill 是纯共享资产（无 provider/调度/沙箱）。写盘走 {@link
- * SkillStore}、内存索引走 {@link SkillRegistry}，两者在每次增删改后同步（{@code ContextLoader} 按名解析时即时可见）。校验与 web
- * 层解耦：{@link #get} 返回 {@link Optional}，404 由 web 决定；非法入参抛 {@link IllegalArgumentException}（web 映射
- * 400）。
+ * SkillStore}、内存索引走 {@link SkillRegistry}，两者在每次增删改后同步；运行时绑定元数据直接现读文件系统。校验与 web 层解耦：{@link #get} 返回
+ * {@link Optional}，404 由 web 决定；非法入参抛 {@link IllegalArgumentException}（web 映射 400）。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification =
+        "Store, registry and binding service are injected live coordinators intentionally shared by reference.")
 public class SkillService {
 
   /** 内置 Skill 名（供测试与外部引用）。 */
@@ -102,11 +107,21 @@ public class SkillService {
   private final SkillStore store;
   private final SkillRegistry registry;
   private final SkillLoader loader;
+  private final AgentSkillBindingService bindings;
 
   public SkillService(SkillStore store, SkillRegistry registry, SkillLoader loader) {
+    this(store, registry, loader, null);
+  }
+
+  public SkillService(
+      SkillStore store,
+      SkillRegistry registry,
+      SkillLoader loader,
+      AgentSkillBindingService bindings) {
     this.store = store;
     this.registry = registry;
     this.loader = loader;
+    this.bindings = bindings;
   }
 
   /** 新建 Skill：name 冲突第一步就拒；写盘 → 解析 → 登记内存索引。 */
@@ -114,7 +129,7 @@ public class SkillService {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("Skill name 为空");
     }
-    if (registry.exists(name) || store.exists(name)) {
+    if (registry.exists(name) || store.entryExists(name)) {
       throw new IllegalArgumentException("Skill 已存在: " + name);
     }
     return writeAndRegister(name, description, body);
@@ -128,10 +143,20 @@ public class SkillService {
     return writeAndRegister(name, description, body);
   }
 
-  /** 删除 Skill：物理删目录 + 移出内存索引。 */
-  public void delete(String name) {
-    store.delete(name);
+  /** 删除即归档：有活跃或归档引用时拒绝；否则移动完整目录并更新安装索引。 */
+  public synchronized SkillArchive delete(String name) {
+    if (bindings != null) {
+      return bindings.archiveIfUnreferenced(
+          name,
+          () -> {
+            SkillArchive archive = store.archive(name);
+            registry.remove(name);
+            return archive;
+          });
+    }
+    SkillArchive archive = store.archive(name);
     registry.remove(name);
+    return archive;
   }
 
   public Optional<Skill> get(String name) {
@@ -145,7 +170,7 @@ public class SkillService {
   /** 播种内置的一批 Skill：逐个"库里没有才写"（幂等，用户改过/删过的名不重复播种）。启动时调一次。 */
   public void seedBuiltins() {
     for (Builtin b : BUILTINS) {
-      if (!store.exists(b.name()) && !registry.exists(b.name())) {
+      if (!store.entryExists(b.name()) && !registry.exists(b.name())) {
         writeAndRegister(b.name(), b.description(), b.body());
       }
     }
@@ -165,7 +190,7 @@ public class SkillService {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("无法确定 Skill 名（SKILL.md 无 name 字段，也未指定 name）");
     }
-    if (registry.exists(name) || store.exists(name)) {
+    if (registry.exists(name) || store.entryExists(name)) {
       throw new IllegalArgumentException("Skill 已存在: " + name);
     }
     return writeAndRegister(name, parsed.description(), parsed.body());
@@ -194,23 +219,55 @@ public class SkillService {
     if (name == null || name.isBlank()) {
       throw new IllegalArgumentException("无法确定 Skill 名（SKILL.md 无 name 字段，也未指定 name）");
     }
-    if (registry.exists(name) || store.exists(name)) {
+    if (registry.exists(name) || store.entryExists(name)) {
       throw new IllegalArgumentException("Skill 已存在: " + name);
     }
-    store.writeAll(name, files); // name 非法在此抛（SkillStore.safe）
-    // 不能再用 loader.parse(skillMd, name) 重新派生——SKILL.md 里若有 name 字段，parse 会优先用它，
-    // 那样 nameOverride 就白传了；这里直接拿 name（已按 override 优先解析过）+ 已解析出的 description/body。
-    Skill skill = new Skill(name, parsed.description(), parsed.body());
-    registry.register(skill);
-    return skill;
+    Map<String, String> normalizedFiles = new LinkedHashMap<>(files);
+    if (!name.equals(parsed.name())) {
+      normalizedFiles.put(SKILL_FILE, replaceFrontmatterName(skillMd, name));
+    }
+    boolean registered = false;
+    try {
+      store.writeAll(name, normalizedFiles); // name 非法在此抛（SkillStore.safe）
+      Skill skill = loader.deriveSkill(store.directory(name));
+      registry.register(skill);
+      registered = true;
+      if (bindings != null) {
+        bindings.logCurrentIssues();
+      }
+      return skill;
+    } catch (RuntimeException e) {
+      if (registered) {
+        registry.remove(name);
+      }
+      try {
+        store.rollbackCreate(name);
+      } catch (RuntimeException rollbackFailure) {
+        e.addSuppressed(rollbackFailure);
+      }
+      throw e;
+    }
   }
 
   private Skill writeAndRegister(String name, String description, String body) {
+    if (description == null || description.isBlank()) {
+      throw new IllegalArgumentException("Skill description 为空: " + name);
+    }
+    if (body == null || body.isBlank()) {
+      throw new IllegalArgumentException("Skill body 为空: " + name);
+    }
     String markdown = toSkillMarkdown(name, description, body);
     store.write(name, markdown); // name 非法在此抛（SkillStore.safe）
     Skill skill = loader.parse(markdown, name);
     registry.register(skill);
+    if (bindings != null) {
+      bindings.logCurrentIssues();
+    }
     return skill;
+  }
+
+  private static String replaceFrontmatterName(String markdown, String name) {
+    return AgentMarkdown.replaceTopLevelScalar(markdown, "name", name);
   }
 
   /**

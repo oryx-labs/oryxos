@@ -42,7 +42,12 @@ public class MockChatModel implements ChatModel {
             "function",
             "save_memory",
             "{\"content\":" + jsonString(fact) + ",\"scope\":\"archival\"}");
-    return single(new AssistantMessage("", Map.of(), List.of(toolCall)));
+    return single(
+        AssistantMessage.builder()
+            .content("")
+            .properties(Map.of())
+            .toolCalls(List.of(toolCall))
+            .build());
   }
 
   private static ChatResponse single(AssistantMessage message) {
@@ -54,7 +59,7 @@ public class MockChatModel implements ChatModel {
     for (int i = messages.size() - 1; i >= 0; i--) {
       if (messages.get(i) instanceof UserMessage) {
         String text = ((UserMessage) messages.get(i)).getText();
-        return text == null || text.isBlank() ? "（空消息）" : text;
+        return text.isBlank() ? "（空消息）" : text;
       }
     }
     return "（无用户消息）";

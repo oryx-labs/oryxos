@@ -2,7 +2,7 @@
 
 OryxOS is a Spring Boot 3.x single-binary application running on JDK 21. The entire system — LLM routing, reasoning loop, memory, tools, REST API, and the web admin console — ships as one fat JAR. No external dependencies are required beyond a JVM and the LLM provider credentials you configure. State is stored in SQLite and on the local filesystem under the workspace directory (`.oryxos/` by default, configurable — see below).
 
-The reasoning engine is a self-implemented ReAct loop. Spring AI Alibaba handles LLM protocol translation; OryxOS owns the loop, the context assembly, the tool dispatch, and the audit records.
+The reasoning engine is a self-implemented ReAct loop. Spring AI's OpenAI connector handles OpenAI-compatible LLM protocol translation; OryxOS owns the loop, the context assembly, the tool dispatch, and the audit records.
 
 ## Architecture Diagram
 
@@ -117,7 +117,7 @@ Modules communicate through interfaces. Adding a new Channel or Tool implementat
 | --- | --- |
 | Language / runtime | Java 21 (required; virtual threads, no SecurityManager) |
 | Framework | Spring Boot 3.x |
-| LLM integration | Spring AI + Spring AI Alibaba (protocol translation and `@Tool` schema generation only) |
+| LLM integration | Spring AI (OpenAI-compatible protocol translation and `@Tool` schema generation only) |
 | HTTP service | Spring MVC with Java 21 virtual threads |
 | Admin console | Vue 3 + Vite (served at `/admin/`) |
 | CLI | Picocli |

@@ -60,7 +60,7 @@ oryxos chat --profile weather      # ⑤ 开聊
 | `oryxos init` | 轻 | 初始化 `.oryxos/` 工作区 |
 | `oryxos status` | 轻 | 查看工作区与数据文件状态 |
 | `oryxos chat [--profile <name>]` | **重** | 交互式对话（默认 profile：`default`） |
-| `oryxos serve [--port 8080]` | **重** | 启动 HTTP API 服务（REST 端点第 26 节接线） |
+| `oryxos serve [--port 8080]` | **重** | 启动 HTTP API 服务（REST 端点 + Web 管理台） |
 | `oryxos gateway` | **重** | 守护进程模式（多 Channel 挂载属扩展阶段） |
 | `oryxos profile list` | 轻 | 列出全部 Profile |
 | `oryxos profile create <name>` | 轻 | 创建 Profile（最小模板，不覆盖已有） |

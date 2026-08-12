@@ -40,9 +40,11 @@ class MockChatModelTest {
             new Prompt(
                 List.of(
                     new UserMessage("记住：我在北京"),
-                    new ToolResponseMessage(
-                        List.of(
-                            new ToolResponseMessage.ToolResponse("id-1", "save_memory", "已记住"))))));
+                    ToolResponseMessage.builder()
+                        .responses(
+                            List.of(
+                                new ToolResponseMessage.ToolResponse("id-1", "save_memory", "已记住")))
+                        .build())));
 
     AssistantMessage out = resp.getResult().getOutput();
     assertFalse(out.hasToolCalls(), "第二轮不应再调工具");

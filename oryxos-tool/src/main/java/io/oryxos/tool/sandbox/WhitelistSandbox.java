@@ -1,7 +1,9 @@
 package io.oryxos.tool.sandbox;
 
+import io.oryxos.core.fs.RealPathBoundary;
 import io.oryxos.core.sandbox.SandboxWhitelist;
 import io.oryxos.core.sandbox.SandboxWhitelistStore;
+import java.net.IDN;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -107,6 +109,16 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   private static Path normalizeRoot(String rawPath) {
+    Path lexical = lexicalRoot(rawPath);
+    try {
+      return RealPathBoundary.project(lexical).projectedReal();
+    } catch (RuntimeException e) {
+      LOG.warn("白名单路径暂时无法解析真实目标，保留词法路径并在访问时失败关闭: {}", sanitize(lexical.toString()));
+      return lexical;
+    }
+  }
+
+  private static Path lexicalRoot(String rawPath) {
     return Path.of(rawPath).toAbsolutePath().normalize();
   }
 
@@ -135,7 +147,12 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   private void checkFilePath(String rawPath) {
-    Path target = Path.of(rawPath).normalize().toAbsolutePath();
+    Path target;
+    try {
+      target = RealPathBoundary.project(Path.of(rawPath)).projectedReal();
+    } catch (RuntimeException e) {
+      throw new SandboxViolationException("路径真实目标无法安全解析，拒绝访问: " + rawPath);
+    }
     boolean allowed = allowedRoots.stream().anyMatch(target::startsWith);
     if (!allowed) {
       throw new SandboxViolationException(
@@ -204,13 +221,25 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   /** SSRF 兜底：拒绝主机解析到回环/任意本地/链路本地(含云元数据 169.254.169.254)/站点内网/组播/CGNAT，及 localhost、*.internal。 */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification =
+          "IDN.toASCII canonicalizes the complete DNS host before security checks; no substring is transformed independently.")
   private static void assertNotInternalHost(String host) {
-    String h = host.toLowerCase(Locale.ROOT);
-    if (h.equals("localhost") || h.equals("metadata.google.internal") || h.endsWith(".internal")) {
+    String asciiHost;
+    try {
+      asciiHost = IDN.toASCII(host);
+    } catch (IllegalArgumentException e) {
+      throw new SandboxViolationException("非法主机名: " + host);
+    }
+    if (isInternalName(asciiHost)) {
       throw new SandboxViolationException("拒绝访问内网 / 元数据主机（SSRF 防护）: " + host + "。这是安全策略，请勿重试。");
     }
     // IPv6 字面量 getHost() 带方括号（如 [fd00::1]），解析前剥掉，ULA/回环等判断才生效
-    String lookup = h.startsWith("[") && h.endsWith("]") ? h.substring(1, h.length() - 1) : host;
+    String lookup =
+        asciiHost.startsWith("[") && asciiHost.endsWith("]")
+            ? asciiHost.substring(1, asciiHost.length() - 1)
+            : asciiHost;
     InetAddress[] addresses;
     try {
       addresses = InetAddress.getAllByName(lookup);
@@ -229,6 +258,20 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
             "拒绝访问内网 / 保留地址（SSRF 防护）: " + host + " → " + addr.getHostAddress() + "。这是安全策略，请勿重试。");
       }
     }
+  }
+
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification =
+          "DNS labels are case-insensitive and the complete IDN-canonicalized host is compared.")
+  private static boolean isInternalName(String host) {
+    if (LOCALHOST.equalsIgnoreCase(host) || GOOGLE_METADATA_HOST.equalsIgnoreCase(host)) {
+      return true;
+    }
+    int offset = host.length() - INTERNAL_DOMAIN_SUFFIX.length();
+    return offset >= 0
+        && host.regionMatches(
+            true, offset, INTERNAL_DOMAIN_SUFFIX, 0, INTERNAL_DOMAIN_SUFFIX.length());
   }
 
   /** 100.64.0.0/10（运营商级 NAT，isSiteLocalAddress 不覆盖，单独判）。 */
@@ -286,10 +329,18 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
     String entry = requireNonBlank(value);
     boolean changed;
     String canonical; // 入内存的规范形，也是落库/展示/删除对齐的值（FILE 为归一后的绝对路径）
+    String staleCanonical = null;
     if (category == Category.FILE) {
+      Path lexical = lexicalRoot(entry);
       Path root = normalizeRoot(entry);
       canonical = root.toString();
-      changed = allowedRoots.addIfAbsent(root);
+      if (!root.equals(lexical) && allowedRoots.remove(lexical)) {
+        allowedRoots.addIfAbsent(root);
+        staleCanonical = lexical.toString();
+        changed = true;
+      } else {
+        changed = allowedRoots.addIfAbsent(root);
+      }
     } else if (category == Category.SHELL) {
       canonical = requireAllowedShellExecutable(entry);
       changed = allowedCommands.add(canonical);
@@ -299,6 +350,9 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
     }
     // 写穿：只有内存确有变更才落库（幂等，避免重复写；启动播种重复调用不会重复插入）
     if (changed && store != null) {
+      if (staleCanonical != null) {
+        store.remove(category, staleCanonical);
+      }
       store.add(category, canonical);
     }
     LOG.info("Sandbox 白名单增加 {} -> {}（changed={}）", category, sanitize(entry), changed);
@@ -315,8 +369,9 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
     String canonical;
     if (category == Category.FILE) {
       Path root = normalizeRoot(entry);
-      canonical = root.toString();
-      changed = allowedRoots.remove(root);
+      Path removed = removeFileRoot(root, lexicalRoot(entry));
+      canonical = removed == null ? root.toString() : removed.toString();
+      changed = removed != null;
     } else if (category == Category.SHELL) {
       canonical = entry;
       changed = allowedCommands.remove(entry);
@@ -329,6 +384,16 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
     }
     LOG.info("Sandbox 白名单删除 {} -> {}（changed={}）", category, sanitize(entry), changed);
     return changed;
+  }
+
+  private Path removeFileRoot(Path normalized, Path lexical) {
+    if (allowedRoots.remove(normalized)) {
+      return normalized;
+    }
+    if (!normalized.equals(lexical) && allowedRoots.remove(lexical)) {
+      return lexical;
+    }
+    return null;
   }
 
   private static String requireNonBlank(String value) {

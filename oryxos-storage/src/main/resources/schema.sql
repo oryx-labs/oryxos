@@ -109,7 +109,8 @@ CREATE TABLE IF NOT EXISTS notify_channels (
 );
 
 -- providers：LLM Provider 动态注册表（31 节）——name → api_key + base_url + 描述；管理台可 CRUD、运行时按名动态建 ChatModel。
--- 启动时把 config/application.yml 的 oryxos.providers 播种进来（库里没有才写），之后以本表为准。
+-- 启动时仅把 config/application.yml 中数据库尚不存在且有效的 Provider 作为首次种子；
+-- 已有同名记录绝不从 YAML 覆盖，之后以本表为唯一运行时事实源。
 -- 注意：api_key 明文落库（本地 gitignored 库）——这是"可动态管理"对宪法"凭证走环境变量"的核心阶段让步。
 CREATE TABLE IF NOT EXISTS providers (
     name VARCHAR(128) PRIMARY KEY,
@@ -130,3 +131,27 @@ CREATE TABLE IF NOT EXISTS sandbox_whitelist (
     created_at TIMESTAMP NOT NULL,
     UNIQUE (category, entry_value)
 );
+
+-- web_users：管理台 Basic Auth 账号（012-web-auth）
+-- 密码哈希存储（{bcrypt} 前缀 + hash），绝不存明文（宪法 VI 凭证不落地）
+CREATE TABLE IF NOT EXISTS web_users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username VARCHAR(64) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_web_users_username ON web_users (username);
+
+-- web_sessions：浏览器登录 session（012-web-auth US3）
+-- session_id = UUID（cookie 值）；expires_at = created_at + session-ttl（默认 12h）
+-- 惰性清：filter 查到过期行顺手 delete，无后台定时线程
+CREATE TABLE IF NOT EXISTS web_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id VARCHAR(64) NOT NULL UNIQUE,
+    username VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_web_sessions_session ON web_sessions (session_id);

@@ -7,7 +7,7 @@
     <parent>
         <groupId>io.oryxos</groupId>
         <artifactId>oryxos</artifactId>
-        <version>0.1.1-RELEASE</version>
+        <version>0.1.2-RELEASE</version>
     </parent>
 
     <artifactId>oryxos-memory</artifactId>
@@ -30,7 +30,7 @@
         <!-- @Tool 注解（MemoryTools 走 20 节同款注解管道，schema 自动生成） -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-core</artifactId>
+            <artifactId>spring-ai-model</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

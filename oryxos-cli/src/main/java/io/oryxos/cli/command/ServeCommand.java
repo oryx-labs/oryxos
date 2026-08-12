@@ -5,10 +5,10 @@ import org.springframework.boot.SpringApplication;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-/** 重命令：启动骨架——起完整运行时常驻；REST 端点第 26 节接线（届时挂 Web 层）。 */
+/** 重命令：启动骨架——起完整运行时常驻；REST 端点已在 Web 层交付。 */
 @Command(
     name = "serve",
-    description = "启动 HTTP API 服务（REST 端点 26 节接线）",
+    description = "启动 HTTP API 服务（REST 端点 + Web 管理台）",
     mixinStandardHelpOptions = true)
 public class ServeCommand implements Runnable {
 
@@ -18,7 +18,7 @@ public class ServeCommand implements Runnable {
   @Override
   public void run() {
     System.setProperty("server.port", String.valueOf(port));
-    System.out.println("OryxOS 运行时已启动（serve 骨架；REST 端点将在第 26 节接线）。Ctrl-C 退出。");
+    System.out.println("OryxOS 运行已启动（REST API: /api/v1, Web 管理台: /admin/）。Ctrl-C 退出。");
     SpringApplication.run(OryxOsRuntime.class, new String[0]);
     keepAlive();
   }

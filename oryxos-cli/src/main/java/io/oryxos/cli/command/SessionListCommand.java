@@ -28,6 +28,8 @@ public class SessionListCommand implements Runnable {
     /** 与重命令 application.yml 的 datasource 保持同一相对路径——两边看到的必须是同一个库。 */
     private static final String DB_FILE = "oryxos.db";
 
+    private static final String DB_URL = "jdbc:sqlite:" + DB_FILE + "?busy_timeout=5000";
+
     @Override
     public void run() {
       if (!Files.exists(Path.of(DB_FILE))) {
@@ -37,7 +39,7 @@ public class SessionListCommand implements Runnable {
       String sql =
           "SELECT session_id, profile_name, status, last_active_at FROM sessions"
               + " ORDER BY last_active_at DESC";
-      try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + DB_FILE);
+      try (Connection conn = DriverManager.getConnection(DB_URL);
           Statement stmt = conn.createStatement();
           ResultSet rs = stmt.executeQuery(sql)) {
         boolean any = false;

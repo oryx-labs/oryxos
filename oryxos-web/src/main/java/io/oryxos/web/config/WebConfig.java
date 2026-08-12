@@ -28,6 +28,8 @@ public class WebConfig implements WebMvcConfigurer {
     registry.addRedirectViewController("/admin", "/admin/");
     // /admin/（入口）转发到 index.html——ResourceHttpRequestHandler 对空路径不走 resolver，必须显式转发
     registry.addViewController("/admin/").setViewName("forward:/admin/index.html");
+    // / （根）重定向到 /admin/——管理台是主入口，直接访问根即进管理台（012-web-auth US3 体验优化）
+    registry.addRedirectViewController("/", "/admin/");
   }
 
   @Override

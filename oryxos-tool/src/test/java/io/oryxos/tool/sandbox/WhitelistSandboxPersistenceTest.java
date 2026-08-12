@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.oryxos.core.sandbox.SandboxWhitelist.Category;
 import io.oryxos.core.sandbox.SandboxWhitelistStore;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /** 31 节：store-backed WhitelistSandbox 的加载 / 写穿行为（宪法 VI 白名单持久化）。 */
 class WhitelistSandboxPersistenceTest {
@@ -77,6 +80,46 @@ class WhitelistSandboxPersistenceTest {
 
     assertThat(restored.list(Category.SHELL)).contains("cat");
     assertThat(restored.list(Category.HTTP)).contains("*.feishu.cn");
+  }
+
+  @Test
+  @DisplayName("恢复悬空软连接白名单不阻断启动且访问仍失败关闭")
+  void constructorToleratesDanglingPersistedFileRoot(@TempDir Path temp) throws Exception {
+    Path dangling = temp.resolve("dangling-root");
+    Files.createSymbolicLink(dangling, temp.resolve("missing"));
+    FakeStore store = new FakeStore();
+    store.entries.add(new SandboxWhitelistStore.Entry(Category.FILE, dangling.toString()));
+
+    WhitelistSandbox restored = new WhitelistSandbox(store);
+
+    assertThat(restored.list(Category.FILE)).contains(dangling.toAbsolutePath().toString());
+    org.junit.jupiter.api.Assertions.assertThrows(
+        SandboxViolationException.class,
+        () ->
+            restored.enforce(
+                new SandboxAction(
+                    ActionType.FILE_READ, dangling.resolve("secret.txt").toString())));
+  }
+
+  @Test
+  @DisplayName("悬空白名单链接恢复后可用原值刷新并删除")
+  void danglingFileRootCanBeRemovedAfterTargetAppears(@TempDir Path temp) throws Exception {
+    Path target = temp.resolve("target");
+    Path dangling = temp.resolve("dangling-root");
+    Files.createSymbolicLink(dangling, target);
+    FakeStore store = new FakeStore();
+    store.entries.add(new SandboxWhitelistStore.Entry(Category.FILE, dangling.toString()));
+    WhitelistSandbox restored = new WhitelistSandbox(store);
+    Files.createDirectory(target);
+
+    assertThat(restored.add(Category.FILE, dangling.toString())).isTrue();
+    assertThat(store.loadAll()).hasSize(1);
+    assertThat(restored.list(Category.FILE)).containsExactly(target.toRealPath().toString());
+    restored.enforce(
+        new SandboxAction(ActionType.FILE_READ, dangling.resolve("secret.txt").toString()));
+    assertThat(restored.remove(Category.FILE, dangling.toString())).isTrue();
+    assertThat(store.loadAll()).isEmpty();
+    assertThat(restored.list(Category.FILE)).isEmpty();
   }
 
   @Test

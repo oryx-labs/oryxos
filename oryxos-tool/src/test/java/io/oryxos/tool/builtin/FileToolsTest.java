@@ -109,7 +109,20 @@ class FileToolsTest {
     assertThrows(SandboxViolationException.class, () -> guarded.readFile(target.toString()));
     assertThrows(SandboxViolationException.class, () -> guarded.writeFile(target.toString(), "x"));
     assertThrows(SandboxViolationException.class, () -> guarded.listDir(dir.toString()));
+    assertThrows(
+        SandboxViolationException.class, () -> guarded.makeDir(dir.resolve("new").toString()));
+    assertThrows(SandboxViolationException.class, () -> guarded.appendFile(target.toString(), "x"));
+    assertThrows(SandboxViolationException.class, () -> guarded.deleteFile(target.toString()));
+    assertThrows(
+        SandboxViolationException.class,
+        () -> guarded.moveFile(target.toString(), dir.resolve("moved").toString()));
+    assertThrows(
+        SandboxViolationException.class,
+        () -> guarded.copyFile(target.toString(), dir.resolve("copied").toString()));
     assertFalse(Files.exists(target), "校验不过，文件根本不该被创建");
+    assertFalse(Files.exists(dir.resolve("new")));
+    assertFalse(Files.exists(dir.resolve("moved")));
+    assertFalse(Files.exists(dir.resolve("copied")));
   }
 
   @Test

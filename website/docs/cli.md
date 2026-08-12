@@ -249,3 +249,72 @@ oryxos session list
 cli:user-001:ops-agent                   ops-agent        active    2025-06-01 10:05
 cli:user-002:default                      default          active    2025-06-01 09:30
 ```
+
+---
+
+## User management
+
+Manage admin accounts for the management console (`/admin/**`) Basic Auth. Accounts are stored in the `web_users` SQLite table; passwords are BCrypt-hashed and never stored in plaintext. Changes take effect immediately — no server restart is required for new accounts to work.
+
+> Basic Auth is opt-in. It is disabled by default (`oryxos.web.auth.enabled=false`, assuming a trusted internal network). Enable it in `config/application.yml`, then create at least one account before starting `serve` — otherwise startup is blocked with a clear error.
+
+### user add
+
+Create an account. Prompts for a password twice (input is not echoed); the password must be at least 8 characters and the two entries must match.
+
+```bash
+oryxos user add <username>
+```
+
+```bash
+oryxos user add admin
+# Password (>= 8 chars): ********
+# Confirm: ********
+# Created user 'admin'
+```
+
+### user list
+
+List all accounts. **Never prints passwords or hashes.**
+
+```bash
+oryxos user list
+```
+
+```text
+USERNAME                ENABLED  CREATED_AT
+admin                   true     2026-07-22T10:30:00Z
+alice                   true     2026-07-22T11:00:00Z
+```
+
+### user passwd
+
+Change an account's password. Prompts for the new password twice (not echoed).
+
+```bash
+oryxos user passwd <username>
+```
+
+### user disable
+
+Disable an account without deleting it. A disabled account cannot log in (Basic Auth returns 401).
+
+```bash
+oryxos user disable <username>
+```
+
+### user enable
+
+Re-enable a previously disabled account (symmetric to `disable`).
+
+```bash
+oryxos user enable <username>
+```
+
+### user delete
+
+Delete an account permanently.
+
+```bash
+oryxos user delete <username>
+```

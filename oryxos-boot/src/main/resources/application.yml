@@ -6,7 +6,6 @@ spring:
   # auto-instantiated at startup (which would also demand API keys before any agent runs).
   autoconfigure:
     exclude:
-      - com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeAutoConfiguration
       # 宪法 II：禁用 Spring AI eager 模型自动装配。deepseek 走 spring-ai-openai starter，
       # OpenAiAutoConfiguration 会急切建 OpenAiChatModel 并索要 spring.ai.openai.api-key；
       # OryxOS 不用它（Provider 由 ProviderChatModelFactory 显式构造），排掉后 serve 只需 DEEPSEEK_API_KEY。
@@ -17,6 +16,10 @@ spring:
   datasource:
     url: jdbc:sqlite:oryxos.db
     driver-class-name: org.sqlite.JDBC
+    hikari:
+      data-source-properties:
+        journal_mode: WAL
+        busy_timeout: 5000
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
@@ -29,6 +32,10 @@ spring:
 
 server:
   port: 8080
+  # 反向代理（nginx/caddy 终止 TLS）下识别 X-Forwarded-Proto/Host/Port：
+  # 没有它 request.isSecure() 恒为 false，登录 cookie 不会带 Secure 属性。
+  # 直连部署无副作用（无 X-Forwarded-* 头时行为不变）。
+  forward-headers-strategy: framework
 
 # Sandbox 白名单（第 24 节 WhitelistSandbox；宪法 VI 第一档：应用层校验）。
 # 三块各自独立；**空列表 = 该类什么都不允许（deny-all）**，绝非"不校验"——按最小权限收窄。
@@ -42,8 +49,8 @@ shell:
     - cat
     - echo
     - grep
-    - python          # GitHub 日报 Agent 跑 scripts/github_trending.py（31 节 Demo 三）
-    - python3
+    # 解释器（python/python3 等）刻意不入默认白名单：bash -c 执行下是任意代码执行入口。
+    # 确需跑脚本的 Agent 请在部署配置里显式加入并自担风险。
 http:
   allowed_domains:
     - api.deepseek.com      # Provider 端点（精确匹配）
@@ -69,7 +76,14 @@ oryxos:
   # model 留空则生成端点返回可读的 503（不向 OpenAI 兼容端点发 model=null）。
   author:
     provider: deepseek
-    model: deepseek-chat
+    model: deepseek-v4-flash
+  # 管理台 Basic Auth（012-web-auth）。默认关=假设内网现状不变（SC-001）；
+  # 开启后 /admin/** 需账密，/api/v1/** 不受影响（REST 不做 Basic Auth）。
+  # 开启前先 oryxos user add <username> 建账号，否则启动阻断（FR-006）。
+  web:
+    auth:
+      enabled: false
+      realm: OryxOS
 
 # Observability: Actuator + Micrometer/Prometheus
 management:
@@ -77,13 +91,6 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
-  health:
-    # Nacos is pulled in transitively by the Spring AI Alibaba starter but OryxOS does not
-    # use it; its health indicator would otherwise report DOWN (no Nacos server).
-    nacos-config:
-      enabled: false
-    nacos-discovery:
-      enabled: false
   endpoint:
     health:
       probes:

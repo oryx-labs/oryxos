@@ -2,6 +2,7 @@ package io.oryxos.web.controller;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -43,10 +45,10 @@ class WorkspaceApiControllerTest {
   void tree_returnsAgentsAndArchive() throws Exception {
     mvc.perform(get("/api/v1/workspace/tree"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.data.children[0].name").value("agents"))
-        .andExpect(jsonPath("$.data.children[0].children[0].name").value("demo"))
-        .andExpect(jsonPath("$.data.children[1].name").value("output"))
-        .andExpect(jsonPath("$.data.children[2].name").value("archive"));
+        .andExpect(
+            jsonPath("$.data.children[*].name")
+                .value(org.hamcrest.Matchers.hasItems("agents", "skills", "output", "archive")))
+        .andExpect(jsonPath("$.data.children[0].children[0].name").value("demo"));
   }
 
   @Test
@@ -93,5 +95,72 @@ class WorkspaceApiControllerTest {
     mvc.perform(get("/api/v1/workspace/download").param("path", "agents/demo/output/nope.md"))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.code").value(404));
+  }
+
+  @Test
+  @DisplayName("read/download/write 均拒绝经父软连接逃逸，tree 把链接作为叶节点")
+  void symlinkEscapeIsRejectedAndTreeDoesNotFollow() throws Exception {
+    Path outside = Files.createDirectories(oryxosRoot.resolveSibling("outside-workspace"));
+    Files.writeString(outside.resolve("secret.txt"), "SECRET");
+    Files.createSymbolicLink(oryxosRoot.resolve("agents/demo/escape"), outside);
+
+    mvc.perform(get("/api/v1/workspace/file").param("path", "agents/demo/escape/secret.txt"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(get("/api/v1/workspace/download").param("path", "agents/demo/escape/secret.txt"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            post("/api/v1/workspace/file")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"agents/demo/escape/new.txt\",\"content\":\"bad\"}"))
+        .andExpect(status().isBadRequest());
+    org.junit.jupiter.api.Assertions.assertFalse(Files.exists(outside.resolve("new.txt")));
+
+    mvc.perform(get("/api/v1/workspace/tree"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$..[?(@.name == 'escape')].type").value("link"))
+        .andExpect(jsonPath("$..[?(@.name == 'escape')].children.length()").value(0));
+  }
+
+  @Test
+  @DisplayName("工作区写入口禁止写 Agent skills 绑定视图")
+  void writeThroughAgentSkillsIsRejected() throws Exception {
+    mvc.perform(
+            post("/api/v1/workspace/file")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"agents/demo/skills/report/SKILL.md\",\"content\":\"bad\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("工作区写入口禁止直接或经归档 Agent 软连接修改共享 Skill")
+  void writeThroughSharedSkillPathsIsRejected() throws Exception {
+    Path shared = Files.createDirectories(oryxosRoot.resolve("skills/report"));
+    Path skillFile = Files.writeString(shared.resolve("SKILL.md"), "original");
+    Path archivedLinks = Files.createDirectories(oryxosRoot.resolve("archive/ops-old/skills"));
+    Files.createSymbolicLink(archivedLinks.resolve("report"), Path.of("../../../skills/report"));
+
+    mvc.perform(
+            post("/api/v1/workspace/file")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"path\":\"skills/report/SKILL.md\",\"content\":\"bad\"}"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            post("/api/v1/workspace/file")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"path\":\"archive/ops-old/skills/report/SKILL.md\",\"content\":\"bad\"}"))
+        .andExpect(status().isBadRequest());
+    org.junit.jupiter.api.Assertions.assertEquals("original", Files.readString(skillFile));
+  }
+
+  @Test
+  @DisplayName("工作区读取悬空软连接返回 400 而非 500")
+  void danglingLinkReturnsBadRequest() throws Exception {
+    Files.createSymbolicLink(
+        oryxosRoot.resolve("agents/demo/dangling"), Path.of("../../skills/missing"));
+
+    mvc.perform(get("/api/v1/workspace/file").param("path", "agents/demo/dangling/SKILL.md"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
   }
 }

@@ -1,15 +1,22 @@
 package io.oryxos.web.controller;
 
+import io.oryxos.core.skill.AgentSkillBindingService;
+import io.oryxos.core.skill.SkillCatalog;
+import io.oryxos.core.skill.SkillCatalogEntry;
 import io.oryxos.core.skill.SkillService;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.CreateSkillRequest;
 import io.oryxos.web.controller.dto.ImportSkillRequest;
+import io.oryxos.web.controller.dto.SkillArchiveView;
+import io.oryxos.web.controller.dto.SkillBindingIssueView;
+import io.oryxos.web.controller.dto.SkillCatalogView;
 import io.oryxos.web.controller.dto.SkillView;
 import io.oryxos.web.controller.dto.UpdateSkillRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
 import io.oryxos.web.skill.GithubFolderFetcher;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.IDN;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
@@ -21,6 +28,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,17 +36,18 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 全局 Skill 库端点（第 32 节）：list/get/create/update/delete 薄转发给 {@link SkillService}。Agent 通过 AGENT.md 的
- * {@code skills:[名]} 引用这些 Skill，由 {@code ContextLoader} 注入正文来约束产出。
+ * 全局 Skill 库端点：管理已安装实体、查询外部候选目录并报告 Agent 软连接绑定问题。绑定只认 Agent 目录里的固定相对软连接； 运行时仅注入 Skill 元数据与本地入口，正文由
+ * Agent 按需读取。
  *
  * <p>错误码复用既有：name 冲突 / 空 → 400（`IllegalArgumentException`）；不存在 →
  * 404（`ResourceNotFoundException`）；统一 `ApiResponse` 信封。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-    value = {"SPRING_ENDPOINT", "EI_EXPOSE_REP2", "URLCONNECTION_SSRF_FD"},
+    value = {"SPRING_ENDPOINT", "EI_EXPOSE_REP2", "URLCONNECTION_SSRF_FD", "IMPROPER_UNICODE"},
     justification =
         "core-stage web API is unauthenticated by design (internal network + gateway); auth is extension-phase. 协作者是 Spring 注入的共享单例，构造注入共享同一引用正是意图。/import 拉取运营者给定的 URL（等同安装插件），已做 SSRF 防护：限 http/https + 超时 + 大小上限 + 禁自动重定向、每跳校验目标主机非回环/内网/链路本地(含云元数据 169.254.169.254)/CGNAT。")
 @RestController
@@ -47,11 +56,29 @@ public class SkillApiController {
 
   private static final int MAX_SKILL_BYTES = 512 * 1024;
   private static final int MAX_REDIRECTS = 5;
+  private static final String HTTP_SCHEME = "http";
+  private static final String HTTPS_SCHEME = "https";
+  private static final String LOCALHOST = "localhost";
+  private static final String GOOGLE_METADATA_HOST = "metadata.google.internal";
+  private static final String INTERNAL_DOMAIN_SUFFIX = ".internal";
+  private static final String VISIBILITY_ALL = "all";
+  private static final String VISIBILITY_PUBLIC = "public";
+  private static final String VISIBILITY_PRIVATE = "private";
 
   private final SkillService skills;
+  private final SkillCatalog catalog;
+  private final AgentSkillBindingService bindings;
 
   public SkillApiController(SkillService skills) {
+    this(skills, null, null);
+  }
+
+  @Autowired
+  public SkillApiController(
+      SkillService skills, SkillCatalog catalog, AgentSkillBindingService bindings) {
     this.skills = skills;
+    this.catalog = catalog;
+    this.bindings = bindings;
   }
 
   @GetMapping
@@ -101,7 +128,7 @@ public class SkillApiController {
       throw new IllegalArgumentException("非法 URL: " + url);
     }
     String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
-    if (!"http".equals(scheme) && !"https".equals(scheme)) {
+    if (!HTTP_SCHEME.equals(scheme) && !HTTPS_SCHEME.equals(scheme)) {
       throw new IllegalArgumentException("仅支持 http/https URL: " + url);
     }
     return uri;
@@ -155,18 +182,27 @@ public class SkillApiController {
   /**
    * SSRF 防护：拒绝主机解析到回环/任意本地/链路本地(含 169.254.169.254)/站点内网/组播/CGNAT，以及 localhost、*.internal、云元数据主机名。
    */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification =
+          "IDN.toASCII canonicalizes the complete DNS host before security checks; no substring is transformed independently.")
   private static void guardPublicHost(URI uri) {
     String host = uri.getHost();
     if (host == null || host.isBlank()) {
       throw new IllegalArgumentException("URL 缺少主机名: " + uri);
     }
-    String h = host.toLowerCase(Locale.ROOT);
-    if (h.equals("localhost") || h.equals("metadata.google.internal") || h.endsWith(".internal")) {
+    String asciiHost;
+    try {
+      asciiHost = IDN.toASCII(host);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("非法主机名: " + host);
+    }
+    if (isInternalName(asciiHost)) {
       throw new IllegalArgumentException("拒绝访问内网 / 元数据主机: " + host);
     }
     InetAddress[] addresses;
     try {
-      addresses = InetAddress.getAllByName(host);
+      addresses = InetAddress.getAllByName(asciiHost);
     } catch (UnknownHostException e) {
       throw new IllegalArgumentException("无法解析主机: " + host);
     }
@@ -181,6 +217,20 @@ public class SkillApiController {
             "拒绝访问内网 / 保留地址: " + host + " → " + addr.getHostAddress());
       }
     }
+  }
+
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification =
+          "DNS labels are case-insensitive and the complete IDN-canonicalized host is compared.")
+  private static boolean isInternalName(String host) {
+    if (LOCALHOST.equalsIgnoreCase(host) || GOOGLE_METADATA_HOST.equalsIgnoreCase(host)) {
+      return true;
+    }
+    int offset = host.length() - INTERNAL_DOMAIN_SUFFIX.length();
+    return offset >= 0
+        && host.regionMatches(
+            true, offset, INTERNAL_DOMAIN_SUFFIX, 0, INTERNAL_DOMAIN_SUFFIX.length());
   }
 
   /** 100.64.0.0/10（运营商级 NAT，isSiteLocalAddress 不覆盖，单独判）。 */
@@ -201,11 +251,38 @@ public class SkillApiController {
   }
 
   @DeleteMapping("/{name}")
-  public ApiResponse<Void> delete(@PathVariable String name) {
+  public ApiResponse<SkillArchiveView> delete(@PathVariable String name) {
     if (skills.get(name).isEmpty()) {
       throw new ResourceNotFoundException("Skill 不存在: " + name); // → 404
     }
-    skills.delete(name);
-    return ApiResponse.ok(null);
+    return ApiResponse.ok(SkillArchiveView.from(skills.delete(name)));
+  }
+
+  @GetMapping("/catalog")
+  public ApiResponse<List<SkillCatalogView>> catalog(
+      @RequestParam(required = false) String q,
+      @RequestParam(defaultValue = "all") String visibility) {
+    if (catalog == null) {
+      throw new IllegalStateException("Skill catalog 不可用");
+    }
+    SkillCatalogEntry.Visibility filter;
+    if (VISIBILITY_ALL.equals(visibility)) {
+      filter = null;
+    } else if (VISIBILITY_PUBLIC.equals(visibility)) {
+      filter = SkillCatalogEntry.Visibility.PUBLIC;
+    } else if (VISIBILITY_PRIVATE.equals(visibility)) {
+      filter = SkillCatalogEntry.Visibility.PRIVATE;
+    } else {
+      throw new IllegalArgumentException("非法 visibility: " + visibility);
+    }
+    return ApiResponse.ok(catalog.query(q, filter).stream().map(SkillCatalogView::from).toList());
+  }
+
+  @GetMapping("/binding-issues")
+  public ApiResponse<List<SkillBindingIssueView>> bindingIssues() {
+    if (bindings == null) {
+      throw new IllegalStateException("Agent Skill 绑定服务未装配");
+    }
+    return ApiResponse.ok(bindings.reconcile().stream().map(SkillBindingIssueView::from).toList());
   }
 }

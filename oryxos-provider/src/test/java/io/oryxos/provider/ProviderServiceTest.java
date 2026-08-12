@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -116,9 +117,9 @@ class ProviderServiceTest {
     ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
     verify(deepseek).call(captor.capture());
     OpenAiChatOptions options = (OpenAiChatOptions) captor.getValue().getOptions();
-    assertTrue(options.getProxyToolCalls()); // 坑二的回归：一旦有人改回自动执行，这里立刻红
+    assertFalse(options.getInternalToolExecutionEnabled()); // 坑二的回归：一旦有人改回自动执行，这里立刻红
     assertFalse(options.getToolCallbacks().isEmpty()); // 翻译过的 schema 确实带上了
-    assertEquals("http_get", options.getToolCallbacks().get(0).getName());
+    assertEquals("http_get", options.getToolCallbacks().get(0).getToolDefinition().name());
   }
 
   @Test
@@ -180,13 +181,34 @@ class ProviderServiceTest {
   }
 
   @Test
+  void 成功调用的审计失败_向上抛出且不伪装成模型失败() {
+    when(deepseek.call(any(Prompt.class))).thenReturn(textResponse("你好"));
+    doThrow(new IllegalStateException("audit unavailable"))
+        .when(audit)
+        .record(eq("s-1"), eq("deepseek"), eq("model-x"), any(), eq(true), isNull(), anyLong());
+
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> service.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi")));
+
+    assertEquals("audit unavailable", error.getMessage());
+    verify(deepseek, times(1)).call(any(Prompt.class));
+    verify(audit, never())
+        .record(eq("s-1"), eq("deepseek"), eq("model-x"), isNull(), eq(false), any(), anyLong());
+  }
+
+  @Test
   void 模型想调工具_请求被原样透传_本模块零执行() {
     AssistantMessage withToolCall =
-        new AssistantMessage(
-            "",
-            Map.of(),
-            List.of(
-                new AssistantMessage.ToolCall("id-1", "function", "http_get", "{\"url\":\"x\"}")));
+        AssistantMessage.builder()
+            .content("")
+            .properties(Map.of())
+            .toolCalls(
+                List.of(
+                    new AssistantMessage.ToolCall(
+                        "id-1", "function", "http_get", "{\"url\":\"x\"}")))
+            .build();
     when(deepseek.call(any(Prompt.class)))
         .thenReturn(new ChatResponse(List.of(new Generation(withToolCall))));
 
@@ -197,5 +219,40 @@ class ProviderServiceTest {
     assertTrue(response.hasToolCalls());
     assertEquals("http_get", response.toolCalls().get(0).name());
     assertEquals("{\"url\":\"x\"}", response.toolCalls().get(0).argumentsJson()); // 原样，未执行
+  }
+
+  @Test
+  void provider配置变更_ChatModel缓存原地替换不累积() {
+    io.oryxos.core.provider.ProviderRegistry registry =
+        mock(io.oryxos.core.provider.ProviderRegistry.class);
+    java.util.concurrent.atomic.AtomicReference<io.oryxos.core.provider.ProviderDef> current =
+        new java.util.concurrent.atomic.AtomicReference<>(
+            new io.oryxos.core.provider.ProviderDef("deepseek", "key-1", "https://a", null));
+    when(registry.find("deepseek")).thenAnswer(inv -> java.util.Optional.of(current.get()));
+    java.util.concurrent.atomic.AtomicInteger builds =
+        new java.util.concurrent.atomic.AtomicInteger();
+    ChatModel model = mock(ChatModel.class);
+    when(model.call(any(Prompt.class))).thenReturn(textResponse("ok"));
+    ProviderService cachedService =
+        new SpringAiProviderServiceImpl(
+            registry,
+            def -> {
+              builds.incrementAndGet();
+              return model;
+            },
+            new ToolSchemaAdapter(),
+            audit);
+
+    cachedService.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
+    cachedService.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
+    assertEquals(1, builds.get()); // 同配置复用，不重建
+
+    current.set(new io.oryxos.core.provider.ProviderDef("deepseek", "key-2", "https://b", null));
+    cachedService.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
+    assertEquals(2, builds.get()); // 改了 key/url → 重建
+
+    current.set(new io.oryxos.core.provider.ProviderDef("deepseek", "key-1", "https://a", null));
+    cachedService.chat("s-1", profileUsing("deepseek"), ProviderRequest.of("hi"));
+    assertEquals(3, builds.get()); // 换回旧配置也重建——旧条目已被替换而非累积保留
   }
 }

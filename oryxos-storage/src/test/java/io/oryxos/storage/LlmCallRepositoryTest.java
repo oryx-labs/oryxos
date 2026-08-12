@@ -1,8 +1,8 @@
 package io.oryxos.storage;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -76,13 +76,16 @@ class LlmCallRepositoryTest {
   }
 
   @Test
-  void 审计实现自吞异常_不阻断主链路() {
+  void 审计写入失败_必须阻断主链路() {
     LlmCallRepository broken = mock(LlmCallRepository.class);
     when(broken.save(any())).thenThrow(new RuntimeException("db locked"));
     JpaLlmCallAuditor auditor = new JpaLlmCallAuditor(broken);
 
-    // research D5：审计自身失败只记 ERROR，不上抛
-    assertDoesNotThrow(
-        () -> auditor.record("s-3", "deepseek", "m", null, true, null, List.of().size()));
+    IllegalStateException error =
+        assertThrows(
+            IllegalStateException.class,
+            () -> auditor.record("s-3", "deepseek", "m", null, true, null, List.of().size()));
+    assertTrue(error.getMessage().contains("llm_calls"));
+    assertEquals("db locked", error.getCause().getMessage());
   }
 }

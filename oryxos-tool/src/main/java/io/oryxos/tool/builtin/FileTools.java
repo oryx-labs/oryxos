@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.nio.file.StandardCopyOption;
@@ -123,11 +124,14 @@ public class FileTools {
     Pattern regex = Pattern.compile(pattern);
     List<String> matches = new ArrayList<>();
     try (Stream<Path> files = Files.walk(root)) {
-      for (Path file : (Iterable<Path>) files.filter(Files::isRegularFile)::iterator) {
+      // NOFOLLOW_LINKS：白名单根内被植入指向外部的软链接时，链接项不算普通文件，内容不外泄
+      for (Path file : (Iterable<Path>) files.filter(FileTools::isRealRegularFile)::iterator) {
         if (matches.size() >= MAX_MATCHES) {
           matches.add("...（已达 " + MAX_MATCHES + " 条上限，结果截断）");
           break;
         }
+        // 纵深防御：每个实际读取的文件再过一次文件白名单（防根校验到读取间符号链接被替换）
+        sandbox.enforce(new SandboxAction(ActionType.FILE_READ, file.toString()));
         appendMatches(file, regex, matches);
       }
     } catch (IOException e) {
@@ -149,14 +153,24 @@ public class FileTools {
     List<String> hits = new ArrayList<>();
     try (Stream<Path> files = Files.walk(root)) {
       files
-          .filter(Files::isRegularFile)
+          .filter(FileTools::isRealRegularFile)
           .filter(p -> matcher.matches(root.relativize(p)))
           .limit(MAX_MATCHES)
-          .forEach(p -> hits.add(p.toString()));
+          // 每个命中路径再过一次文件白名单（与 grep 同款纵深防御）
+          .forEach(
+              p -> {
+                sandbox.enforce(new SandboxAction(ActionType.FILE_READ, p.toString()));
+                hits.add(p.toString());
+              });
     } catch (IOException e) {
       throw new UncheckedIOException("查找失败: " + path, e);
     }
     return hits.isEmpty() ? "（无匹配）" : String.join("\n", hits);
+  }
+
+  /** 普通文件判定不跟随符号链接：链接项（无论指向内部还是外部）都不作为可读文件参与搜索。 */
+  private static boolean isRealRegularFile(Path file) {
+    return Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS);
   }
 
   private void appendMatches(Path file, Pattern regex, List<String> matches) {

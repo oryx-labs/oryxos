@@ -85,7 +85,7 @@ public class ProfileCommand implements Runnable {
             prompt: 你是一个乐于助人的助手。
           provider:
             name: deepseek
-            model: deepseek-chat
+            model: deepseek-v4-flash
           tools: []
           bootstrap:
             - AGENTS.md

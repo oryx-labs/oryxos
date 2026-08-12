@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.oryxos.core.sandbox.SandboxWhitelist.Category;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -83,13 +84,13 @@ class WhitelistSandboxMutationTest {
 
   @Test
   @DisplayName("增加文件路径_归一为绝对路径后 enforce 放行")
-  void addFileNormalizesPathAndEnforcePasses(@TempDir Path dir) {
+  void addFileNormalizesPathAndEnforcePasses(@TempDir Path dir) throws IOException {
     WhitelistSandbox sb = emptySandbox();
 
     sb.add(Category.FILE, dir.toString());
 
-    // list 返回归一后的绝对路径
-    assertTrue(sb.list(Category.FILE).contains(dir.toAbsolutePath().normalize().toString()));
+    // list 返回解析软连接后的真实根路径（macOS /var → /private/var 也能稳定匹配）
+    assertTrue(sb.list(Category.FILE).contains(dir.toRealPath().toString()));
     assertDoesNotThrow(
         () ->
             sb.enforce(
