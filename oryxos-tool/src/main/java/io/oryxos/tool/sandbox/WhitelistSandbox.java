@@ -37,6 +37,10 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   /** 域名白名单里的通配前缀；命中后转成"以 . 之后部分结尾"的点号边界匹配。 */
   private static final String WILDCARD_PREFIX = "*.";
 
+  private static final String LOCALHOST = "localhost";
+  private static final String GOOGLE_METADATA_HOST = "metadata.google.internal";
+  private static final String INTERNAL_DOMAIN_SUFFIX = ".internal";
+
   // 具体类型 CopyOnWriteArrayList（而非 List 接口）：需要 addIfAbsent 的原子"不存在才加"语义
   private final CopyOnWriteArrayList<Path> allowedRoots = new CopyOnWriteArrayList<>();
   private final Set<String> allowedCommands = ConcurrentHashMap.newKeySet();
