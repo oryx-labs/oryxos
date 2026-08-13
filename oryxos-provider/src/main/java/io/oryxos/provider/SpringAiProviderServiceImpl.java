@@ -65,6 +65,9 @@ public class SpringAiProviderServiceImpl implements ProviderService {
   }
 
   @Override
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志中的 provider 名已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
   public ProviderResponse chat(String sessionId, Profile profile, ProviderRequest request) {
     String providerName = profile.provider().name();
     // 宪法 III：仍是按 name 的显式查找，只是从"启动静态 map"变成"运行时注册表 + 按名动态建/缓存"

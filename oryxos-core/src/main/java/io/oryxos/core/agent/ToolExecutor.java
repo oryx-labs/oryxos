@@ -51,6 +51,9 @@ public class ToolExecutor {
     this.auditor = auditor;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志中的工具名已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
   public ToolResult execute(String sessionId, String agentName, ToolCallRequest call) {
     long startedAt = System.currentTimeMillis();
     OryxTool tool = tools.get(call.name());
@@ -118,6 +121,9 @@ public class ToolExecutor {
     return "Agent 未在 mcp_servers 声明所属 server「" + owner + "」，拒绝调用: " + toolName;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志中的工具名已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
   private ToolResult fail(
       String sessionId, ToolCallRequest call, String errorMessage, long startedAt) {
     // 同成功路径：审计失败不掩盖工具的真实失败原因（否则循环看到的是审计异常而非工具错误）。
