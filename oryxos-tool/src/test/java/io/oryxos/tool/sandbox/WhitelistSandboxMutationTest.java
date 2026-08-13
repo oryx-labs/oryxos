@@ -72,8 +72,7 @@ class WhitelistSandboxMutationTest {
 
     assertTrue(sb.add(Category.SHELL, "python3"));
     assertTrue(sb.list(Category.SHELL).contains("python3"));
-    assertDoesNotThrow(
-        () -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "python3")));
+    assertDoesNotThrow(() -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "python3")));
   }
 
   @Test
