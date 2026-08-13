@@ -30,7 +30,8 @@ import org.slf4j.LoggerFactory;
  * <p>三个 {@code check*} 与 {@code matchesDomain} 均 {@code private}——对外只暴露 {@code enforce} 与管理三方法。 若把
  * check* public 暴露到 {@code Sandbox} 接口上，接口就被这一档实现带偏了。
  */
-public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
+// final：构造器会因非法配置抛异常（normalizeRoot/requireNonBlank），禁止子类化以杜绝 finalizer attack（CT_CONSTRUCTOR_THROW）
+public final class WhitelistSandbox implements Sandbox, SandboxWhitelist {
 
   private static final Logger LOG = LoggerFactory.getLogger(WhitelistSandbox.class);
 

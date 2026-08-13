@@ -38,6 +38,10 @@ public class ShellTools {
     this(sandbox, DEFAULT_TIMEOUT);
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "COMMAND_INJECTION",
+      justification =
+          "默认 ProcessStarter 以 argv 直接执行、不经 shell 解释；可执行文件在 shell() 启动前经 Sandbox 精确白名单校验")
   ShellTools(Sandbox sandbox, Duration timeout) {
     this(sandbox, timeout, command -> new ProcessBuilder(command).start());
   }
@@ -62,7 +66,7 @@ public class ShellTools {
       Process process = processStarter.start(command);
       boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
       if (!finished) {
-        process.destroyForcibly();
+        killTree(process);
         throw new IllegalStateException(
             "命令超时（" + timeout.toSeconds() + "s）被终止: " + commandExecutable);
       }
@@ -106,9 +110,9 @@ public class ShellTools {
     Process start(List<String> command) throws IOException;
   }
 
-  /** 先递归杀 bash 派生的子孙进程，再杀 bash 本身（只 destroyForcibly(bash) 会留孤儿继续执行）。 */
+  /** 先递归杀命令派生的子孙进程，再杀命令本身（只 destroyForcibly 主进程会留孤儿继续执行）。 */
   private static void killTree(Process process) {
-    process.toHandle().descendants().forEach(ProcessHandle::destroyForcibly);
+    process.descendants().forEach(ProcessHandle::destroyForcibly);
     process.destroyForcibly();
   }
 }

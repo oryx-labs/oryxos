@@ -167,6 +167,11 @@ class ShellToolsTest {
       return this;
     }
 
+    @Override
+    public java.util.stream.Stream<ProcessHandle> descendants() {
+      return java.util.stream.Stream.empty(); // 替身无真实 OS 进程，killTree 无子孙可杀
+    }
+
     private boolean wasForciblyDestroyed() {
       return forciblyDestroyed;
     }
