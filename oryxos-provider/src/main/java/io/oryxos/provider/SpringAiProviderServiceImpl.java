@@ -91,7 +91,7 @@ public class SpringAiProviderServiceImpl implements ProviderService {
             e.getMessage(),
             System.currentTimeMillis() - startedAt);
       } catch (RuntimeException auditFailure) {
-        LOG.error("LLM 调用失败的审计落库也失败（主异常照常上抛）: provider={}", providerName, auditFailure);
+        LOG.error("LLM 调用失败的审计落库也失败（主异常照常上抛）: provider={}", sanitize(providerName), auditFailure);
         e.addSuppressed(auditFailure);
       }
       throw e;
@@ -108,9 +108,14 @@ public class SpringAiProviderServiceImpl implements ProviderService {
           null,
           System.currentTimeMillis() - startedAt);
     } catch (RuntimeException auditFailure) {
-      LOG.error("成功 LLM 调用的审计落库失败（结果照常返回）: provider={}", providerName, auditFailure);
+      LOG.error("成功 LLM 调用的审计落库失败（结果照常返回）: provider={}", sanitize(providerName), auditFailure);
     }
     return result;
+  }
+
+  /** 日志参数消毒：去掉换行，防日志伪造（CRLF injection）。 */
+  private static String sanitize(String value) {
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 
   /** 按 provider 名缓存已建的 ChatModel；同名下 key/url 变化即原地重建替换（provider CRUD 改了配置立即生效，旧实例可回收）。 */

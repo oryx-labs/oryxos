@@ -89,7 +89,7 @@ public class ToolExecutor {
             result.success() ? null : result.errorMessage(),
             System.currentTimeMillis() - startedAt);
       } catch (RuntimeException auditFailure) {
-        LOG.error("工具调用审计落库失败（结果照常返回）: tool={}", call.name(), auditFailure);
+        LOG.error("工具调用审计落库失败（结果照常返回）: tool={}", sanitize(call.name()), auditFailure);
       }
       return result;
     } finally {
@@ -131,8 +131,13 @@ public class ToolExecutor {
           errorMessage,
           System.currentTimeMillis() - startedAt);
     } catch (RuntimeException auditFailure) {
-      LOG.error("工具调用失败的审计落库也失败（失败结果照常返回）: tool={}", call.name(), auditFailure);
+      LOG.error("工具调用失败的审计落库也失败（失败结果照常返回）: tool={}", sanitize(call.name()), auditFailure);
     }
     return ToolResult.error(errorMessage, false);
+  }
+
+  /** 日志参数消毒：去掉换行，防日志伪造（CRLF injection）。 */
+  private static String sanitize(String value) {
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 }
