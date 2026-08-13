@@ -93,6 +93,14 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>npm-test</id>
+                        <goals><goal>npm</goal></goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <arguments>test</arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>npm-build</id>
                         <goals><goal>npm</goal></goals>
                         <phase>generate-resources</phase>

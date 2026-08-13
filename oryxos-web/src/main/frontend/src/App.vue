@@ -4,6 +4,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
 import LoginView from './views/LoginView.vue'
+import { isNearBottom } from './chat-scroll.js'
 
 // —— 012-web-auth US3：登录守卫 —— 未登录先查 /api/v1/auth/me；登录页 LoginView 调 /auth/login
 const auth = reactive({ checking: true, enabled: true, username: null })
@@ -1119,9 +1120,10 @@ function resetChat() {
   chat.sending = false
 }
 
-// 会话列表自动滚到底部：新消息到达/历史重载后，把 .chat 容器推到最新一条。
+// 会话列表按需滚到底部：刷新前仍在底部附近才继续跟随，用户上翻历史时保留阅读位置。
 // nextTick 确保 chatTurns 渲染完再读 scrollHeight，否则还是旧值、滚不到底。
-function scrollChatToBottom() {
+function scrollChatToBottom(shouldScroll) {
+  if (!shouldScroll) return
   nextTick(() => {
     const el = chatScrollEl.value
     if (el) el.scrollTop = el.scrollHeight
@@ -1129,6 +1131,7 @@ function scrollChatToBottom() {
 }
 
 async function loadChat() {
+  const shouldScroll = isNearBottom(chatScrollEl.value)
   chat.loading = true; chat.error = null
   try {
     const name = agentDetail.value.name
@@ -1138,7 +1141,7 @@ async function loadChat() {
     chat.sessionId = body.data.sessionId
     chat.messages = body.data.messages || []
   } catch (e) { chat.error = e.message } finally { chat.loading = false }
-  scrollChatToBottom() // 初次进会话看历史、发消息后重载 都走这里，一次覆盖
+  scrollChatToBottom(shouldScroll)
 }
 
 async function sendChat() {
@@ -1745,7 +1748,7 @@ const outputRows = computed(() =>
               <!-- Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
               <div v-else-if="agentDetail.tab === 'chat'">
                 <div class="sess-meta"><span class="mono">{{ chat.sessionId || '（会话尚未创建）' }}</span></div>
-                <p v-if="chat.loading" class="empty">加载中…</p>
+                <p v-if="chat.loading && !chat.messages.length" class="empty">加载中…</p>
                 <p v-else-if="chat.error" class="error">出错：{{ chat.error }}</p>
                 <template v-else>
                   <p v-if="!chat.messages.length" class="empty">（还没有对话，在下面发一条消息开始）</p>
