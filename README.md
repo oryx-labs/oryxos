@@ -282,7 +282,7 @@ All endpoints are prefixed with `/api/v1` and every response is wrapped in a uni
 
 ## Contributing
 
-First PRs are welcome — see the [Contributing Guide](https://oryx-labs.github.io/oryxos/docs/contributing) and the [GitHub workflow primer](https://oryx-labs.github.io/oryxos/docs/github-workflow).
+First PRs are welcome — see the [Contributing Guide](https://oryxos.robustmq.com/docs/contributing) and the [GitHub workflow primer](https://oryxos.robustmq.com/docs/github-workflow).
 
 ## License
 
