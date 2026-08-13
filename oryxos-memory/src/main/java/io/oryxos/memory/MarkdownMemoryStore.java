@@ -135,6 +135,9 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   private static void write(Path file, String content) {
     try {
       Path parent = file.toAbsolutePath().getParent();
+      if (parent == null) { // 只有根路径无父目录；MEMORY.md 不可能是根，这里是防御 + 满足空指针静态分析
+        throw new IllegalArgumentException("MEMORY.md 路径没有父目录: " + file);
+      }
       Files.createDirectories(parent);
       Path tmp = Files.createTempFile(parent, "MEMORY", ".tmp");
       try {
