@@ -108,7 +108,7 @@ Modules communicate through interfaces. Adding a new Channel or Tool implementat
 | 3 | Execution model | Synchronous blocking with Java 21 virtual threads | Straightforward code, high concurrency without reactive programming complexity |
 | 4 | Provider resolution | Dynamic `provider name → ChatModel` map backed by a SQLite registry, cached by `(name\|apiKey\|baseUrl)` | Explicit mapping (never Bean-type scanning) but runtime-mutable, so providers can be added or edited without a restart |
 | 5 | HTTP service layer | Spring MVC + Java 21 virtual threads | Sync-style code, thousands of concurrent requests per node; `SseEmitter` available for streaming in extension phase |
-| 6 | Sandbox strategy | Path/pattern allowlists at the application layer, runtime-manageable | `SecurityManager` is deprecated since JDK 17 and unavailable on JDK 21; full container-level sandbox is extension-phase work |
+| 6 | Sandbox strategy | Path/pattern whitelists at the application layer, runtime-manageable | `SecurityManager` is deprecated since JDK 17 and unavailable on JDK 21; full container-level sandbox is extension-phase work |
 | 7 | Persistence | SQLite + Spring Data JPA for relational data; per-agent `MEMORY.md` for long-term memory | Single binary, no external database process required; audit tables written from day one so auditability is never retrofitted |
 
 ## Tech Stack
