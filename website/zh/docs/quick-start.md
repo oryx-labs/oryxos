@@ -8,6 +8,35 @@
 - **Maven 3.9+**（从源码构建）
 - 至少一个 LLM Provider 的 API Key（DeepSeek、Qwen、Kimi 等）
 
+## Windows 提示
+
+在 Windows（PowerShell）上可以从源码构建并运行，注意：
+
+1. 安装 **JDK 21+** 与 **Maven 3.9+**，并确认 `java -version` / `mvn -version` 可用。
+2. 复制配置文件：
+
+```powershell
+Copy-Item config\application.yml.example config\application.yml
+```
+
+3. 构建：
+
+```powershell
+mvn clean package "-DskipTests"
+```
+
+4. 初始化与启动（在仓库根目录）：
+
+```powershell
+java -jar (Get-ChildItem oryxos-boot\target\oryxos-boot-*.jar | Select-Object -First 1).FullName init
+java -jar (Get-ChildItem oryxos-boot\target\oryxos-boot-*.jar | Select-Object -First 1).FullName serve --port 8080
+```
+
+5. 浏览器打开：`http://localhost:8080/admin/`  
+   健康检查：`http://localhost:8080/api/v1/health`
+
+> `bin/start.sh` 面向 Unix；Windows 上优先用上面的 `java -jar` 方式。密钥请用环境变量（如 `DEEPSEEK_API_KEY`）配合 `${DEEPSEEK_API_KEY}` 占位符，不要把明文 Key 写进仓库。
+
 ## 构建
 
 OryxOS 是 Maven 多模块项目，从源码构建可执行的 boot JAR：

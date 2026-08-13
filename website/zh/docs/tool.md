@@ -45,12 +45,12 @@ OryxOS 核心内置约两打工具——一组精心挑选的**通用原语**，
 | `move_file` | `FileTools` | 移动 / 重命名文件 | 路径白名单（源 + 目标） |
 | `copy_file` | `FileTools` | 复制文件 | 路径白名单（源 + 目标） |
 | `delete_file` | `FileTools` | 删除文件（拒绝删目录） | 路径白名单 |
-| `shell` | `ShellTools` | 执行获准的可执行文件 | 可执行文件白名单 + 超时 |
-| `http_get` / `http_post` | `HttpTools` | HTTP GET / POST | 域名通配符白名单 |
-| `http_request` | `HttpTools` | 任意方法 HTTP（GET/POST/PUT/PATCH/DELETE）+ 请求头 | 域名通配符白名单 |
-| `fetch_webpage` | `HttpTools` | 抓取网页并抽取可读正文（去 HTML） | 域名通配符白名单 |
-| `download_file` | `HttpTools` | 下载 URL 到本地文件 | 域名 + 路径白名单 |
-| `web_search` | `WebSearchTools` | 网络搜索 | 域名通配符白名单 |
+| `shell` | `ShellTools` | 执行 Shell 命令 | 命令白名单 + 元字符扫描 + 超时 |
+| `http_get` / `http_post` | `HttpTools` | HTTP GET / POST | GET：默认放行 + SSRF 黑名单；POST：域名通配符白名单 |
+| `http_request` | `HttpTools` | 任意方法 HTTP（GET/POST/PUT/PATCH/DELETE）+ 请求头 | GET：默认放行 + SSRF；写方法：域名通配符白名单 |
+| `fetch_webpage` | `HttpTools` | 抓取网页并抽取可读正文（去 HTML） | 默认放行 + SSRF 黑名单 |
+| `download_file` | `HttpTools` | 下载 URL 到本地文件 | URL：默认放行 + SSRF；本地路径：路径白名单 |
+| `web_search` | `WebSearchTools` | 网络搜索 | 默认放行 + SSRF 黑名单 |
 | `current_time` | `UtilTools` | 返回指定时区的当前时间 | 无（纯计算） |
 | `json_extract` | `UtilTools` | 从 JSON 文本按路径取值 | 无（纯计算） |
 | `save_memory` | `MemoryTools` | 向 `MEMORY.md` 追加文本 | 无（始终允许） |
@@ -165,7 +165,10 @@ shell:
 
 Shell 白名单是一条独立的能力边界。加入 `python`、`python3`、`sh`、`bash` 等解释器或 Shell，等于授予 Agent 该可执行文件的完整能力，并可能绕过文件与 HTTP 工具策略。因此默认配置刻意不包含它们；只有在脚本可信且确实需要扩大权限时才应显式加入。
 
-**HTTP 域名白名单** — 作用于 `http_get` 和 `http_post`。支持 `*` 作为前缀通配符。
+**HTTP 沙箱（读写分治）** — 自第 32 节起，读请求与写请求策略不同：
+
+- **读**（`http_get`、`http_request` 的 GET、`fetch_webpage`、`web_search`、下载 URL）：**默认放行**，仅用 SSRF 黑名单拦截内网 / 回环 / 云元数据等目标。空的 `http.allowed_domains` **不会**禁止公网 GET。
+- **写**（`http_post`、`http_request` 的非 GET）：走 `http.allowed_domains` 域名通配符白名单。空列表表示写请求 deny-all。支持 `*` 作为前缀通配符。
 
 ```yaml
 http:

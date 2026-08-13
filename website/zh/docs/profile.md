@@ -143,7 +143,7 @@ export DEEPSEEK_API_KEY=sk-...
 | `write_file` | 写文件（路径白名单） |
 | `list_dir` | 列目录（路径白名单） |
 | `shell` | 执行 shell 命令（命令白名单） |
-| `http_get` | HTTP GET（域名白名单） |
+| `http_get` | HTTP GET（默认放行 + SSRF 黑名单） |
 | `http_post` | HTTP POST（域名白名单） |
 | `save_memory` | 向 `MEMORY.md` 追加记忆 |
 | `recall_memory` | 关键词检索 `MEMORY.md` |
