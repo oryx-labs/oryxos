@@ -326,6 +326,14 @@ const skillDetailBodyMd = computed(() =>
 
 // —— 会话详情：点一行会话，拉 GET /sessions/{id} 看完整对话内容 ——
 const sessionDetail = ref(null) // {loading, error, id, data:{sessionId, profileName, messages[]}}
+const sessionDetailScrollEl = ref(null)
+
+function scrollSessionDetailToBottom() {
+  nextTick(() => {
+    const el = sessionDetailScrollEl.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
 
 async function openSession(id) {
   sessionDetail.value = { loading: true, error: null, id, data: null }
@@ -334,6 +342,7 @@ async function openSession(id) {
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '加载失败')
     sessionDetail.value = { loading: false, error: null, id, data: body.data }
+    scrollSessionDetailToBottom()
   } catch (e) {
     sessionDetail.value = { loading: false, error: e.message, id, data: null }
   }
@@ -2137,7 +2146,7 @@ const outputRows = computed(() =>
                     <span class="empty">{{ sessionDetail.data.messages.length }} 条消息</span>
                   </div>
                   <p v-if="!sessionDetail.data.messages.length" class="empty">（该会话暂无对话内容）</p>
-                  <div v-else class="chat">
+                  <div v-else class="chat" ref="sessionDetailScrollEl">
                     <div v-for="(m, i) in sessionDetail.data.messages" :key="i" :class="['msg', m.role]">
                       <div class="msg-role">
                         {{ roleLabel(m.role) }}<span v-if="m.toolName" class="mono tool-name"> · {{ m.toolName }}</span>
