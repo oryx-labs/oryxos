@@ -1,10 +1,14 @@
 package io.oryxos.provider;
 
+import java.net.http.HttpClient;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 
 /**
  * 按全局配置逐条手工构造 ChatModel，产出显式 name→ChatModel 映射表（宪法 III）。
@@ -19,6 +23,15 @@ public class ProviderChatModelFactory {
 
   private static final String SLASH = "/";
   private static final String PATH_V1 = "/v1";
+
+  /** 连接超时（秒）的系统属性名：默认 10，{@code -Doryxos.llm.connect-timeout-seconds=N} 覆盖。 */
+  static final String CONNECT_TIMEOUT_PROP = "oryxos.llm.connect-timeout-seconds";
+
+  /** 读取超时（秒）的系统属性名：默认 120（推理模型长回答留足余量），{@code -Doryxos.llm.read-timeout-seconds=N} 覆盖。 */
+  static final String READ_TIMEOUT_PROP = "oryxos.llm.read-timeout-seconds";
+
+  private static final long DEFAULT_CONNECT_TIMEOUT_SECONDS = 10;
+  private static final long DEFAULT_READ_TIMEOUT_SECONDS = 120;
 
   /** 末尾版本段（如 GLM 的 /api/paas/v4）：此类端点版本在 baseUrl 里，不能再补 /v1。 */
   private static final java.util.regex.Pattern TRAILING_VERSION =
@@ -40,12 +53,29 @@ public class ProviderChatModelFactory {
     }
     // baseUrl 约定不含 /v1：OpenAiApi 内部会追加 /v1/chat/completions；用户填带 /v1 则先剥离，避免双 /v1（fix-issue-47）
     String base = stripTrailingV1(baseUrl);
-    OpenAiApi.Builder api = OpenAiApi.builder().baseUrl(base).apiKey(apiKey);
+    OpenAiApi.Builder api =
+        OpenAiApi.builder()
+            .baseUrl(base)
+            .apiKey(apiKey)
+            .restClientBuilder(RestClient.builder().requestFactory(timeoutFactory()));
     if (TRAILING_VERSION.matcher(base).matches()) {
       // 端点版本在 baseUrl 里（如 GLM 的 /api/paas/v4），改补无版本的 /chat/completions
       api.completionsPath("/chat/completions");
     }
     return OpenAiChatModel.builder().openAiApi(api.build()).build();
+  }
+
+  /** 带连接/读取超时的请求工厂：默认 RestClient 无超时，端点挂死会把同步 ReAct 循环连带会话永久卡住。构建时读属性，不在类加载期固化。 */
+  static JdkClientHttpRequestFactory timeoutFactory() {
+    Duration connectTimeout =
+        Duration.ofSeconds(Long.getLong(CONNECT_TIMEOUT_PROP, DEFAULT_CONNECT_TIMEOUT_SECONDS));
+    Duration readTimeout =
+        Duration.ofSeconds(Long.getLong(READ_TIMEOUT_PROP, DEFAULT_READ_TIMEOUT_SECONDS));
+    JdkClientHttpRequestFactory factory =
+        new JdkClientHttpRequestFactory(
+            HttpClient.newBuilder().connectTimeout(connectTimeout).build());
+    factory.setReadTimeout(readTimeout);
+    return factory;
   }
 
   /**

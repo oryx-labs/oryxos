@@ -151,7 +151,7 @@ public class AgentLifecycleService {
         prompt: 你是一个天气播报助手，简洁给出天气与穿搭提示。
       provider:
         name: deepseek
-        model: deepseek-chat
+        model: deepseek-v4-flash
       tools:
         - http_get
         - notify

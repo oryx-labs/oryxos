@@ -13,7 +13,7 @@ OryxOS 打包为一个可执行 JAR，所有操作都通过 `oryxos` 命令的�
 mvn -pl oryxos-boot -am package -DskipTests
 
 # 运行（下文所有 oryxos 命令均指这个别名）
-alias oryxos='java -jar /path/to/oryxos/oryxos-boot/target/oryxos-boot-1.0.0-SNAPSHOT.jar'
+alias oryxos='java -jar /path/to/oryxos/oryxos-boot/target/oryxos-boot-*.jar'
 
 oryxos --help      # 总览
 oryxos --version   # 版本与 JVM/OS 信息

@@ -106,7 +106,7 @@ Map<String, ChatModel> providerMap = Map.of(
 
 `SecurityManager` 在 JDK 17 起废弃、JDK 21 已不可用。Sandbox 通过 `SandboxChecker` 的 Path / Pattern 白名单实现：
 - 文件操作：路径白名单（`file.allowed_paths`）
-- Shell：命令首 token 白名单（`shell.allowed_commands`）
+- Shell：可执行文件精确白名单（`shell.allowed_commands`）；参数以 argv 直传，不解释 Shell 语法。将解释器列入白名单是管理员对本机代码执行权限的显式授予，不构成隔离
 - HTTP：域名通配符白名单（`http.allowed_domains`）
 
 文件目标存在时必须用 `toRealPath()` 校验真实路径仍位于白名单根；新建路径校验最近存在父目录的真实路径。Agent Skill 绑定只允许指向 `.oryxos/skills/` 的相对软连接，拒绝绝对链接和越界链接。

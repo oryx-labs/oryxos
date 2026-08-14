@@ -645,7 +645,7 @@ Returns all tools registered in the `ToolRegistry` — built-in tools plus any t
 // data — ToolView[]
 [
   { "name": "read_file", "description": "Read a file from the filesystem (path whitelist enforced)" },
-  { "name": "shell",     "description": "Execute a shell command (allowlist and metacharacter checks enforced)" },
+  { "name": "shell",     "description": "Execute a shell command (command whitelist and metacharacter checks enforced)" },
   { "name": "notify",    "description": "Push a message to a registered notify channel by name" }
 ]
 ```

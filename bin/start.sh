@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" # 工作区（.oryxos/、oryxos.db、config/）都相对 CWD，必须在项目根跑
 
 PORT="${1:-8080}"
-JAR="$(find "$ROOT/oryxos-boot/target" -maxdepth 1 -name 'oryxos-boot-*.jar' 2>/dev/null | head -1 || true)"
+JAR="$(find "$ROOT/oryxos-boot/target" -maxdepth 1 -name 'oryxos-boot-*.jar' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1 || true)"
 CONFIG="$ROOT/config/application.yml"
 PIDFILE="$ROOT/bin/oryxos.pid"
 LOG="$ROOT/logs/oryxos.log"

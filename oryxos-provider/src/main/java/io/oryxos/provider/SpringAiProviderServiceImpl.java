@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
@@ -35,12 +37,18 @@ import org.springframework.ai.tool.ToolCallback;
  */
 public class SpringAiProviderServiceImpl implements ProviderService {
 
+  private static final Logger LOG = LoggerFactory.getLogger(SpringAiProviderServiceImpl.class);
+
   private final ProviderRegistry registry;
   private final Function<ProviderDef, ChatModel> chatModelBuilder;
   private final ToolSchemaAdapter adapter;
   private final LlmCallAuditor audit;
-  // 已建的 ChatModel 缓存：key = name|apiKey|baseUrl；provider 改了 key/url（缓存键变）→ 下次自动重建（31 节动态 provider）
-  private final Map<String, ChatModel> cache = new ConcurrentHashMap<>();
+  // 已建的 ChatModel 缓存：key = provider name，值携带配置指纹（apiKey|baseUrl）。指纹变了原地替换旧条目——
+  // 缓存大小恒等于 provider 数，反复改 key/url 不再累积不可回收的旧实例（31 节动态 provider）。
+  private final Map<String, CachedModel> cache = new ConcurrentHashMap<>();
+
+  /** 缓存条目：配置指纹 + 已建实例，指纹不变则复用。 */
+  private record CachedModel(String fingerprint, ChatModel model) {}
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
@@ -57,6 +65,9 @@ public class SpringAiProviderServiceImpl implements ProviderService {
   }
 
   @Override
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志中的 provider 名已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
   public ProviderResponse chat(String sessionId, Profile profile, ProviderRequest request) {
     String providerName = profile.provider().name();
     // 宪法 III：仍是按 name 的显式查找，只是从"启动静态 map"变成"运行时注册表 + 按名动态建/缓存"
@@ -70,7 +81,9 @@ public class SpringAiProviderServiceImpl implements ProviderService {
       ChatResponse response = model.call(prompt);
       result = toProviderResponse(response);
     } catch (RuntimeException e) {
-      // 失败也留痕（宪法 V）：先落审计再上抛——只记成功不记失败，一次真实事故就没有痕迹
+      // 失败也留痕（宪法 V）：先落审计再上抛——只记成功不记失败，一次真实事故就没有痕迹。
+      // 审计自身再失败也不许反客为主：上抛的必须是模型调用的真实异常（排障首先看到的是「LLM 调 400」
+      // 而非「审计存储抖动」），审计异常挂 suppressed + ERROR 日志独立告警。
       try {
         audit.record(
             sessionId,
@@ -81,27 +94,44 @@ public class SpringAiProviderServiceImpl implements ProviderService {
             e.getMessage(),
             System.currentTimeMillis() - startedAt);
       } catch (RuntimeException auditFailure) {
-        auditFailure.addSuppressed(e);
-        throw auditFailure;
+        LOG.error("LLM 调用失败的审计落库也失败（主异常照常上抛）: provider={}", sanitize(providerName), auditFailure);
+        e.addSuppressed(auditFailure);
       }
       throw e;
     }
-    // 成功审计放在模型异常边界之外，避免审计失败被误记成一次模型调用失败。
-    audit.record(
-        sessionId,
-        providerName,
-        profile.provider().model(),
-        result.usage(),
-        true,
-        null,
-        System.currentTimeMillis() - startedAt);
+    // 成功审计 fail-open：调用已成功、token 已消耗，审计存储抖动不应让调用方丢掉这次完整回答
+    // （宪法 V 约束的是实现上不许省审计，不是拿审计故障牺牲用户请求）；失败走 ERROR 日志独立告警。
+    try {
+      audit.record(
+          sessionId,
+          providerName,
+          profile.provider().model(),
+          result.usage(),
+          true,
+          null,
+          System.currentTimeMillis() - startedAt);
+    } catch (RuntimeException auditFailure) {
+      LOG.error("成功 LLM 调用的审计落库失败（结果照常返回）: provider={}", sanitize(providerName), auditFailure);
+    }
     return result;
   }
 
-  /** 按 name+key+url 缓存构建好的 ChatModel；参数变化即换缓存键、下次重建（provider CRUD 改了配置立即生效）。 */
+  /** 日志参数消毒：去掉换行，防日志伪造（CRLF injection）。 */
+  private static String sanitize(String value) {
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
+  }
+
+  /** 按 provider 名缓存已建的 ChatModel；同名下 key/url 变化即原地重建替换（provider CRUD 改了配置立即生效，旧实例可回收）。 */
   private ChatModel resolveModel(ProviderDef def) {
-    String cacheKey = def.name() + "|" + def.apiKey() + "|" + def.baseUrl();
-    return cache.computeIfAbsent(cacheKey, k -> chatModelBuilder.apply(def));
+    String fingerprint = def.apiKey() + "|" + def.baseUrl();
+    return cache
+        .compute(
+            def.name(),
+            (name, cached) ->
+                cached != null && cached.fingerprint().equals(fingerprint)
+                    ? cached
+                    : new CachedModel(fingerprint, chatModelBuilder.apply(def)))
+        .model();
   }
 
   private Prompt buildPrompt(Profile profile, ProviderRequest request) {

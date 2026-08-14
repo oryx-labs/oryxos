@@ -3,7 +3,6 @@ package io.oryxos.core.agent;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -63,22 +62,39 @@ class ToolExecutorTest {
   }
 
   @Test
-  @DisplayName("审计失败向上抛出且不重试工具或审计")
-  void auditFailurePropagatesWithoutRetry() {
+  @DisplayName("审计失败不上抛：结果照常返回、不重试工具或审计")
+  void auditFailureDoesNotMaskToolResult() {
     when(httpGet.execute(any())).thenReturn(ToolResult.ok("ok"));
     doThrow(new IllegalStateException("audit unavailable"))
         .when(auditor)
         .record(eq("s-1"), eq("http_get"), anyString(), eq("ok"), eq(true), isNull(), anyLong());
 
-    IllegalStateException error =
-        assertThrows(
-            IllegalStateException.class,
+    // 工具已执行完、副作用已发生：审计存储抖动不能让循环把这次执行当失败（否则模型可能重调有副作用的工具）
+    ToolResult result =
+        assertDoesNotThrow(
             () -> executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "{}")));
 
-    assertEquals("audit unavailable", error.getMessage());
+    assertTrue(result.success());
+    assertEquals("ok", result.content());
     verify(httpGet, times(1)).execute(any());
     verify(auditor, times(1))
         .record(eq("s-1"), eq("http_get"), anyString(), eq("ok"), eq(true), isNull(), anyLong());
+  }
+
+  @Test
+  @DisplayName("工具失败且审计也失败：返回的仍是工具的真实错误")
+  void auditFailureOnFailPathKeepsToolError() {
+    when(httpGet.execute(any())).thenThrow(new RuntimeException("connect timeout"));
+    doThrow(new IllegalStateException("audit unavailable"))
+        .when(auditor)
+        .record(any(), anyString(), any(), any(), eq(false), anyString(), anyLong());
+
+    ToolResult result =
+        assertDoesNotThrow(
+            () -> executor.execute("s-1", "agent-x", new ToolCallRequest("http_get", "{}")));
+
+    assertFalse(result.success());
+    assertTrue(result.errorMessage().contains("connect timeout")); // 审计异常不掩盖工具错误
   }
 
   @Test

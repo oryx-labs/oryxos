@@ -66,6 +66,16 @@ class WhitelistSandboxMutationTest {
   }
 
   @Test
+  @DisplayName("运行时管理可显式授予解释器 Shell 执行权限")
+  void addInterpreterAllowsExecution() {
+    WhitelistSandbox sb = emptySandbox();
+
+    assertTrue(sb.add(Category.SHELL, "python3"));
+    assertTrue(sb.list(Category.SHELL).contains("python3"));
+    assertDoesNotThrow(() -> sb.enforce(new SandboxAction(ActionType.SHELL_COMMAND, "python3")));
+  }
+
+  @Test
   @DisplayName("删除不存在条目_返回 false 不报错")
   void removeNonexistentReturnsFalse() {
     WhitelistSandbox sb = emptySandbox();
