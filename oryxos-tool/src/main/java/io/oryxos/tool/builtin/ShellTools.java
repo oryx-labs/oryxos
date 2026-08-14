@@ -52,14 +52,6 @@ public class ShellTools {
     this.processStarter = Objects.requireNonNull(processStarter, "processStarter 不能为空");
   }
 
-  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-      value = "COMMAND_INJECTION",
-      justification =
-          "ProcessBuilder 以 argv 列表启动，不经 shell；可执行文件在 shell() 内经 Sandbox 精确白名单校验后再 start")
-  private static Process startProcess(List<String> command) throws IOException {
-    return new ProcessBuilder(command).start();
-  }
-
   @Tool(name = "shell", description = "执行一个已获许可的可执行文件，返回标准输出")
   public String shell(
       @ToolParam(description = "要执行的、已在白名单中的可执行文件") String executable,
