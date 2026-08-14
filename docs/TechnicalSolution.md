@@ -278,7 +278,7 @@ OryxOS 内部统一的 Tool 抽象接口。内置 Tool、`@Tool` 注解的 Plugi
 核心阶段提供九个内置 Tool，分五组：
 
 - **`FileTools`**：`read_file`、`write_file`、`list_dir`，执行前调用 `Sandbox.enforce(...)` 做路径白名单检查
-- **`ShellTools`**：`shell` Tool 执行 bash 命令，带超时和命令白名单
+- **`ShellTools`**：`shell` Tool 直接执行白名单内的可执行文件与参数数组，带超时；不经 Shell 解释
 - **`HttpTools`**：`http_get`、`http_post`，带域名白名单
 - **`MemoryTools`**：`save_memory`、`recall_memory`（归 Memory 模块，但作为内置 Tool 注册）
 - **`NotifyTools`**：`notify`（把消息推送到全局注册表中按名引用的通知渠道，详见 6.8）
@@ -333,7 +333,7 @@ ActionType     = FILE_READ | FILE_WRITE | SHELL_COMMAND | HTTP_REQUEST
 **`WhitelistSandbox`（核心阶段唯一实现）。** 配置在 `application.yaml`（`file.allowed_paths`、`shell.allowed_commands`、`http.allowed_domains`），内部按 `ActionType` 路由到三个私有校验方法：
 
 - `checkFilePath`（路径标准化后比对白名单，需处理 `../` 路径穿越）
-- `checkShellCommand`（拆出命令首个 token 比对白名单）
+- `checkShellCommand`（精确比对可执行文件白名单；解释器仅在管理员显式列入时允许，并授予宿主机进程权限）
 - `checkHttpUrl`（解析 host 后做通配符匹配）
 
 任意校验失败抛 `SandboxViolationException`，Tool 执行终止；异常信息直接复用 `ToolExecutor` 已有的失败审计路径写入 `tool_invocations`（`success=false`、`error_message`），不需要为 Sandbox 单独新增审计逻辑。
@@ -689,7 +689,7 @@ mvn clean package
 
 **派生 Profile**：底座（第 1~10 章的一切）都吃 `Profile`，所以 `AgentLoader.deriveProfile(agentDir)` 把 `AGENT.md` 的 frontmatter 映射成一个 `Profile`，让 Agent 目录**零改动复用整台底座**。
 
-**渐进式披露**：L1 每轮注入当前 Agent 已绑定 Skill 的 name、description 和本地绝对路径；L2 模型命中后 `read_file` 读取 `SKILL.md` 正文；L3 再按正文引用读取 references/模板或运行脚本。未绑定 Skill 不进入 Agent prompt；不新增 `use_skill`，Skill 不进 `ToolRegistry`。
+**渐进式披露（收进一个 Agent 内部）**：Agent 的**正文**在被触发时进 system prompt（它就是这个 Agent 的"人格 + 干什么"）；目录里的**子指令 / 参考 / 脚本不预载**，按正文指引**用底座既有能力按需取**——读子指令 / 参考用 `read_file`；在可信单机部署中，脚本可通过 `shell` 调用管理员显式白名单内的解释器。该操作以 OryxOS 进程的操作系统权限运行，不构成文件或网络隔离；不可信或多租户代码应使用未来基于容器/MicroVM 的 `execute_code` Runner。没有新工具、没有能力库、没有全局索引。
 
 > **底线不变（宪法原则四）**：`AGENT.md` 正文由 `ContextLoader` 注入 system prompt（与 Bootstrap 文件同层）；**一个 Agent 目录不是一个可执行 Tool**——它的子资源经底座既有的 `read_file`/`shell` 取用，不新造机制。
 
@@ -771,14 +771,14 @@ mvn clean package
 
 **场景：** 每天早上 9:30，Agent 自动抓 GitHub 今日与本月热门项目、专挑 AI 相关做总结并推送。这个 Demo 演一个 Agent 目录里**捆绑一个脚本**：Agent 跑脚本拿确定性数据。
 
-1. 业务方**写一个带脚本的 Agent 目录** `.oryxos/agents/github-daily/`：`AGENT.md`（frontmatter：`tools:[shell, notify]` + 每天 09:30 的 `schedules`；正文"跑脚本 → 组三段日报 → notify"）+ `scripts/github_trending.py`（免 token 用 GitHub Search API 按日期区间 + stars 近似 trending）
+1. 业务方**写一个带脚本的 Agent 目录** `.oryxos/agents/github-daily/`：`AGENT.md`（frontmatter：`tools:[github_daily, notify]` + 每天 09:30 的 `schedules`；正文"获取数据 → 组三段日报 → notify"）+ `scripts/github_trending.py`（免 token 用 GitHub Search API 按日期区间 + stars 近似 trending）；该脚本由 `github_daily` MCP 或专用 Tool 封装，而非交给通用 `shell`。
 2. 到点触发，`PromptBuilder` 注入 `AGENT.md` 正文
-3. LLM 按正文调 `shell` 跑 `python scripts/github_trending.py`——`Sandbox.enforce` 校验 `shell.allowed_commands` 放行 `python`、`file.allowed_paths` 限定到该 Agent 的 `scripts/` 目录；脚本自己请求 `api.github.com` 拿数据、返回 JSON。**脚本产出的 JSON 进上下文、脚本代码不进**，写 `tool_invocations`
+3. LLM 按正文调 `github_daily` 获取 JSON；该 MCP 或专用 Tool 自己定义输入、脚本访问范围和网络策略，并通过 `ToolExecutor` 写 `tool_invocations`。**脚本产出的 JSON 进上下文、脚本代码不进**。
 4. LLM 用 JSON + 记忆偏好组织三段日报（今日 / 本月 / AI 重点），调 `notify` 推送
 
-> **脚本的信任边界（呼应 11.1 与宪法原则四）**：第 3 步里脚本经 `python` 子进程自己发网络请求，**绕过了 `http_get` 的域名白名单**（白名单只管内置 `http_get` 工具）。所以**装一个带脚本的 Agent = 信任这个 Agent 的作者**（与 Anthropic 一致）。核心阶段沙箱对脚本只做"解释器 + 脚本目录"两道白名单，容器 / 网络隔离留扩展阶段。做 Agent OS 要对这条诚实：能跑第三方 Agent 很强，但信任从"底座"挪到了"Agent 作者"。
+> **脚本的信任边界（呼应 11.1 与宪法原则四）**：通用 `shell` 可调用管理员显式白名单内的 Python、Bash、Node 等解释器，但这等于授予模型 OryxOS 进程所属操作系统用户的代码执行权限。argv 直传只阻止 Shell 语法拼接，不会隔离解释器的文件或网络行为。对不可信或多租户代码，应使用未来基于容器/MicroVM 的 `execute_code` Runner；在此之前，只能在可信单机部署中启用解释器。
 
-**验收要点：** `tool_invocations` 里有 `shell` 跑脚本；脚本产出进上下文、代码不进；AI 段体现记忆偏好；改一下 `AGENT.md` 正文即时生效。
+**验收要点：** `tool_invocations` 里有 `github_daily` 调用；脚本产出进上下文、代码不进；AI 段体现记忆偏好；改一下 `AGENT.md` 正文即时生效。
 
 涉及 Agent 目录脚本（`shell` 跑捆绑脚本 + 沙箱信任边界）+ 能力二（ReAct）+ 能力三（Memory）+ 定时任务 + 内置 `NotifyTools`。
 

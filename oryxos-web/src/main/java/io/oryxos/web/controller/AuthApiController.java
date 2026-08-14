@@ -64,7 +64,9 @@ public class AuthApiController {
     this.loginAttemptService = loginAttemptService;
   }
 
-  /** 登录：验账密 → 建 session → 设 cookie。失败 401（"Invalid username or password"，不区分原因防枚举）。 */
+  /**
+   * 登录：验账密 → 废旧 session → 建新 session → 设 cookie。失败 401（"Invalid username or password"，不区分原因防枚举）。
+   */
   @PostMapping("/login")
   public ApiResponse<AuthMeView> login(
       @RequestBody LoginRequest loginRequest,
@@ -91,6 +93,8 @@ public class AuthApiController {
       return ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Invalid username or password");
     }
     loginAttemptService.onSuccess(attemptKey);
+    // 重新登录废掉旧 session：旧 id 不能继续用，也不在库里堆孤儿行等自然过期。
+    findSessionId(request).ifPresent(sessionService::delete);
     WebSession session = sessionService.create(loginRequest.username());
     response.addHeader(
         HttpHeaders.SET_COOKIE, buildCookie(session.getSessionId(), -1, request.isSecure()));

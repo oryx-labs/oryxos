@@ -3,7 +3,7 @@ package io.oryxos.tool.sandbox;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/** Shell 命令白名单配置（键 {@code shell.allowed_commands}）。比对命令首 token；空列表 = deny-all。 */
+/** Shell 可执行文件白名单配置（键 {@code shell.allowed_commands}）。精确比对可执行文件；空列表 = deny-all。 */
 @ConfigurationProperties(prefix = "shell")
 public record ShellSandboxProperties(List<String> allowedCommands) {
 

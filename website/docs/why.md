@@ -10,7 +10,7 @@ Why? Four barriers, none of which is the model:
 
 **The data has to leave.** Cloud agent platforms solve infrastructure by taking your data with it. For any company with data-residency, network-perimeter, or audit obligations, that's a non-starter.
 
-**It's a black box.** An agent that can run shell commands, write files, and call external APIs — with no record of what it did, no allowlist on what it *can* do, and no one approving the dangerous steps — is not something an enterprise can put into production.
+**It's a black box.** An agent that can run shell commands, write files, and call external APIs — with no record of what it did, no whitelist on what it *can* do, and no one approving the dangerous steps — is not something an enterprise can put into production.
 
 **One agent is easy. A fleet is not.** A single wrapped LLM loop is a script. Running dozens of agents — with shared providers, shared tools, schedules, lifecycle, and governance — is an operating-systems problem, and almost nobody hands you that layer.
 
@@ -22,7 +22,7 @@ OryxOS removes all four barriers at once:
 
 - **Plain language instead of code.** One sentence — or one markdown directory — defines an agent. The OS supplies everything else: memory, 24 built-in tools, MCP connectors, skills, notifications, scheduling. The cost of defining an agent trends toward zero.
 - **Your infrastructure, your data.** One self-hosted binary on your own servers or K8s. No managed service, no telemetry, no cloud lock-in.
-- **Glass box, not black box.** Every tool call and every LLM call is persisted to the audit tables from day one — what was invoked, with what arguments, what came back, how long it took. Sandbox allowlists gate files, shell, and HTTP. Governance is the foundation, not a bolt-on.
+- **Glass box, not black box.** Every tool call and every LLM call is persisted to the audit tables from day one — what was invoked, with what arguments, what came back, how long it took. Sandbox whitelists gate files, shell, and HTTP. Governance is the foundation, not a bolt-on.
 - **An OS for the fleet.** Agents are processes; OryxOS is the operating system — lifecycle, routing, shared registries, scheduling, console, and API for all of them at once.
 
 **So every company can run its own agents — in plain language.**
@@ -39,7 +39,7 @@ The industry has proven the pattern works (planner–worker–reviewer crews, ag
 
 ## Why an OS, not another framework
 
-The common assumption is that better agents need better models. In production, the bottleneck is the **harness** — the scaffolding between the model and the real world: the right context assembled before every call, tools that are allowlisted rather than open-ended, execution that is isolated and audited, and messages that reliably reach their destination.
+The common assumption is that better agents need better models. In production, the bottleneck is the **harness** — the scaffolding between the model and the real world: the right context assembled before every call, tools that are whitelisted rather than open-ended, execution that is isolated and audited, and messages that reliably reach their destination.
 
 A framework gives you one harness inside your own code. OryxOS ships the harness *as infrastructure* and runs a fleet on top of it — which is what changes who can use it: with a framework, engineers build agents; with an OS, **anyone who can describe the work** runs agents.
 

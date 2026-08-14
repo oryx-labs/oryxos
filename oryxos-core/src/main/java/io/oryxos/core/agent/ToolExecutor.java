@@ -8,6 +8,8 @@ import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.ToolCallRequest;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 工具执行的唯一路径（宪法 I/II：执行权只在这里，Provider 侧自动执行已关闭）。
@@ -23,6 +25,8 @@ import java.util.Map;
     value = "EI_EXPOSE_REP2",
     justification = "profileRegistry 是 Spring 注入的共享单例，构造注入共享同一引用正是意图（无法也不应防御性拷贝）。")
 public class ToolExecutor {
+
+  private static final Logger LOG = LoggerFactory.getLogger(ToolExecutor.class);
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -47,6 +51,9 @@ public class ToolExecutor {
     this.auditor = auditor;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志中的工具名已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
   public ToolResult execute(String sessionId, String agentName, ToolCallRequest call) {
     long startedAt = System.currentTimeMillis();
     OryxTool tool = tools.get(call.name());
@@ -73,15 +80,20 @@ public class ToolExecutor {
       } catch (RuntimeException e) {
         return fail(sessionId, call, e.getMessage(), startedAt);
       }
-      // 审计异常不属于工具异常，必须向上抛出，不能重试工具或伪造第二条失败审计。
-      auditor.record(
-          sessionId,
-          call.name(),
-          call.argumentsJson(),
-          result.success() ? result.content() : null,
-          result.success(),
-          result.success() ? null : result.errorMessage(),
-          System.currentTimeMillis() - startedAt);
+      // 审计 fail-open：工具已执行完、副作用已发生，审计存储抖动不应让循环把这次执行当失败处理（否则模型可能
+      // 重调一次有副作用的工具）；不重试审计也不伪造第二条失败审计，失败走 ERROR 日志独立告警。
+      try {
+        auditor.record(
+            sessionId,
+            call.name(),
+            call.argumentsJson(),
+            result.success() ? result.content() : null,
+            result.success(),
+            result.success() ? null : result.errorMessage(),
+            System.currentTimeMillis() - startedAt);
+      } catch (RuntimeException auditFailure) {
+        LOG.error("工具调用审计落库失败（结果照常返回）: tool={}", sanitize(call.name()), auditFailure);
+      }
       return result;
     } finally {
       ToolExecutionContext.clear();
@@ -109,16 +121,29 @@ public class ToolExecutor {
     return "Agent 未在 mcp_servers 声明所属 server「" + owner + "」，拒绝调用: " + toolName;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志中的工具名已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
   private ToolResult fail(
       String sessionId, ToolCallRequest call, String errorMessage, long startedAt) {
-    auditor.record(
-        sessionId,
-        call.name(),
-        call.argumentsJson(),
-        null,
-        false,
-        errorMessage,
-        System.currentTimeMillis() - startedAt);
+    // 同成功路径：审计失败不掩盖工具的真实失败原因（否则循环看到的是审计异常而非工具错误）。
+    try {
+      auditor.record(
+          sessionId,
+          call.name(),
+          call.argumentsJson(),
+          null,
+          false,
+          errorMessage,
+          System.currentTimeMillis() - startedAt);
+    } catch (RuntimeException auditFailure) {
+      LOG.error("工具调用失败的审计落库也失败（失败结果照常返回）: tool={}", sanitize(call.name()), auditFailure);
+    }
     return ToolResult.error(errorMessage, false);
+  }
+
+  /** 日志参数消毒：去掉换行，防日志伪造（CRLF injection）。 */
+  private static String sanitize(String value) {
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 }

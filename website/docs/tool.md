@@ -46,11 +46,11 @@ About two dozen tools ship with OryxOS core — a set of **universal primitives*
 | `copy_file` | `FileTools` | Copy a file | Path whitelist (source + target) |
 | `delete_file` | `FileTools` | Delete a file (never a directory) | Path whitelist |
 | `shell` | `ShellTools` | Execute a shell command | Command whitelist + metacharacter scan + timeout |
-| `http_get` / `http_post` | `HttpTools` | HTTP GET / POST | Domain wildcard whitelist |
-| `http_request` | `HttpTools` | HTTP with any method (GET/POST/PUT/PATCH/DELETE) + headers | Domain wildcard whitelist |
-| `fetch_webpage` | `HttpTools` | Fetch a URL and extract readable text (strip HTML) | Domain wildcard whitelist |
-| `download_file` | `HttpTools` | Download a URL to a local file | Domain + path whitelist |
-| `web_search` | `WebSearchTools` | Search the web | Domain wildcard whitelist |
+| `http_get` / `http_post` | `HttpTools` | HTTP GET / POST | GET: default allow + SSRF blocklist; POST: domain wildcard whitelist |
+| `http_request` | `HttpTools` | HTTP with any method (GET/POST/PUT/PATCH/DELETE) + headers | GET: default allow + SSRF; write methods: domain wildcard whitelist |
+| `fetch_webpage` | `HttpTools` | Fetch a URL and extract readable text (strip HTML) | Default allow + SSRF blocklist |
+| `download_file` | `HttpTools` | Download a URL to a local file | URL: default allow + SSRF; local path: path whitelist |
+| `web_search` | `WebSearchTools` | Search the web | Default allow + SSRF blocklist |
 | `current_time` | `UtilTools` | Current date/time in a timezone | None (pure) |
 | `json_extract` | `UtilTools` | Extract a value from JSON text by path | None (pure) |
 | `save_memory` | `MemoryTools` | Append text to `MEMORY.md` | None (always allowed) |
@@ -141,7 +141,16 @@ file:
     - /tmp/oryxos
 ```
 
-**Shell command whitelist** — applies to `shell`. The executable (first token) must be listed, and shell control, substitution, and redirection metacharacters such as `;`, `&&`, `|`, `$()`, backticks, newlines, and `>` are rejected. Quoted literal punctuation remains valid. Arguments are not independently restricted.
+**Shell executable whitelist** — applies to `shell`. Its input is structured: an allowlisted `executable` and an `arguments` array. `ShellTools` passes the argv directly to `ProcessBuilder`; it does not invoke a shell or interpret pipes, redirects, substitutions, or command separators.
+
+```json
+{
+  "executable": "grep",
+  "arguments": ["-R", "TODO", "src"]
+}
+```
+
+Adding a shell interpreter or language runtime is an explicit administrator grant of code-execution authority: the model can run code with the OS identity of the OryxOS process. Direct argv execution prevents shell-syntax injection, but it does not isolate the interpreter's file or network effects. Use a container/MicroVM-backed `execute_code` runner for untrusted or multi-tenant code; that runner is planned, not implemented yet.
 
 ```yaml
 shell:
@@ -150,11 +159,16 @@ shell:
     - cat
     - echo
     - grep
+    - python3 # trusted-local code execution; not an isolation boundary
+  timeout_seconds: 30
 ```
 
 The shell whitelist is an independent capability boundary. Adding an interpreter or shell such as `python`, `python3`, `sh`, or `bash` grants the agent the capabilities of that executable and can bypass the file and HTTP tool policies. They are deliberately excluded from the default configuration. Add such entries only for trusted scripts and only when that broader authority is intentional.
 
-**HTTP domain whitelist** — applies to `http_get` and `http_post`. Supports `*` as a prefix wildcard.
+**HTTP sandbox (read/write split)** — since section 32, read and write requests use different policies:
+
+- **Read** (`http_get`, GET via `http_request`, `fetch_webpage`, `web_search`, download URLs): **allow by default**, with an SSRF blocklist for private/loopback/cloud-metadata targets. An empty `http.allowed_domains` does **not** block public GETs.
+- **Write** (`http_post`, non-GET `http_request`): `http.allowed_domains` domain wildcard whitelist. An empty list means deny-all for writes. Supports `*` as a prefix wildcard.
 
 ```yaml
 http:

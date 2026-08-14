@@ -144,7 +144,7 @@ Built-in tool names:
 | `write_file` | Write a file (path whitelist enforced) |
 | `list_dir` | List directory contents (path whitelist enforced) |
 | `shell` | Execute a shell command (command whitelist enforced) |
-| `http_get` | HTTP GET request (domain whitelist enforced) |
+| `http_get` | HTTP GET request (default allow + SSRF blocklist) |
 | `http_post` | HTTP POST request (domain whitelist enforced) |
 | `save_memory` | Append a note to `MEMORY.md` |
 | `recall_memory` | Keyword search over `MEMORY.md` |

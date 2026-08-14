@@ -55,7 +55,7 @@ Two layers today. Session memory holds the conversation history, persisted and r
 
 ### Tool System
 
-**24 built-in tools** cover the baseline: file operations (read / write / list / append / move / copy / delete / mkdir), shell, HTTP (get / post / arbitrary request / fetch-webpage / download), time and JSON utilities, memory, and `notify`. All execute under sandbox enforcement — path allowlist for files, command allowlist for shell, domain allowlist for HTTP — with every invocation audited. The `notify` tool pushes to named channels (Feishu / WeCom / DingTalk / generic webhook), themselves a dynamic registry with full CRUD.
+**24 built-in tools** cover the baseline: file operations (read / write / list / append / move / copy / delete / mkdir), shell, HTTP (get / post / arbitrary request / fetch-webpage / download), time and JSON utilities, memory, and `notify`. All execute under sandbox enforcement — path whitelist for files, command whitelist for shell, domain whitelist for HTTP — with every invocation audited. The `notify` tool pushes to named channels (Feishu / WeCom / DingTalk / generic webhook), themselves a dynamic registry with full CRUD.
 
 Extension follows three tiers, ordered by effort:
 
@@ -80,5 +80,5 @@ On top of it sits a web console at `/admin/`: an overview dashboard, agent manag
 - **One directory = one Agent** — an agent is defined by a directory of markdown, not by code
 - **Open standards** — MCP for tools, A2A for agent-to-agent collaboration, open formats for skills
 - **Stateless instances, externalized state** — the prerequisite for going distributed without an architectural rewrite
-- **Security as foundation, not afterthought** — least privilege, mandatory sandbox allowlists, credentials via environment variables, full audit trail persisted from day one
+- **Security as foundation, not afterthought** — least privilege, mandatory sandbox whitelists, credentials via environment variables, full audit trail persisted from day one
 - **Phased and disciplined** — build the minimal complete runtime kernel first; governance and distributed infrastructure come next, proven by real usage

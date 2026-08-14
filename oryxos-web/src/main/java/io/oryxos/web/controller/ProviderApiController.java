@@ -5,6 +5,7 @@ import io.oryxos.core.provider.ProviderDef;
 import io.oryxos.core.provider.ProviderRegistry;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.CreateProviderRequest;
+import io.oryxos.web.controller.dto.ProviderConnectivityView;
 import io.oryxos.web.controller.dto.ProviderView;
 import io.oryxos.web.controller.dto.UpdateProviderRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
@@ -97,6 +98,14 @@ public class ProviderApiController {
   @GetMapping("/{name}/models")
   public ApiResponse<List<String>> models(@PathVariable String name) {
     return ApiResponse.ok(modelsService.listModels(name));
+  }
+
+  /** 测试 provider 连通性：复用服务端 /models 探测，不把 api-key 暴露给浏览器。 */
+  @PostMapping("/{name}/test")
+  public ApiResponse<ProviderConnectivityView> test(@PathVariable String name) {
+    List<String> models = modelsService.listModels(name);
+    return ApiResponse.ok(
+        new ProviderConnectivityView(true, models.size(), models.stream().limit(5).toList()));
   }
 
   @DeleteMapping("/{name}")

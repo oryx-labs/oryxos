@@ -6,6 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.oryxos.core.memory.MemoryScope;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,5 +57,35 @@ class MarkdownMemoryStoreTest {
     // 归档检索只命中归档条目
     assertEquals(1, memory.recallByKeyword("归档").size());
     assertTrue(memory.recallByKeyword("核心").isEmpty());
+  }
+
+  @Test
+  @DisplayName("并发追加_条目一条不丢")
+  void concurrentAppendsLoseNoEntry() throws Exception {
+    MarkdownMemoryStore memory = new MarkdownMemoryStore(root);
+    int writers = 32;
+    CountDownLatch start = new CountDownLatch(1);
+    List<Future<?>> results = new ArrayList<>();
+    try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+      for (int i = 0; i < writers; i++) {
+        int id = i;
+        results.add(
+            pool.submit(
+                () -> {
+                  start.await(); // 卡闸齐发，最大化读-改-写窗口重叠
+                  memory.append("concurrent-entry-" + id, MemoryScope.CORE);
+                  return null;
+                }));
+      }
+      start.countDown();
+      for (Future<?> result : results) {
+        result.get();
+      }
+    }
+
+    String loaded = memory.load();
+    for (int i = 0; i < writers; i++) {
+      assertTrue(loaded.contains("concurrent-entry-" + i), "不加锁时并发追加会互相覆盖丢条目: " + i);
+    }
   }
 }

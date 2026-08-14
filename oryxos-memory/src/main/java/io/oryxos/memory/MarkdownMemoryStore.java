@@ -4,11 +4,15 @@ import io.oryxos.core.agent.ToolExecutionContext;
 import io.oryxos.core.memory.MemoryScope;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
@@ -30,6 +34,9 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   private static final DateTimeFormatter TIMESTAMP =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+  /** 每个 MEMORY.md 一把锁（静态：多个 store 实例指向同一文件也互斥），条目数上限 = Agent 数 + 1，不会膨胀。 */
+  private static final Map<Path, Object> FILE_LOCKS = new ConcurrentHashMap<>();
+
   private final Path oryxosRoot;
 
   public MarkdownMemoryStore(Path oryxosRoot) {
@@ -47,17 +54,24 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
 
   @Override
   public void append(String content, MemoryScope scope) {
-    String header = scope == MemoryScope.CORE ? CORE_HEADER : ARCHIVE_HEADER;
     String entry = "- [" + LocalDateTime.now().format(TIMESTAMP) + "] " + content;
-    String raw = read();
-    String core = extractSection(raw, CORE_HEADER);
-    String archive = extractSection(raw, ARCHIVE_HEADER);
-    if (scope == MemoryScope.CORE) {
-      core = core.isEmpty() ? entry : core + "\n" + entry;
-    } else {
-      archive = archive.isEmpty() ? entry : archive + "\n" + entry;
+    Path file = memoryFile();
+    // 读-改-写必须整段互斥：并发会话/定时任务同时 append 时，不加锁会互相覆盖对方刚写的条目。
+    synchronized (lockFor(file)) {
+      String raw = read(file);
+      String core = extractSection(raw, CORE_HEADER);
+      String archive = extractSection(raw, ARCHIVE_HEADER);
+      if (scope == MemoryScope.CORE) {
+        core = core.isEmpty() ? entry : core + "\n" + entry;
+      } else {
+        archive = archive.isEmpty() ? entry : archive + "\n" + entry;
+      }
+      write(file, CORE_HEADER + "\n" + core + "\n" + ARCHIVE_HEADER + "\n" + archive);
     }
-    write(CORE_HEADER + "\n" + core + "\n" + ARCHIVE_HEADER + "\n" + archive);
+  }
+
+  private static Object lockFor(Path file) {
+    return FILE_LOCKS.computeIfAbsent(file.toAbsolutePath().normalize(), key -> new Object());
   }
 
   @Override
@@ -103,7 +117,10 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   }
 
   private String read() {
-    Path file = memoryFile();
+    return read(memoryFile());
+  }
+
+  private static String read(Path file) {
     if (!Files.isRegularFile(file)) {
       return "";
     }
@@ -114,14 +131,26 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
     }
   }
 
-  private void write(String content) {
-    Path file = memoryFile();
+  /** 先写临时文件再原子改名：进程在写一半时被杀也不会留下截断的 MEMORY.md（长期记忆不可再生，不容半个文件）。 */
+  private static void write(Path file, String content) {
     try {
-      Path parent = file.getParent();
-      if (parent != null) {
-        Files.createDirectories(parent);
+      Path parent = file.toAbsolutePath().getParent();
+      if (parent == null) { // 只有根路径无父目录；MEMORY.md 不可能是根，这里是防御 + 满足空指针静态分析
+        throw new IllegalArgumentException("MEMORY.md 路径没有父目录: " + file);
       }
-      Files.writeString(file, content);
+      Files.createDirectories(parent);
+      Path tmp = Files.createTempFile(parent, "MEMORY", ".tmp");
+      try {
+        Files.writeString(tmp, content);
+        try {
+          Files.move(
+              tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+          Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING); // 极少数文件系统不支持原子移动，退而求其次
+        }
+      } finally {
+        Files.deleteIfExists(tmp);
+      }
     } catch (IOException e) {
       throw new UncheckedIOException("写入 MEMORY.md 失败", e);
     }

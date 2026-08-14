@@ -1,6 +1,7 @@
 package io.oryxos.cli.command;
 
 import io.oryxos.cli.OryxOsRuntime;
+import java.util.concurrent.CountDownLatch;
 import org.springframework.boot.SpringApplication;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -25,7 +26,7 @@ public class ServeCommand implements Runnable {
 
   static void keepAlive() {
     try {
-      Thread.currentThread().join(); // 常驻直到进程被终止
+      new CountDownLatch(1).await(); // 常驻直到进程被终止
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }

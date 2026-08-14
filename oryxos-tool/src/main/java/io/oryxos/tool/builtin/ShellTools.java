@@ -7,24 +7,23 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.concurrent.ExecutionException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 
 /**
- * 内置 Shell 工具：执行 bash 命令，带超时兜底——命令挂死不能拖死整个 ReAct 循环。
+ * 内置命令工具：直接执行获准的可执行文件，带超时兜底——命令挂死不能拖死整个 ReAct 循环。
  *
- * <p>命令首词白名单归 24 节（SHELL_COMMAND 检查位已过 enforce，含命令注入元字符扫描）；超时默认 30 秒。 两个运维细节（review 高危 6）： (1)
- * stdout/stderr 在 waitFor 前就并发排空——否则输出超过管道缓冲（~64KB）的命令会写阻塞、被误判超时； (2) 超时后递归杀进程树——{@code bash -c}
- * 派生的孙进程不在 bash 的进程组内，只杀 bash 会留孤儿继续跑。
+ * <p>白名单校验可执行文件名（SHELL_COMMAND 检查位已过 enforce）；参数作为 argv 直接传给进程，不经 Shell 解释。超时默认 30 秒。
  */
 public class ShellTools {
 
-  /** 默认超时：30 秒（clarify 既定默认）。 */
+  /** 默认超时：30 秒。 */
   static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
 
   /** 排空子进程输出的虚拟线程执行器（宪法 VII）：流读取是 IO 等待，虚拟线程天然适配。 */
@@ -33,61 +32,94 @@ public class ShellTools {
 
   private final Sandbox sandbox;
   private final Duration timeout;
+  private final ProcessStarter processStarter;
 
   public ShellTools(Sandbox sandbox) {
     this(sandbox, DEFAULT_TIMEOUT);
   }
 
   ShellTools(Sandbox sandbox, Duration timeout) {
-    this.sandbox = sandbox;
-    this.timeout = timeout;
+    this(sandbox, timeout, ShellTools::startProcess);
   }
 
-  @Tool(name = "shell", description = "执行一条 bash 命令，返回标准输出")
+  ShellTools(Sandbox sandbox, Duration timeout, ProcessStarter processStarter) {
+    this.sandbox = Objects.requireNonNull(sandbox, "sandbox 不能为空");
+    this.timeout = Objects.requireNonNull(timeout, "timeout 不能为空");
+    this.processStarter = Objects.requireNonNull(processStarter, "processStarter 不能为空");
+  }
+
+  @Tool(name = "shell", description = "执行一个已获许可的可执行文件，返回标准输出")
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "COMMAND_INJECTION",
-      justification =
-          "shell 工具的功能本质就是执行 LLM 给出的命令；命令白名单由首行 Sandbox.enforce 前置校验（24 节 WhitelistSandbox，含元字符扫描）")
-  public String shell(@ToolParam(description = "要执行的 bash 命令") String command) {
-    sandbox.enforce(new SandboxAction(ActionType.SHELL_COMMAND, command));
-    Process process;
+      justification = "参数以 ProcessBuilder 的 argv 直接执行，不经 shell 解释；可执行文件在启动前经 Sandbox 精确白名单校验")
+  public String shell(
+      @ToolParam(description = "要执行的、已在白名单中的可执行文件") String executable,
+      @ToolParam(description = "传给可执行文件的独立参数数组，不支持 shell 语法") List<String> arguments) {
+    String commandExecutable = requireExecutable(executable);
+    List<String> command = command(commandExecutable, arguments);
+    sandbox.enforce(new SandboxAction(ActionType.SHELL_COMMAND, commandExecutable));
     try {
-      process = new ProcessBuilder("bash", "-c", command).start();
-    } catch (IOException e) {
-      throw new UncheckedIOException("命令启动失败: " + command, e);
-    }
-    // 先起并发排空再 waitFor：管道不被写满阻塞，waitFor 只在"命令真没跑完"时超时
-    Future<byte[]> stdout = DRAINER.submit(() -> process.getInputStream().readAllBytes());
-    Future<byte[]> stderr = DRAINER.submit(() -> process.getErrorStream().readAllBytes());
-    boolean finished;
-    try {
-      finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      killTree(process);
-      throw new IllegalStateException("命令执行被中断: " + command, e);
-    }
-    if (!finished) {
-      killTree(process);
-      throw new IllegalStateException("命令超时（" + timeout.toSeconds() + "s）被终止: " + command);
-    }
-    try {
-      if (process.exitValue() != 0) {
-        String err = new String(stderr.get(), StandardCharsets.UTF_8);
-        throw new IllegalStateException("命令退出码 " + process.exitValue() + ": " + err.trim());
+      Process process = processStarter.start(command);
+      boolean finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      if (!finished) {
+        killTree(process);
+        throw new IllegalStateException(
+            "命令超时（" + timeout.toSeconds() + "s）被终止: " + commandExecutable);
       }
-      return new String(stdout.get(), StandardCharsets.UTF_8);
+      String stdout = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+      if (process.exitValue() != 0) {
+        String stderr = new String(process.getErrorStream().readAllBytes(), StandardCharsets.UTF_8);
+        throw new IllegalStateException("命令退出码 " + process.exitValue() + ": " + stderr.trim());
+      }
+      return stdout;
+    } catch (IOException e) {
+      throw new UncheckedIOException("命令启动失败: " + commandExecutable, e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new IllegalStateException("命令执行被中断: " + command, e);
-    } catch (ExecutionException e) {
-      throw new IllegalStateException("命令输出读取失败: " + command, e.getCause());
+      throw new IllegalStateException("命令执行被中断: " + commandExecutable, e);
     }
   }
 
-  /** 先递归杀 bash 派生的子孙进程，再杀 bash 本身（只 destroyForcibly(bash) 会留孤儿继续执行）。 */
+  /**
+   * 默认 ProcessStarter：命名方法而非 lambda，让 SuppressFBWarnings 能落在告警位置上（lambda 编译成 synthetic
+   * 方法，构造器上的注解盖不住）。
+   */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "COMMAND_INJECTION",
+      justification = "以 argv 直接执行、不经 shell 解释；可执行文件在 shell() 启动前经 Sandbox 精确白名单校验")
+  private static Process startProcess(List<String> command) throws IOException {
+    return new ProcessBuilder(command).start();
+  }
+
+  private static String requireExecutable(String executable) {
+    if (executable == null || executable.isBlank()) {
+      throw new IllegalArgumentException("可执行文件不能为空");
+    }
+    return executable.strip();
+  }
+
+  private static List<String> command(String executable, List<String> arguments) {
+    List<String> command = new ArrayList<>();
+    command.add(executable);
+    if (arguments != null) {
+      for (String argument : arguments) {
+        if (argument == null) {
+          throw new IllegalArgumentException("命令参数不能为 null");
+        }
+        command.add(argument);
+      }
+    }
+    return List.copyOf(command);
+  }
+
+  @FunctionalInterface
+  interface ProcessStarter {
+    Process start(List<String> command) throws IOException;
+  }
+
+  /** 先递归杀命令派生的子孙进程，再杀命令本身（只 destroyForcibly 主进程会留孤儿继续执行）。 */
   private static void killTree(Process process) {
-    process.toHandle().descendants().forEach(ProcessHandle::destroyForcibly);
+    process.descendants().forEach(ProcessHandle::destroyForcibly);
     process.destroyForcibly();
   }
 }

@@ -17,7 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 核心阶段唯一的 {@link Sandbox} 实现：应用层白名单校验（宪法 VI 第一档）。按 {@link ActionType} 路由到文件路径 / 命令首 token / HTTP
+ * 核心阶段唯一的 {@link Sandbox} 实现：应用层白名单校验（宪法 VI 第一档）。按 {@link ActionType} 路由到文件路径 / 可执行文件 / HTTP
  * 域名三类校验，任一不过抛 {@link SandboxViolationException}、动作零发生。
  *
  * <p>三块白名单初始来自配置（{@code file.allowed_paths} / {@code shell.allowed_commands} / {@code
@@ -30,7 +30,8 @@ import org.slf4j.LoggerFactory;
  * <p>三个 {@code check*} 与 {@code matchesDomain} 均 {@code private}——对外只暴露 {@code enforce} 与管理三方法。 若把
  * check* public 暴露到 {@code Sandbox} 接口上，接口就被这一档实现带偏了。
  */
-public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
+// final：构造器会因非法配置抛异常（normalizeRoot/requireNonBlank），禁止子类化以杜绝 finalizer attack（CT_CONSTRUCTOR_THROW）
+public final class WhitelistSandbox implements Sandbox, SandboxWhitelist {
 
   private static final Logger LOG = LoggerFactory.getLogger(WhitelistSandbox.class);
 
@@ -82,7 +83,7 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
     if (category == Category.FILE) {
       allowedRoots.addIfAbsent(normalizeRoot(value));
     } else if (category == Category.SHELL) {
-      allowedCommands.add(value);
+      allowedCommands.add(requireNonBlank(value));
     } else {
       allowedDomainPatterns.addIfAbsent(value);
     }
@@ -149,64 +150,9 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   private void checkShellCommand(String command) {
-    String firstToken = command.trim().split("\\s+")[0];
-    if (!allowedCommands.contains(firstToken)) {
-      throw new SandboxViolationException(
-          "命令不在白名单内: " + firstToken + "。这是安全策略，请勿反复重试；确需该命令，请在管理台「SandBox 列表」把它加入 shell 白名单。");
+    if (!allowedCommands.contains(command)) {
+      throw new SandboxViolationException("可执行文件不在白名单内: " + command);
     }
-    // 首 token 通过还不够：执行器是 bash -c <整串>，命令分隔/替换元字符可让白名单形同虚设
-    // （ls && cat /etc/passwd、echo $(curl ...)、`rm -rf` 等）。元字符命中即拒。
-    if (hasShellInjection(command)) {
-      throw new SandboxViolationException(
-          "命令含 shell 元字符，拒绝执行（防命令注入）: " + command + "。这是安全策略，请勿反复重试；如需组合命令，请拆分执行。");
-    }
-  }
-
-  /**
-   * 命令串是否含可被 bash 解释为"追加执行/命令替换/重定向"的元字符。逐字符状态机：单引号内全字面； 双引号内仅 {@code $}、{@code `}
-   * 仍特殊（命令替换在双引号内照常执行）；引号外所有分隔/替换/重定向符一律拒绝。 反斜杠转义跳过下一字符。未闭合引号视为不合法命令，拒绝。
-   */
-  private static boolean hasShellInjection(String command) {
-    boolean inSingle = false;
-    boolean inDouble = false;
-    boolean escaped = false;
-    for (int i = 0; i < command.length(); i++) {
-      char c = command.charAt(i);
-      if (escaped) {
-        escaped = false;
-        continue;
-      }
-      if (inSingle) {
-        if (c == '\'') {
-          inSingle = false;
-        }
-        continue;
-      }
-      if (c == '\\') {
-        escaped = true;
-        continue;
-      }
-      if (inDouble) {
-        if (c == '"') {
-          inDouble = false;
-        } else if (c == '$' || c == '`') {
-          return true; // 双引号内 $() / `cmd` 仍会执行
-        }
-        continue;
-      }
-      if (c == '\'') {
-        inSingle = true;
-        continue;
-      }
-      if (c == '"') {
-        inDouble = true;
-        continue;
-      }
-      if (";&|<>`$(){}!\n\r\t".indexOf(c) >= 0) {
-        return true;
-      }
-    }
-    return inSingle || inDouble;
   }
 
   /** HTTP 读（GET 类）：默认放行，只挡内网/回环/云元数据等 SSRF 目标。无主机的伪目标（如 web_search）放行。 */
@@ -368,7 +314,7 @@ public class WhitelistSandbox implements Sandbox, SandboxWhitelist {
       }
     } else if (category == Category.SHELL) {
       canonical = entry;
-      changed = allowedCommands.add(entry);
+      changed = allowedCommands.add(canonical);
     } else {
       canonical = entry;
       changed = allowedDomainPatterns.addIfAbsent(entry);

@@ -4,6 +4,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
 import LoginView from './views/LoginView.vue'
+import { isNearBottom } from './chat-scroll.js'
 
 // —— 012-web-auth US3：登录守卫 —— 未登录先查 /api/v1/auth/me；登录页 LoginView 调 /auth/login
 const auth = reactive({ checking: true, enabled: true, username: null })
@@ -326,6 +327,14 @@ const skillDetailBodyMd = computed(() =>
 
 // —— 会话详情：点一行会话，拉 GET /sessions/{id} 看完整对话内容 ——
 const sessionDetail = ref(null) // {loading, error, id, data:{sessionId, profileName, messages[]}}
+const sessionDetailScrollEl = ref(null)
+
+function scrollSessionDetailToBottom() {
+  nextTick(() => {
+    const el = sessionDetailScrollEl.value
+    if (el) el.scrollTop = el.scrollHeight
+  })
+}
 
 async function openSession(id) {
   sessionDetail.value = { loading: true, error: null, id, data: null }
@@ -334,6 +343,7 @@ async function openSession(id) {
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '加载失败')
     sessionDetail.value = { loading: false, error: null, id, data: body.data }
+    scrollSessionDetailToBottom()
   } catch (e) {
     sessionDetail.value = { loading: false, error: e.message, id, data: null }
   }
@@ -606,6 +616,7 @@ async function deleteNotifyChannel(name) {
 
 // —— Provider 管理（CRUD /api/v1/providers）：命名的模型 Provider，apiKey 明文返回 ——
 const providers = ref({ loading: false, error: null, data: [] })
+const providerTests = ref({})
 async function loadProviders() {
   providers.value = { loading: true, error: null, data: [] }
   try {
@@ -615,6 +626,33 @@ async function loadProviders() {
     providers.value = { loading: false, error: null, data: body.data || [] }
   } catch (e) {
     providers.value = { loading: false, error: e.message, data: [] }
+  }
+}
+
+async function testProvider(name) {
+  providerTests.value = {
+    ...providerTests.value,
+    [name]: { loading: true, ok: null, message: '测试中…' },
+  }
+  try {
+    const res = await fetch(`/api/v1/providers/${encodeURIComponent(name)}/test`, { method: 'POST' })
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '连通测试失败')
+    const data = body.data || {}
+    const samples = (data.sampleModels || []).slice(0, 3).join('、')
+    providerTests.value = {
+      ...providerTests.value,
+      [name]: {
+        loading: false,
+        ok: true,
+        message: samples ? `可用 · ${data.modelCount || 0} 个模型 · ${samples}` : `可用 · ${data.modelCount || 0} 个模型`,
+      },
+    }
+  } catch (e) {
+    providerTests.value = {
+      ...providerTests.value,
+      [name]: { loading: false, ok: false, message: e.message || '连通测试失败' },
+    }
   }
 }
 
@@ -804,7 +842,7 @@ async function submitEnable() {
 // —— Sandbox 白名单管理（CRUD /api/v1/sandbox/whitelist）：三类 file/shell/http 的白名单条目 ——
 const WL_CATS = [
   { key: 'file', label: '文件路径', ph: '允许访问的路径，如 /data 或 /tmp/*' },
-  { key: 'shell', label: 'Shell 命令', ph: '允许执行的命令首 token，如 ls' },
+  { key: 'shell', label: '可执行文件', ph: '允许执行的可执行文件，如 python3（授予本机代码执行权限）' },
   { key: 'http', label: 'HTTP 域名', ph: '允许访问的域名，如 *.example.com' },
 ]
 const wl = ref({ loading: false, error: null, file: [], shell: [], http: [] })
@@ -1119,9 +1157,10 @@ function resetChat() {
   chat.sending = false
 }
 
-// 会话列表自动滚到底部：新消息到达/历史重载后，把 .chat 容器推到最新一条。
+// 会话列表按需滚到底部：刷新前仍在底部附近才继续跟随，用户上翻历史时保留阅读位置。
 // nextTick 确保 chatTurns 渲染完再读 scrollHeight，否则还是旧值、滚不到底。
-function scrollChatToBottom() {
+function scrollChatToBottom(shouldScroll) {
+  if (!shouldScroll) return
   nextTick(() => {
     const el = chatScrollEl.value
     if (el) el.scrollTop = el.scrollHeight
@@ -1129,6 +1168,7 @@ function scrollChatToBottom() {
 }
 
 async function loadChat() {
+  const shouldScroll = isNearBottom(chatScrollEl.value)
   chat.loading = true; chat.error = null
   try {
     const name = agentDetail.value.name
@@ -1138,7 +1178,7 @@ async function loadChat() {
     chat.sessionId = body.data.sessionId
     chat.messages = body.data.messages || []
   } catch (e) { chat.error = e.message } finally { chat.loading = false }
-  scrollChatToBottom() // 初次进会话看历史、发消息后重载 都走这里，一次覆盖
+  scrollChatToBottom(shouldScroll)
 }
 
 async function sendChat() {
@@ -1508,7 +1548,7 @@ const outputRows = computed(() =>
                     <option value="http">HTTP 域名</option>
                   </select>
                   <input v-model="wlForm.value" class="gen-input" :placeholder="wlPlaceholder" />
-                  <p class="empty">选择类别并填写一条白名单条目：文件路径 / Shell 命令首 token / HTTP 域名（支持通配，如 *.example.com）。</p>
+                  <p class="empty">选择类别并填写一条白名单条目：文件路径 / 可执行文件 / HTTP 域名（支持通配，如 *.example.com）。</p>
                   <p v-if="wlForm.error" class="error">{{ wlForm.error }}</p>
                 </div>
                 <div class="modal-foot">
@@ -1745,7 +1785,7 @@ const outputRows = computed(() =>
               <!-- Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
               <div v-else-if="agentDetail.tab === 'chat'">
                 <div class="sess-meta"><span class="mono">{{ chat.sessionId || '（会话尚未创建）' }}</span></div>
-                <p v-if="chat.loading" class="empty">加载中…</p>
+                <p v-if="chat.loading && !chat.messages.length" class="empty">加载中…</p>
                 <p v-else-if="chat.error" class="error">出错：{{ chat.error }}</p>
                 <template v-else>
                   <p v-if="!chat.messages.length" class="empty">（还没有对话，在下面发一条消息开始）</p>
@@ -1966,15 +2006,24 @@ const outputRows = computed(() =>
             <p v-if="providers.loading" class="empty">加载中…</p>
             <p v-else-if="providers.error" class="error">出错：{{ providers.error }}</p>
             <table v-else>
-              <thead><tr><th>name</th><th>apiKey</th><th>baseUrl</th><th>description</th><th>操作</th></tr></thead>
+              <thead><tr><th>name</th><th>apiKey</th><th>baseUrl</th><th>description</th><th>连通性</th><th>操作</th></tr></thead>
               <tbody>
-                <tr v-if="!providers.data.length"><td colspan="5" class="empty">（暂无 Provider · 点上面「新建 Provider」）</td></tr>
+                <tr v-if="!providers.data.length"><td colspan="6" class="empty">（暂无 Provider · 点上面「新建 Provider」）</td></tr>
                 <tr v-for="p in providers.data" :key="p.name">
                   <td class="mono">{{ p.name }}</td>
                   <td class="mono">{{ p.apiKey || '—' }}</td>
                   <td class="mono">{{ p.baseUrl || '—' }}</td>
                   <td>{{ p.description || '—' }}</td>
+                  <td>
+                    <span v-if="providerTests[p.name]" :class="providerTests[p.name].ok === false ? 'error' : 'ok'">
+                      {{ providerTests[p.name].message }}
+                    </span>
+                    <span v-else class="empty">未测试</span>
+                  </td>
                   <td class="ops">
+                    <button class="btn" :disabled="providerTests[p.name]?.loading" @click="testProvider(p.name)">
+                      {{ providerTests[p.name]?.loading ? '测试中' : '测试连接' }}
+                    </button>
                     <button class="btn" @click="editProvider(p)">编辑</button>
                     <button class="btn" @click="deleteProvider(p.name)">删除</button>
                   </td>
@@ -2137,7 +2186,7 @@ const outputRows = computed(() =>
                     <span class="empty">{{ sessionDetail.data.messages.length }} 条消息</span>
                   </div>
                   <p v-if="!sessionDetail.data.messages.length" class="empty">（该会话暂无对话内容）</p>
-                  <div v-else class="chat">
+                  <div v-else class="chat" ref="sessionDetailScrollEl">
                     <div v-for="(m, i) in sessionDetail.data.messages" :key="i" :class="['msg', m.role]">
                       <div class="msg-role">
                         {{ roleLabel(m.role) }}<span v-if="m.toolName" class="mono tool-name"> · {{ m.toolName }}</span>

@@ -15,6 +15,9 @@
 # ── 服务 ────────────────────────────────────────────────
 server:
   port: 8080                    # HTTP API / 管理台端口（oryxos serve --port 可临时覆盖）
+  # 反向代理（nginx/caddy 终止 TLS）下识别 X-Forwarded-Proto 等头，登录 cookie 才会带 Secure；
+  # 直连部署无副作用（无 X-Forwarded-* 头时行为不变）。从 jar 内置默认继承，列此便于按需关闭。
+  forward-headers-strategy: framework
 
 # ── 持久化 / 并发 ───────────────────────────────────────
 spring:
@@ -40,7 +43,7 @@ file:
   allowed_paths:
     - .oryxos                   # Agent 工作区（Profile / 记忆 / 技能 / 日志）
 shell:
-  allowed_commands:             # 只放最小只读命令集；写 / 删类默认不在内
+  allowed_commands:             # 解释器条目授予模型当前系统用户的代码执行权限，不提供隔离
     - ls
     - cat
     - echo

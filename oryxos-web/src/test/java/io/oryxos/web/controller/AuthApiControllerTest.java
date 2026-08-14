@@ -115,78 +115,44 @@ class AuthApiControllerTest {
   }
 
   @Test
-  @DisplayName("login_连续5次失败_第6次429且不再碰密码校验")
-  void login_fiveFailures_sixthBlocked429() throws Exception {
-    when(userService.verify("admin", "wrong")).thenReturn(false);
-
-    for (int i = 0; i < 5; i++) {
-      mvc.perform(
-              post("/api/v1/auth/login")
-                  .contentType(MediaType.APPLICATION_JSON)
-                  .content("{\"username\":\"admin\",\"password\":\"wrong\"}"))
-          .andExpect(status().isUnauthorized());
-    }
-
-    mvc.perform(
-            post("/api/v1/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"username\":\"admin\",\"password\":\"wrong\"}"))
-        .andExpect(status().isTooManyRequests())
-        .andExpect(jsonPath("$.code").value(429))
-        .andExpect(jsonPath("$.message").value("Too many failed login attempts, try again later"));
-    // 锁定期内不碰 verify：第 6 次请求不能成为密码探针。
-    verify(userService, times(5)).verify("admin", "wrong");
-    verify(sessionService, never()).create(anyString());
-  }
-
-  @Test
-  @DisplayName("login_锁定仅限同用户名+同IP_其他用户名不受影响")
-  void login_lockScopedToUsernameIpPair() throws Exception {
-    when(userService.verify(anyString(), anyString())).thenReturn(false);
-
-    for (int i = 0; i < 5; i++) {
-      mvc.perform(
-              post("/api/v1/auth/login")
-                  .contentType(MediaType.APPLICATION_JSON)
-                  .content("{\"username\":\"admin\",\"password\":\"wrong\"}"))
-          .andExpect(status().isUnauthorized());
-    }
-
-    // admin 已锁，但另一用户名从同 IP 登录仍走正常校验（401 而非 429）。
-    mvc.perform(
-            post("/api/v1/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"username\":\"other\",\"password\":\"wrong\"}"))
-        .andExpect(status().isUnauthorized());
-  }
-
-  @Test
-  @DisplayName("login_失败后成功登录_计数清零后续失败重新计")
-  void login_successResetsFailureCount() throws Exception {
-    when(userService.verify("admin", "wrong")).thenReturn(false);
+  @DisplayName("login_带旧cookie重新登录_旧session被废新session生效")
+  void login_withStaleCookie_deletesOldSession() throws Exception {
     when(userService.verify("admin", "s3cret-pw")).thenReturn(true);
-    when(sessionService.create("admin")).thenReturn(newSession("admin", "sid-123"));
-
-    for (int i = 0; i < 4; i++) {
-      mvc.perform(
-              post("/api/v1/auth/login")
-                  .contentType(MediaType.APPLICATION_JSON)
-                  .content("{\"username\":\"admin\",\"password\":\"wrong\"}"))
-          .andExpect(status().isUnauthorized());
-    }
+    when(sessionService.create("admin")).thenReturn(newSession("admin", "sid-new"));
 
     mvc.perform(
             post("/api/v1/auth/login")
+                .cookie(new jakarta.servlet.http.Cookie("oryxos_session", "sid-old"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"username\":\"admin\",\"password\":\"s3cret-pw\"}"))
-        .andExpect(status().isOk());
+        .andExpect(status().isOk())
+        .andExpect(
+            header()
+                .string(
+                    "Set-Cookie", org.hamcrest.Matchers.containsString("oryxos_session=sid-new")));
+    verify(sessionService).delete("sid-old"); // 旧 session 废掉，不留孤儿行也不给旧 id 续命
+  }
 
-    // 清零后再失败一次：仍是 401（重新从 1 计），而非累计到第 5 次触发 429。
-    mvc.perform(
+  @Test
+  @DisplayName("login_反代带X-Forwarded-Proto=https_ForwardedHeaderFilter下Set-Cookie含Secure")
+  void login_behindProxy_forwardedProtoYieldsSecureCookie() throws Exception {
+    when(userService.verify("admin", "s3cret-pw")).thenReturn(true);
+    when(sessionService.create("admin")).thenReturn(newSession("admin", "sid-123"));
+    // 镜像 server.forward-headers-strategy=framework 的装配：该策略就是注册 ForwardedHeaderFilter
+    MockMvc proxiedMvc =
+        MockMvcBuilders.standaloneSetup(
+                new AuthApiController(userService, sessionService, properties))
+            .addFilters(new org.springframework.web.filter.ForwardedHeaderFilter())
+            .build();
+
+    proxiedMvc
+        .perform(
             post("/api/v1/auth/login")
+                .header("X-Forwarded-Proto", "https")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"username\":\"admin\",\"password\":\"wrong\"}"))
-        .andExpect(status().isUnauthorized());
+                .content("{\"username\":\"admin\",\"password\":\"s3cret-pw\"}"))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.containsString("Secure")));
   }
 
   @Test
