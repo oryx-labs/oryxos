@@ -141,7 +141,8 @@ class AuthApiControllerTest {
     // 镜像 server.forward-headers-strategy=framework 的装配：该策略就是注册 ForwardedHeaderFilter
     MockMvc proxiedMvc =
         MockMvcBuilders.standaloneSetup(
-                new AuthApiController(userService, sessionService, properties))
+                new AuthApiController(
+                    userService, sessionService, properties, new LoginAttemptService()))
             .addFilters(new org.springframework.web.filter.ForwardedHeaderFilter())
             .build();
 
