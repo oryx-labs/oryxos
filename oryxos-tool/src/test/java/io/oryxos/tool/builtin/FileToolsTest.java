@@ -239,6 +239,44 @@ class FileToolsTest {
   }
 
   @Test
+  @DisplayName("read_file rechecks FILE_READ right before the read (closes TOCTOU window)")
+  void readFileRechecksPathBeforeRead() throws IOException {
+    Path target = dir.resolve("read-escape.txt");
+    Files.writeString(target, "secret");
+    AtomicInteger fileReads = new AtomicInteger();
+    Sandbox sandbox =
+        action -> {
+          if (action.type() == ActionType.FILE_READ && fileReads.incrementAndGet() >= 2) {
+            throw new SandboxViolationException("recheck rejected: " + action.target());
+          }
+        };
+    FileTools guarded = new FileTools(sandbox);
+
+    assertThrows(SandboxViolationException.class, () -> guarded.readFile(target.toString()));
+    assertEquals(
+        2, fileReads.get(), "should enforce FILE_READ once before and once right before the read");
+  }
+
+  @Test
+  @DisplayName("delete_file rechecks FILE_WRITE right before the delete (closes TOCTOU window)")
+  void deleteFileRechecksPathBeforeDelete() throws IOException {
+    Path target = dir.resolve("delete-escape.txt");
+    Files.writeString(target, "secret");
+    AtomicInteger fileWrites = new AtomicInteger();
+    Sandbox sandbox =
+        action -> {
+          if (action.type() == ActionType.FILE_WRITE && fileWrites.incrementAndGet() >= 2) {
+            throw new SandboxViolationException("recheck rejected: " + action.target());
+          }
+        };
+    FileTools guarded = new FileTools(sandbox);
+
+    assertThrows(SandboxViolationException.class, () -> guarded.deleteFile(target.toString()));
+    assertEquals(2, fileWrites.get());
+    assertTrue(Files.exists(target), "must not delete after the recheck is rejected");
+  }
+
+  @Test
   @DisplayName("list_dir 列出目录条目")
   void listDirShowsEntries() throws IOException {
     Files.writeString(dir.resolve("x.txt"), "");

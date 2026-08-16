@@ -47,6 +47,9 @@ public class FileTools {
       throw new IllegalArgumentException("文件不存在或不是普通文件: " + path);
     }
     try {
+      // Recheck right before the read, same as write_file: closes the TOCTOU window where the
+      // path could be swapped for an outbound symlink between the first enforce and readString.
+      sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
       return Files.readString(file);
     } catch (IOException e) {
       throw new UncheckedIOException("读取文件失败: " + path, e);
@@ -265,6 +268,9 @@ public class FileTools {
       throw new IllegalArgumentException("拒绝删除目录（本工具只删文件）: " + path);
     }
     try {
+      // Recheck right before the delete, same as write_file: closes the TOCTOU window where the
+      // path could be swapped for an outbound symlink between the first enforce and deleteIfExists.
+      sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
       return Files.deleteIfExists(file) ? "已删除: " + path : "文件不存在: " + path;
     } catch (IOException e) {
       throw new UncheckedIOException("删除文件失败: " + path, e);
