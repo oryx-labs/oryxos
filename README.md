@@ -179,7 +179,7 @@ The workspace defaults to `.oryxos/` but is configurable — set `ORYXOS_ROOT` (
 | `http://localhost:8080/admin/` | **Web Manager** — Vue 3 console |
 | `http://localhost:8080/swagger-ui` | OpenAPI docs |
 
-The Web Manager is a Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **agent management** (create, one-sentence LLM generation, file editor, per-agent session and memory views), **provider and notify-channel CRUD**, **scheduled tasks**, **sessions, tools, sandbox whitelist**, and a **workspace file browser**. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process.
+The Web Manager is a Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **agent management** (create, one-sentence LLM generation, file editor, per-agent session and memory views), **provider and notify-channel CRUD**, **scheduled tasks**, **sessions, tools, sandbox whitelist**, and a **workspace file browser**. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process. The console supports optional HTTP Basic Auth (disabled by default) — see [Authentication](https://oryxos.robustmq.com/docs/auth).
 
 <p align="center">
   <img src="website/public/images/manager.jpg" alt="OryxOS Web Manager console" width="100%"/>
