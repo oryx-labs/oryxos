@@ -48,7 +48,7 @@ async function logout() {
 const TOP_NAV = [
   { key: 'overview', label: '概览' },
   { key: 'agents', label: 'Agent 列表' },
-  { key: 'schedules', label: '定时任务', path: '/api/v1/schedules' },
+  { key: 'schedules', label: '定时任务', path: '/api/v2/schedules' },
   // Skill 列表（第 32 节）：全局 Skill 库，自定义加载器（loadSkills）不走通用 path。知识库仍为占位页
   { key: 'skills', label: 'Skill 列表' },
   { key: 'knowledge', label: '知识库' },
@@ -165,7 +165,7 @@ function cols(key) {
   if (key === 'tools') return ['name', 'description']
   if (key === 'providers') return ['name', 'status']
   if (key === 'schedules')
-    return ['taskId', 'profileName', 'cron', 'zone', 'enabled', 'runCount', 'lastStatus', 'lastRunAt']
+    return ['name', 'profileName', 'key', 'cron', 'zone', 'enabled', 'runCount', 'lastStatus', 'lastRunAt']
   if (key === 'sessions')
     return ['sessionId', 'profileName', 'channel', 'status', 'messageCount', 'lastActiveAt']
   return []
@@ -359,18 +359,18 @@ function roleLabel(role) {
 }
 
 // —— 定时任务管理动作（28 节：管理台可管，不再只读）——
-const busy = ref(null) // 正在操作的 taskId，防重复点击
+const busy = ref(null) // 正在操作的 scheduleId，防重复点击
 
 // 立即执行一次（POST /schedules/{id}/run），跑完刷新列表
-async function runTask(id) {
-  busy.value = id
+async function runTask(scheduleId) {
+  busy.value = scheduleId
   try {
-    const res = await fetch(`/api/v1/schedules/${id}/run`, { method: 'POST' })
+    const res = await fetch(`/api/v2/schedules/${encodeURIComponent(scheduleId)}/run`, { method: 'POST' })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '执行失败')
     await load('schedules')
     // 若正打开着这个任务的执行记录，跑完顺手刷新
-    if (execDetail.value?.taskId === id) await openExecutions(id)
+    if (execDetail.value?.scheduleId === scheduleId) await openExecutions(scheduleId)
   } catch (e) {
     state.schedules = { ...state.schedules, error: e.message }
   } finally {
@@ -379,17 +379,17 @@ async function runTask(id) {
 }
 
 // 执行记录历史：点"执行记录"拉 GET /schedules/{id}/executions
-const execDetail = ref(null) // {loading, error, taskId, data:[{startedAt,success,durationMs,errorMessage,sessionId}]}
+const execDetail = ref(null) // {loading, error, scheduleId, data:[{startedAt,success,durationMs,errorMessage,sessionId}]}
 
-async function openExecutions(taskId) {
-  execDetail.value = { loading: true, error: null, taskId, data: null }
+async function openExecutions(scheduleId) {
+  execDetail.value = { loading: true, error: null, scheduleId, data: null }
   try {
-    const res = await fetch(`/api/v1/schedules/${encodeURIComponent(taskId)}/executions`)
+    const res = await fetch(`/api/v2/schedules/${encodeURIComponent(scheduleId)}/executions`)
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '加载失败')
-    execDetail.value = { loading: false, error: null, taskId, data: body.data }
+    execDetail.value = { loading: false, error: null, scheduleId, data: body.data }
   } catch (e) {
-    execDetail.value = { loading: false, error: e.message, taskId, data: null }
+    execDetail.value = { loading: false, error: e.message, scheduleId, data: null }
   }
 }
 
@@ -399,9 +399,9 @@ function closeExecutions() {
 
 // 启用/停用（PUT /schedules/{id}），切换后刷新列表
 async function toggleTask(row) {
-  busy.value = row.taskId
+  busy.value = row.scheduleId
   try {
-    const res = await fetch(`/api/v1/schedules/${row.taskId}`, {
+    const res = await fetch(`/api/v2/schedules/${encodeURIComponent(row.scheduleId)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: !row.enabled }),
@@ -2132,7 +2132,7 @@ const outputRows = computed(() =>
               <!-- 执行记录详情视图 -->
               <div v-if="execDetail">
                 <button class="btn back" @click="closeExecutions">← 返回定时任务</button>
-                <div class="sess-meta"><span class="mono">{{ execDetail.taskId }}</span><span class="empty">执行记录（最近 100 条）</span></div>
+                <div class="sess-meta"><span class="mono">{{ execDetail.scheduleId }}</span><span class="empty">执行记录（最近 100 条）</span></div>
                 <p v-if="execDetail.loading" class="empty">加载中…</p>
                 <p v-else-if="execDetail.error" class="error">出错：{{ execDetail.error }}</p>
                 <template v-else-if="execDetail.data">
@@ -2141,7 +2141,7 @@ const outputRows = computed(() =>
                     <thead><tr><th>开始时间</th><th>结果</th><th>耗时(ms)</th><th>会话</th><th>错误</th></tr></thead>
                     <tbody>
                       <tr v-for="(e, i) in execDetail.data" :key="i">
-                        <td class="mono">{{ e.startedAt }}</td>
+                        <td class="mono">{{ e.startedAt }}<span v-if="e.legacyMigrated" class="tag">迁移前历史{{ e.legacyTaskKey ? `: ${e.legacyTaskKey}` : '' }}</span></td>
                         <td><span :class="e.success ? 'ok' : 'off'">{{ e.success ? '成功' : '失败' }}</span></td>
                         <td>{{ e.durationMs }}</td>
                         <td class="mono">{{ e.sessionId ?? '—' }}</td>
@@ -2158,15 +2158,15 @@ const outputRows = computed(() =>
                 </thead>
                 <tbody>
                   <tr v-if="!state.schedules.data.length"><td :colspan="cols('schedules').length + 1" class="empty">（暂无定时任务 · 在 Profile 的 schedules 里定义）</td></tr>
-                  <tr v-for="row in state.schedules.data" :key="row.taskId">
-                    <td v-for="c in cols('schedules')" :key="c" :class="{ mono: c === 'taskId' || c === 'cron' }">
+                  <tr v-for="row in state.schedules.data" :key="row.scheduleId">
+                    <td v-for="c in cols('schedules')" :key="c" :class="{ mono: c === 'key' || c === 'cron' }">
                       <span v-if="c === 'enabled'" :class="row.enabled ? 'ok' : 'off'">{{ row.enabled ? '启用' : '停用' }}</span>
                       <template v-else>{{ row[c] ?? '—' }}</template>
                     </td>
                     <td class="ops">
-                      <button class="btn" :disabled="busy === row.taskId" @click="runTask(row.taskId)">立即执行</button>
-                      <button class="btn" :disabled="busy === row.taskId" @click="toggleTask(row)">{{ row.enabled ? '停用' : '启用' }}</button>
-                      <button class="btn" @click="openExecutions(row.taskId)">执行记录</button>
+                      <button class="btn" :disabled="busy === row.scheduleId" @click="runTask(row.scheduleId)">立即执行</button>
+                      <button class="btn" :disabled="busy === row.scheduleId" @click="toggleTask(row)">{{ row.enabled ? '停用' : '启用' }}</button>
+                      <button class="btn" @click="openExecutions(row.scheduleId)">执行记录</button>
                     </td>
                   </tr>
                 </tbody>

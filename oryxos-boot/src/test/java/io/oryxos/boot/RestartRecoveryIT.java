@@ -29,7 +29,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 @Tag("integration")
 class RestartRecoveryIT {
 
-  private static final String TASK_ID = "restart-probe";
+  private static final String SCHEDULE_KEY = "restart-probe";
 
   @Test
   @DisplayName("任务状态与执行历史_跨进程重启仍在")
@@ -40,9 +40,9 @@ class RestartRecoveryIT {
     // —— 第一次启动：登记 + 执行一次，然后关闭（模拟停机）——
     try (ConfigurableApplicationContext ctx = boot(root, dbUrl)) {
       AgentScheduler scheduler = ctx.getBean(AgentScheduler.class);
-      scheduler.runNow(TASK_ID); // 手动触发一次真实 ReAct（mock provider）
-
       ScheduledTaskView task = findTask(ctx.getBean(ScheduledTaskStore.class).list());
+      scheduler.runNow(task.scheduleId()); // 手动触发一次真实 ReAct（mock provider）
+      task = findTask(ctx.getBean(ScheduledTaskStore.class).list());
       assertEquals(1, task.runCount(), "第一次运行后 run_count 应为 1");
     }
 
@@ -52,25 +52,25 @@ class RestartRecoveryIT {
       ScheduledTaskView task = findTask(store.list());
       assertEquals(1, task.runCount(), "重启后 run_count 仍应为 1（状态没随进程丢）");
       assertEquals("success", task.lastStatus(), "重启后 last_status 仍应为 success");
-      assertTrue(store.executions(TASK_ID, 10).size() >= 1, "重启后执行历史仍应查得到");
+      assertTrue(store.executions(task.scheduleId(), 10).size() >= 1, "重启后执行历史仍应查得到");
     }
   }
 
   private static ConfigurableApplicationContext boot(Path root, String dbUrl) {
     return new SpringApplicationBuilder(OryxOsRuntime.class)
-        .properties(
-            "oryxos.root=" + root,
-            "oryxos.providers[0].name=mock",
-            "spring.datasource.url=" + dbUrl,
-            "spring.main.web-application-type=none")
-        .run();
+        .run(
+            "--oryxos.root=" + root,
+            "--oryxos.providers[0].name=mock",
+            "--spring.datasource.url=" + dbUrl,
+            "--spring.lifecycle.timeout-per-shutdown-phase=100ms",
+            "--spring.main.web-application-type=none");
   }
 
   private static ScheduledTaskView findTask(List<ScheduledTaskView> list) {
     return list.stream()
-        .filter(t -> TASK_ID.equals(t.taskId()))
+        .filter(t -> SCHEDULE_KEY.equals(t.key()))
         .findFirst()
-        .orElseThrow(() -> new AssertionError("列表里应含任务 " + TASK_ID));
+        .orElseThrow(() -> new AssertionError("列表里应含任务 " + SCHEDULE_KEY));
   }
 
   private static Path seedWorkspace() throws IOException {
@@ -93,7 +93,8 @@ class RestartRecoveryIT {
           - save_memory
           - recall_memory
         schedules:
-          - id: restart-probe
+          - key: restart-probe
+            name: Restart probe
             cron: "0 0 0 1 1 *"
             zone: Asia/Shanghai
             message: 重启探针一次巡检

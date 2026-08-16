@@ -120,7 +120,7 @@ public class ProfileLoader {
         asStringList(map.get("mcp_servers")),
         asStringList(map.get("channels")),
         toNotifyChannels(asList(map.get("notify_channels"))),
-        toSchedules(asList(map.get("schedules"))),
+        toSchedules(asList(map.get("schedules")), source),
         asStringList(map.get("bootstrap")),
         toSettings(asMap(map.get("settings"))));
   }
@@ -180,19 +180,46 @@ public class ProfileLoader {
     return channels;
   }
 
-  private static List<Profile.ScheduleConfig> toSchedules(List<Object> list) {
+  private static List<Profile.ScheduleConfig> toSchedules(List<Object> list, String source) {
     if (list == null) {
       return List.of();
     }
     List<Profile.ScheduleConfig> schedules = new ArrayList<>();
+    Set<String> keys = new java.util.HashSet<>();
     for (Object item : list) {
       Map<String, Object> entry = asMap(item);
       if (entry == null) {
         continue;
       }
+      String legacyId = asString(entry.get("id"));
+      String configuredKey = asString(entry.get("key"));
+      if (configuredKey != null && configuredKey.isBlank()) {
+        throw new ProfileValidationException("Profile 定时配置 key 不能为空: " + source);
+      }
+      if (legacyId != null && legacyId.isBlank()) {
+        throw new ProfileValidationException("Profile 定时配置 id 不能为空: " + source);
+      }
+      if (configuredKey != null && legacyId != null && !configuredKey.equals(legacyId)) {
+        throw new ProfileValidationException(
+            "Profile 定时配置 id 与 key 必须相同: " + source);
+      }
+
+      String key = configuredKey != null ? configuredKey : legacyId;
+      if (key == null || key.isBlank()) {
+        throw new ProfileValidationException("Profile 定时配置缺少 key: " + source);
+      }
+      String configuredName = asString(entry.get("name"));
+      String name = configuredName != null ? configuredName : configuredKey == null ? legacyId : null;
+      if (name == null || name.isBlank()) {
+        throw new ProfileValidationException("Profile 定时配置缺少 name: " + source);
+      }
+      if (!keys.add(key)) {
+        throw new ProfileValidationException("Profile 定时配置 key 重复: " + key + " (" + source + ")");
+      }
       schedules.add(
           new Profile.ScheduleConfig(
-              asString(entry.get("id")),
+              key,
+              name,
               asString(entry.get("cron")),
               asString(entry.get("zone")),
               asString(entry.get("message"))));

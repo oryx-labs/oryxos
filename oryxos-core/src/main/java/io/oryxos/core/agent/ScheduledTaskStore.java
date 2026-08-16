@@ -4,25 +4,29 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * 定时任务的持久化契约（28 节）：把任务状态与执行历史落 SQLite，重启后仍在。
+ * Persistent runtime state and execution history for schedules defined by Agent profiles.
  *
- * <p>依赖倒置：接口在 core（{@link AgentScheduler} 用它），JPA 实现在 oryxos-storage。定义来源仍是 skill/Profile 的
- * schedules——本 store 只存"状态 + 历史"，不作为定义源（与 29 节 skill-centric 不冲突）。
+ * <p>Configuration belongs to AGENT.md. This store owns the stable runtime {@code scheduleId}
+ * generated for each profile/key pair.
  */
 public interface ScheduledTaskStore {
 
-  /** 注册/更新一条任务的登记信息与下次触发（启动扫描或运行时新增时调用）；新任务默认启用。 */
-  void register(
-      String taskId,
+  /**
+   * Reconcile the configuration with stored state and return its stable, globally unique schedule
+   * ID. A matching profile/key pair retains its enabled flag and execution history.
+   */
+  String reconcile(
       String profileName,
+      String key,
+      String name,
       String cron,
       String zone,
       String message,
       Instant nextRunAt);
 
-  /** 记录一次执行（成功失败都记），并更新任务的 last_run / last_status / run_count / next_run。 */
+  /** Record an execution and update the schedule's runtime state. */
   void recordExecution(
-      String taskId,
+      String scheduleId,
       String sessionId,
       Instant startedAt,
       boolean success,
@@ -30,15 +34,24 @@ public interface ScheduledTaskStore {
       long durationMs,
       Instant nextRunAt);
 
-  /** 任务是否启用（未登记的按启用处理，fail-open）。 */
-  boolean isEnabled(String taskId);
+  /** Return the enabled state for an existing schedule ID. */
+  boolean isEnabled(String scheduleId);
 
-  /** 启用/停用一条任务（管理台开关）。 */
-  void setEnabled(String taskId, boolean enabled);
+  /** Enable or disable an existing schedule ID. */
+  void setEnabled(String scheduleId, boolean enabled);
 
-  /** 列出全部定时任务的状态视图。 */
+  /** Retire a configuration definition while retaining its runtime state and history. */
+  void retire(String profileName, String key);
+
+  /** List currently configured, non-retired schedules. */
   List<ScheduledTaskView> list();
 
-  /** 某任务最近 {@code limit} 条执行历史（按开始时间倒序）。 */
-  List<TaskExecutionView> executions(String taskId, int limit);
+  /** Find all profile schedules sharing the supplied configuration key. */
+  List<ScheduledTaskView> findByKey(String key);
+
+  /** Whether a persisted schedule exists, including a retired one retained for history. */
+  boolean exists(String scheduleId);
+
+  /** Return the most recent execution history for a schedule ID, including a retired schedule. */
+  List<TaskExecutionView> executions(String scheduleId, int limit);
 }

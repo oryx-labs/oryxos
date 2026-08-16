@@ -25,7 +25,9 @@ class AgentScanRegisterTest {
     fm.append("name: ").append(name).append('\n');
     fm.append("provider:\n  name: deepseek\n  model: deepseek-chat\n");
     if (withSchedule) {
-      fm.append("schedules:\n  - {cron: \"0 0 9 * * *\", zone: Asia/Shanghai, message: 到点}\n");
+      fm.append(
+          "schedules:\n"
+              + "  - {key: morning, name: Morning digest, cron: \"0 0 9 * * *\", zone: Asia/Shanghai, message: 到点}\n");
     }
     Files.writeString(dir.resolve("AGENT.md"), "---\n" + fm + "---\n正文");
   }

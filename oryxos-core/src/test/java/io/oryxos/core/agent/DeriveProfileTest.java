@@ -68,7 +68,8 @@ class DeriveProfileTest {
 
     assertEquals(1, p.schedules().size());
     Profile.ScheduleConfig sc = p.schedules().get(0);
-    assertEquals("morning", sc.id());
+    assertEquals("morning", sc.key());
+    assertEquals("morning", sc.name());
     assertEquals("0 0 9 * * *", sc.cron());
     assertEquals("Asia/Shanghai", sc.zone());
     assertEquals("到点了", sc.message());

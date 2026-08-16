@@ -5,8 +5,10 @@ import java.time.Instant;
 
 /** GET /schedules 视图：定时任务状态。 */
 public record ScheduleView(
-    String taskId,
+    String scheduleId,
     String profileName,
+    String key,
+    String name,
     String cron,
     String zone,
     String message,
@@ -18,8 +20,10 @@ public record ScheduleView(
 
   public static ScheduleView from(ScheduledTaskView t) {
     return new ScheduleView(
-        t.taskId(),
+        t.scheduleId(),
         t.profileName(),
+        t.key(),
+        t.name(),
         t.cron(),
         t.zone(),
         t.message(),

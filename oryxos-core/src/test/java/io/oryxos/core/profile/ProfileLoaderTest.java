@@ -84,6 +84,8 @@ class ProfileLoaderTest {
     assertEquals("webhook", profile.notifyChannels().get(0).type()); // notify_channels
     assertEquals("0 0 8 * * *", profile.schedules().get(0).cron());
     assertEquals("Asia/Shanghai", profile.schedules().get(0).zone());
+    assertEquals("morning", profile.schedules().get(0).key());
+    assertEquals("morning", profile.schedules().get(0).name());
     assertEquals(5, profile.settings().maxIterations()); // max_iterations
     assertEquals(15, profile.settings().maxHistoryTurns()); // max_history_turns
   }
@@ -168,5 +170,193 @@ class ProfileLoaderTest {
 
     assertEquals(
         "https://hooks.example.com/team", profile.notifyChannels().get(0).config().get("url"));
+  }
+
+  @Test
+  void 定时配置的key和展示名称被解析() throws IOException {
+    write(
+        "key-and-name.yaml",
+        """
+        name: key-and-name
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: daily
+            name: Daily digest
+            cron: "0 0 8 * * *"
+            message: summarize yesterday
+        """);
+
+    Profile.ScheduleConfig schedule =
+        loader().loadAll().get("key-and-name").orElseThrow().schedules().get(0);
+
+    assertEquals("daily", schedule.key());
+    assertEquals("Daily digest", schedule.name());
+  }
+
+  @Test
+  void 定时配置不能同时给出不同的id和key() throws IOException {
+    write(
+        "conflicting-key.yaml",
+        """
+        name: conflicting-key
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - id: legacy-daily
+            key: daily
+            name: Daily digest
+            cron: "0 0 8 * * *"
+        """);
+
+    ProfileValidationException exception =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("conflicting-key.yaml")));
+
+    assertTrue(exception.getMessage().contains("id"));
+    assertTrue(exception.getMessage().contains("key"));
+  }
+
+  @Test
+  void 同一Agent不能重复定义定时key() throws IOException {
+    write(
+        "duplicate-key.yaml",
+        """
+        name: duplicate-key
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: daily
+            name: Morning digest
+            cron: "0 0 8 * * *"
+          - key: daily
+            name: Evening digest
+            cron: "0 0 18 * * *"
+        """);
+
+    ProfileValidationException exception =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("duplicate-key.yaml")));
+
+    assertTrue(exception.getMessage().contains("daily"));
+  }
+
+  @Test
+  void 定时key和展示名称不能为空() throws IOException {
+    write(
+        "blank-schedule-fields.yaml",
+        """
+        name: blank-schedule-fields
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: " "
+            name: " "
+            cron: "0 0 8 * * *"
+        """);
+
+    ProfileValidationException exception =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("blank-schedule-fields.yaml")));
+
+    assertTrue(exception.getMessage().contains("key"));
+  }
+
+  @Test
+  void 定时展示名称不能为空() throws IOException {
+    write(
+        "blank-schedule-name.yaml",
+        """
+        name: blank-schedule-name
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: daily
+            name: " "
+            cron: "0 0 8 * * *"
+        """);
+
+    ProfileValidationException exception =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("blank-schedule-name.yaml")));
+
+    assertTrue(exception.getMessage().contains("name"));
+  }
+
+  @Test
+  void legacyIdMayMatchKeyWhenNameIsExplicit() throws IOException {
+    write(
+        "matching-id-and-key.yaml",
+        """
+        name: matching-id-and-key
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - id: daily
+            key: daily
+            name: Daily digest
+            cron: "0 0 8 * * *"
+        """);
+
+    Profile.ScheduleConfig schedule =
+        loader().loadAll().get("matching-id-and-key").orElseThrow().schedules().get(0);
+
+    assertEquals("daily", schedule.key());
+    assertEquals("Daily digest", schedule.name());
+  }
+
+  @Test
+  void keyOnlyScheduleStillRequiresName() throws IOException {
+    write(
+        "key-only-without-name.yaml",
+        """
+        name: key-only-without-name
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: daily
+            cron: "0 0 8 * * *"
+        """);
+
+    ProfileValidationException exception =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("key-only-without-name.yaml")));
+
+    assertTrue(exception.getMessage().contains("name"));
+  }
+
+  @Test
+  void 新key格式即使id相同也必须显式给出name() throws IOException {
+    write(
+        "key-without-name.yaml",
+        """
+        name: key-without-name
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - id: daily
+            key: daily
+            cron: "0 0 8 * * *"
+        """);
+
+    ProfileValidationException exception =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("key-without-name.yaml")));
+
+    assertTrue(exception.getMessage().contains("name"));
   }
 }

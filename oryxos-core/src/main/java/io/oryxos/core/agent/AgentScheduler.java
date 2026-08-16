@@ -7,6 +7,7 @@ import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -20,54 +21,34 @@ import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.scheduling.support.SimpleTriggerContext;
 
 /**
- * 定时任务这个第三触发源（"钟推"）。CLI/Web 是人推，本类到点自己拼一条消息交给 {@link AgentService#process}——
- * 走跟人推完全一样的入口，ReAct/Tool/Provider 一个字不用改（§8.5）。
- *
- * <p>只干一件事：到点了拼消息、交给编排入口。消息说什么是 Agent（AGENT.md）的事，交上去怎么处理是 ReActLoop 的事， 都不归本类管——职责划窄，不膨胀成工作流引擎。
- *
- * <p>四个坑的解法：坑一配置驱动（{@code TaskScheduler.schedule(...)} 动态注册，不用编译期写死的 {@code @Scheduled}）；
- * 坑二重叠跳过（按任务 id 的进程内 {@link ReentrantLock} + {@code tryLock}，核心阶段单实例，非分布式锁）； 坑三失败隔离（单次失败只记日志不外抛、审计走
- * {@code process} 既有链路、{@code finally} 必放锁）； 坑四时区显式（{@link CronTrigger} 带 {@link
- * ZoneId}，不由服务器系统时区替用户做主）。
- *
- * <p>纯 POJO：装配与启动注册由 {@code OryxOsRuntime} 显式做（{@code @Bean(initMethod="registerAll")}）， 不在 core
- * 类里放 Spring 注解（与 AgentService/ReActLoop 同构）。
+ * Delivers a configured scheduler message through the same AgentService entry point as interactive
+ * callers. Runtime identity is always the globally unique scheduleId; the profile key only locates
+ * the current configuration definition.
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
     value = "EI_EXPOSE_REP2",
-    justification = "taskStore 等协作者是 Spring 注入的单例服务，构造注入共享同一引用正是意图（无法也不应防御性拷贝）。")
+    justification = "Injected collaborators are shared Spring services by design.")
 public class AgentScheduler {
 
   private static final Logger LOG = LoggerFactory.getLogger(AgentScheduler.class);
-
-  /** 钟推的会话身份三元组固定值：同一 Profile 的历次定时触发复用同一 Session（§8.5、FR-006）。 */
   private static final String SCHEDULER_CHANNEL = "scheduler";
-
   private static final String SCHEDULER_USER = "scheduler";
-
-  /** 任务句柄复合键分隔符：schedule id 是 Agent 内的，跨 Agent 用 profileName@taskId 区分。 */
-  private static final String KEY_SEP = "@";
 
   private final TaskScheduler taskScheduler;
   private final ProfileRegistry profileRegistry;
   private final AgentService agentService;
   private final SessionManager sessionManager;
-
-  /** 28 节：任务状态 + 执行历史落 SQLite（重启不丢），并支持启用/停用。 */
   private final ScheduledTaskStore taskStore;
-
-  /** 32 节：定时触发也记进 Agent 维度执行历史（可空——旧调用方/测试不带）。 */
   private final AgentExecutionStore agentExecutionStore;
 
-  /** 任务 id → 锁：防同一任务重叠执行。进程内锁，核心阶段单实例足够（非分布式锁）。 */
+  /** scheduleId => in-process overlap lock. */
   private final ConcurrentMap<String, Lock> taskLocks = new ConcurrentHashMap<>();
 
-  /**
-   * 可注销句柄表（为 30 节运行时注销/更新 Agent 铺路）。 键是 {@code profileName@taskId} 复合（review 高危 7）：schedule id 只在
-   * 单个 Agent 内唯一，跨 Agent 撞 id 时若用裸 taskId 作键，后注册覆盖先注册的句柄（旧 future 泄漏、任务双跑）， 删除先注册的 Agent 还会 cancel
-   * 掉另一个 Agent 的任务。
-   */
+  /** scheduleId => cancellable future. */
   private final Map<String, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+
+  /** scheduleId => configuration generation captured by each cron callback. */
+  private final ConcurrentMap<String, Long> scheduleGenerations = new ConcurrentHashMap<>();
 
   public AgentScheduler(
       TaskScheduler taskScheduler,
@@ -78,7 +59,6 @@ public class AgentScheduler {
     this(taskScheduler, profileRegistry, agentService, sessionManager, taskStore, null);
   }
 
-  /** 32 节：注入 {@link AgentExecutionStore}，定时触发也记 Agent 维度执行历史。 */
   public AgentScheduler(
       TaskScheduler taskScheduler,
       ProfileRegistry profileRegistry,
@@ -94,7 +74,7 @@ public class AgentScheduler {
     this.agentExecutionStore = agentExecutionStore;
   }
 
-  /** 启动时扫一遍所有 Agent 的 schedules，逐个 Profile 注册（配置驱动，坑一）。 */
+  /** Registers schedules for every currently loaded Agent. */
   public void registerAll() {
     for (Profile profile : profileRegistry.all()) {
       registerProfile(profile);
@@ -102,163 +82,281 @@ public class AgentScheduler {
   }
 
   /**
-   * 注册单个 Agent（Profile）的全部定时（29 节：从 {@link #registerAll} 循环体抽出，供 30 节运行时逐个 Agent
-   * 注册/注销）。每条定时留一个可注销句柄进 {@link #scheduledTasks}；单条 cron/时区非法只跳过这条、不拖垮其它（FR-007）。
+   * Reconciles each configured task before its trigger is installed. Reconciliation preserves the
+   * stable scheduleId for the same (profileName, key), including its enabled state and history.
    */
-  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-      value = "CRLF_INJECTION_LOGS",
-      justification = "日志里的 id/cron/zone 来自运营方手写的 AGENT.md 配置（非请求输入），仅用于启动诊断")
   public void registerProfile(Profile profile) {
-    for (ScheduleConfig sc : profile.schedules()) {
+    for (ScheduleConfig schedule : profile.schedules()) {
       try {
-        CronTrigger trigger = new CronTrigger(sc.cron(), resolveZone(sc.zone()));
-        ScheduledFuture<?> future = taskScheduler.schedule(() -> runOnce(profile, sc), trigger);
-        if (future != null) {
-          scheduledTasks.put(taskKey(sc.id(), profile.name()), future); // 留可注销句柄（30 节用）
+        CronTrigger trigger = new CronTrigger(schedule.cron(), resolveZone(schedule.zone()));
+        String scheduleId =
+            taskStore.reconcile(
+                profile.name(),
+                schedule.key(),
+                schedule.name(),
+                schedule.cron(),
+                schedule.zone(),
+                schedule.message(),
+                nextExecution(schedule));
+        Lock lock = lockFor(scheduleId);
+        lock.lock();
+        try {
+          long generation = nextGeneration(scheduleId);
+          ScheduledFuture<?> future =
+              taskScheduler.schedule(
+                  () -> runOnce(profile, schedule, scheduleId, generation), trigger);
+          if (future != null) {
+            ScheduledFuture<?> previous = scheduledTasks.put(scheduleId, future);
+            if (previous != null && previous != future) {
+              previous.cancel(false);
+            }
+          }
+        } finally {
+          lock.unlock();
         }
-        // 28 节：登记任务状态 + 下次触发到 SQLite（重启后可查；已存在则保留启用状态与运行次数）
-        taskStore.register(
-            sc.id(), profile.name(), sc.cron(), sc.zone(), sc.message(), nextExecution(sc));
-        LOG.info("已注册定时任务 {}（cron={} zone={}）", sc.id(), sc.cron(), sc.zone());
-      } catch (RuntimeException e) {
-        LOG.warn("定时任务 {} 配置非法，跳过：{}", sc.id(), e.getMessage());
+        LOG.info(
+            "Registered schedule {} (profile={} key={} cron={} zone={})",
+            scheduleId,
+            profile.name(),
+            schedule.key(),
+            schedule.cron(),
+            schedule.zone());
+      } catch (RuntimeException exception) {
+        LOG.warn("Invalid schedule {} was skipped: {}", schedule.key(), exception.getMessage());
       }
     }
   }
 
-  /** 某任务是否已留下可注销句柄（30 节注销前提；harness 守点）。键为复合键，按 taskId 前缀匹配。 */
-  public boolean hasScheduledTask(String taskId) {
-    String suffix = KEY_SEP + taskId;
-    return scheduledTasks.keySet().stream().anyMatch(key -> key.endsWith(suffix));
+  /** Returns whether the runtime handle for this scheduleId exists. */
+  public boolean hasScheduledTask(String scheduleId) {
+    return scheduledTasks.containsKey(scheduleId);
   }
 
-  /**
-   * 按 Agent 注销其全部定时（30 节：删除 / 改定时用）。遍历 {@code profile.schedules()}，从 {@link #scheduledTasks} 取句柄
-   * {@code cancel(false)}（不打断正在跑的一次，配合 taskLocks 的重叠保护）再移除句柄；不动 taskLocks、不动 taskStore。
-   */
-  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-      value = "CRLF_INJECTION_LOGS",
-      justification = "日志里的 sc.id() 来自运营方手写的 AGENT.md 配置（非请求输入），仅用于诊断")
+  /** Cancels the registered futures for all definitions belonging to a Profile. */
   public void unregisterProfile(Profile profile) {
-    for (ScheduleConfig sc : profile.schedules()) {
-      ScheduledFuture<?> future = scheduledTasks.remove(taskKey(sc.id(), profile.name()));
-      if (future != null) {
-        future.cancel(false);
-        LOG.info("已注销定时任务 {}", sc.id());
+    for (ScheduleConfig schedule : profile.schedules()) {
+      List<String> scheduleIds =
+          taskStore.list().stream()
+              .filter(
+                  task ->
+                      task.profileName().equals(profile.name()) && task.key().equals(schedule.key()))
+              .map(ScheduledTaskView::scheduleId)
+              .toList();
+      for (String scheduleId : scheduleIds) {
+        retire(scheduleId, profile.name(), schedule.key());
+      }
+      if (scheduleIds.isEmpty()) {
+        taskStore.retire(profile.name(), schedule.key());
       }
     }
   }
 
-  /** 定时触发入口：先看启用状态（停用则跳过、不记执行），启用才真正执行。 */
-  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-      value = "CRLF_INJECTION_LOGS",
-      justification = "日志里的 sc.id() 来自运营方手写的 Profile YAML 配置（非请求输入），仅用于诊断")
-  public void runOnce(Profile profile, ScheduleConfig sc) {
-    if (!taskStore.isEnabled(sc.id())) {
-      LOG.info("定时任务 {} 已停用，跳过本次触发", sc.id());
-      return;
-    }
-    execute(profile, sc);
-  }
-
-  /** 管理台"立即执行"：按 id 找到任务手动跑一次（无视启用状态，属显式手动触发）。找不到抛 IllegalArgumentException。 */
-  public void runNow(String taskId) {
-    for (Profile profile : profileRegistry.all()) {
-      for (ScheduleConfig sc : profile.schedules()) {
-        if (sc.id().equals(taskId)) {
-          execute(profile, sc);
-          return;
-        }
-      }
-    }
-    throw new IllegalArgumentException("定时任务不存在: " + taskId);
+  /** Runs a cron callback if its runtime task is enabled. */
+  public void runOnce(Profile profile, ScheduleConfig schedule, String scheduleId) {
+    runOnce(profile, schedule, scheduleId, currentGeneration(scheduleId));
   }
 
   /**
-   * 真正跑一次：拿锁 → 拼消息交给编排入口 → 成功失败都记 task_executions 并更新任务状态 → finally 放锁。 拿不到锁说明上一次还没跑完，直接跳过。public
-   * 为可测（harness 直接调、抓锁）。
+   * Manually runs exactly one persisted schedule. The persisted scheduleId identifies both the
+   * owning profile and the current configuration key.
    */
-  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-      value = "CRLF_INJECTION_LOGS",
-      justification = "日志里的 sc.id() 来自运营方手写的 Profile YAML 配置（非请求输入），仅用于诊断")
-  public void execute(Profile profile, ScheduleConfig sc) {
-    Lock lock = lockFor(sc.id());
+  public void runNow(String scheduleId) {
+    ScheduledTaskView task =
+        taskStore.list().stream()
+            .filter(candidate -> candidate.scheduleId().equals(scheduleId))
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Schedule does not exist: " + scheduleId));
+    Profile profile =
+        profileRegistry
+            .get(task.profileName())
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "Schedule owner does not exist: " + task.profileName() + " (" + scheduleId + ")"));
+    ScheduleConfig schedule =
+        profile.schedules().stream()
+            .filter(candidate -> candidate.key().equals(task.key()))
+            .findFirst()
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "Schedule configuration does not exist: "
+                            + task.profileName()
+                            + "/"
+                            + task.key()
+                            + " ("
+                            + scheduleId
+                            + ")"));
+    executeIfCurrent(profile, schedule, scheduleId, currentGeneration(scheduleId));
+  }
+
+  /** Manually runs one schedule identified by its configuration location. */
+  public void runNow(String profileName, String key) {
+    String scheduleId =
+        taskStore.list().stream()
+            .filter(task -> task.profileName().equals(profileName) && task.key().equals(key))
+            .map(ScheduledTaskView::scheduleId)
+            .findFirst()
+            .orElseThrow(
+                () -> new IllegalArgumentException("Schedule does not exist: " + profileName + "/" + key));
+    runNow(scheduleId);
+  }
+
+  /** Executes and records one scheduler delivery under its global scheduleId. */
+  public void execute(Profile profile, ScheduleConfig schedule, String scheduleId) {
+    executeIfCurrent(profile, schedule, scheduleId, currentGeneration(scheduleId));
+  }
+
+  private void runOnce(
+      Profile profile, ScheduleConfig schedule, String scheduleId, long capturedGeneration) {
+    Lock lock = lockFor(scheduleId);
     if (!lock.tryLock()) {
-      LOG.info("定时任务 {} 上一次还在跑，跳过本次触发", sc.id()); // 坑二：不排队、不并行两份
+      LOG.info("Schedule {} is still running; skipping this trigger", scheduleId);
       return;
     }
+    try {
+      if (!isCurrentGeneration(scheduleId, capturedGeneration)) {
+        LOG.debug("Schedule {} callback belongs to a retired configuration; skipping", scheduleId);
+        return;
+      }
+      if (!taskStore.isEnabled(scheduleId)) {
+        LOG.info("Schedule {} is disabled; skipping this trigger", scheduleId);
+        return;
+      }
+      executeLocked(profile, schedule, scheduleId);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private void executeIfCurrent(
+      Profile profile, ScheduleConfig schedule, String scheduleId, long capturedGeneration) {
+    Lock lock = lockFor(scheduleId);
+    if (!lock.tryLock()) {
+      LOG.info("Schedule {} is still running; skipping this trigger", scheduleId);
+      return;
+    }
+    try {
+      if (!isCurrentGeneration(scheduleId, capturedGeneration)) {
+        LOG.debug("Schedule {} changed while it was being started; skipping", scheduleId);
+        return;
+      }
+      executeLocked(profile, schedule, scheduleId);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private void executeLocked(Profile profile, ScheduleConfig schedule, String scheduleId) {
     Instant startedAt = Instant.now();
     long start = System.currentTimeMillis();
     String sessionId = null;
     boolean success = false;
     String error = null;
-    // 32 节：Agent 维度执行记录（定时来源）；store 为空（旧装配/测试）则不记
-    long agentExecId = -1;
-    if (agentExecutionStore != null) {
-      try {
-        agentExecId = agentExecutionStore.start(profile.name(), "schedule", startedAt);
-      } catch (RuntimeException re) {
-        LOG.warn("Agent 执行记录落库失败（start）：{}", re.getMessage());
-      }
-    }
+    long agentExecutionId = startAgentExecution(profile, startedAt);
     try {
-      // channel/user 固定为 scheduler：同一 Profile 历次触发复用同一 Session，历史靠 max_history_turns 截断兜底。
-      // session_id 仍由 SessionManager 内部按三元组拼（本类不碰 session_id 生成）。
       Session session =
           sessionManager.getOrCreate(SCHEDULER_CHANNEL, SCHEDULER_USER, profile.name());
       sessionId = session.sessionId();
-      agentService.process(session, sc.message()); // 走跟 CLI/Web 完全一样的入口；审计在 process 内部
+      agentService.process(session, schedule.message());
       success = true;
-    } catch (Exception e) {
-      // 坑三：一次失败只记日志、不外抛，不把调度器搞挂、不影响其它任务的下次触发
-      error = e.getMessage();
-      LOG.error("定时任务 {} 执行失败", sc.id(), e);
+    } catch (Exception exception) {
+      error = exception.getMessage();
+      LOG.error("Schedule {} failed", scheduleId, exception);
     } finally {
-      lock.unlock(); // 成功失败都必须放锁，否则这个任务永远卡住
-      try {
-        // 宪法 V 同理：成功失败都留痕，重启后可回看
-        taskStore.recordExecution(
-            sc.id(),
-            sessionId,
-            startedAt,
-            success,
-            error,
-            System.currentTimeMillis() - start,
-            nextExecution(sc));
-      } catch (RuntimeException re) {
-        LOG.warn("定时任务 {} 执行记录落库失败：{}", sc.id(), re.getMessage());
-      }
-      if (agentExecutionStore != null && agentExecId >= 0) {
-        try {
-          agentExecutionStore.finish(agentExecId, sessionId, success, error, Instant.now());
-        } catch (RuntimeException re) {
-          LOG.warn("Agent 执行记录落库失败（finish）：{}", re.getMessage());
-        }
-      }
+      recordExecution(schedule, scheduleId, sessionId, startedAt, success, error, start);
+      finishAgentExecution(agentExecutionId, sessionId, success, error);
     }
   }
 
-  /** 按 cron/zone 算下次触发时刻；非法配置返回 null（不影响执行本身）。 */
-  private Instant nextExecution(ScheduleConfig sc) {
+  private void retire(String scheduleId, String profileName, String key) {
+    Lock lock = lockFor(scheduleId);
+    lock.lock();
     try {
-      CronTrigger trigger = new CronTrigger(sc.cron(), resolveZone(sc.zone()));
+      nextGeneration(scheduleId);
+      ScheduledFuture<?> future = scheduledTasks.remove(scheduleId);
+      if (future != null) {
+        future.cancel(false);
+        LOG.info("Unregistered schedule {}", scheduleId);
+      }
+      taskStore.retire(profileName, key);
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  private long nextGeneration(String scheduleId) {
+    return scheduleGenerations.merge(scheduleId, 1L, Long::sum);
+  }
+
+  private long currentGeneration(String scheduleId) {
+    return scheduleGenerations.getOrDefault(scheduleId, 0L);
+  }
+
+  private boolean isCurrentGeneration(String scheduleId, long capturedGeneration) {
+    return currentGeneration(scheduleId) == capturedGeneration;
+  }
+
+  private long startAgentExecution(Profile profile, Instant startedAt) {
+    if (agentExecutionStore == null) {
+      return -1;
+    }
+    try {
+      return agentExecutionStore.start(profile.name(), "schedule", startedAt);
+    } catch (RuntimeException exception) {
+      LOG.warn("Could not create Agent execution record: {}", exception.getMessage());
+      return -1;
+    }
+  }
+
+  private void recordExecution(
+      ScheduleConfig schedule,
+      String scheduleId,
+      String sessionId,
+      Instant startedAt,
+      boolean success,
+      String error,
+      long start) {
+    try {
+      taskStore.recordExecution(
+          scheduleId,
+          sessionId,
+          startedAt,
+          success,
+          error,
+          System.currentTimeMillis() - start,
+          nextExecution(schedule));
+    } catch (RuntimeException exception) {
+      LOG.warn("Could not record execution for schedule {}: {}", scheduleId, exception.getMessage());
+    }
+  }
+
+  private void finishAgentExecution(
+      long agentExecutionId, String sessionId, boolean success, String error) {
+    if (agentExecutionStore == null || agentExecutionId < 0) {
+      return;
+    }
+    try {
+      agentExecutionStore.finish(agentExecutionId, sessionId, success, error, Instant.now());
+    } catch (RuntimeException exception) {
+      LOG.warn("Could not finish Agent execution record: {}", exception.getMessage());
+    }
+  }
+
+  private Instant nextExecution(ScheduleConfig schedule) {
+    try {
+      CronTrigger trigger = new CronTrigger(schedule.cron(), resolveZone(schedule.zone()));
       return trigger.nextExecution(new SimpleTriggerContext());
-    } catch (RuntimeException e) {
+    } catch (RuntimeException exception) {
       return null;
     }
   }
 
-  /** 按任务 id 取同一把锁。public 为可测（harness 占锁模拟"上一次还在跑"）。 */
-  public Lock lockFor(String taskId) {
-    return taskLocks.computeIfAbsent(taskId, id -> new ReentrantLock());
+  /** Returns the in-process overlap lock associated with one globally unique scheduleId. */
+  public Lock lockFor(String scheduleId) {
+    return taskLocks.computeIfAbsent(scheduleId, ignored -> new ReentrantLock());
   }
 
-  /** 句柄表复合键：profileName@taskId。taskId 来自 AGENT.md，SAFE 名不含 @，不会与分隔符撞。 */
-  private static String taskKey(String taskId, String profileName) {
-    return profileName + KEY_SEP + taskId;
-  }
-
-  /** 时区显式（坑四）：空/blank 时才退回服务器系统时区，否则按配置解析。 */
   private ZoneId resolveZone(String zone) {
     return zone == null || zone.isBlank() ? ZoneId.systemDefault() : ZoneId.of(zone);
   }

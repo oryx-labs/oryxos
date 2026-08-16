@@ -27,7 +27,7 @@ public record AgentView(
     Profile.ProviderRef pr = p.provider();
     List<ScheduleView> scheds =
         p.schedules().stream()
-            .map(s -> new ScheduleView(s.id(), s.cron(), s.zone(), s.message()))
+            .map(s -> new ScheduleView(s.key(), s.name(), s.cron(), s.zone(), s.message()))
             .toList();
     return new AgentView(
         p.name(),
@@ -39,5 +39,5 @@ public record AgentView(
         scheds);
   }
 
-  public record ScheduleView(String id, String cron, String zone, String message) {}
+  public record ScheduleView(String key, String name, String cron, String zone, String message) {}
 }

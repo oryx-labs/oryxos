@@ -5,7 +5,9 @@ import java.time.Instant;
 
 /** GET /schedules/{id}/executions 视图：一次执行历史。 */
 public record ExecutionView(
-    String taskId,
+    String scheduleId,
+    String legacyTaskKey,
+    boolean legacyMigrated,
     String sessionId,
     Instant startedAt,
     boolean success,
@@ -14,6 +16,13 @@ public record ExecutionView(
 
   public static ExecutionView from(TaskExecutionView e) {
     return new ExecutionView(
-        e.taskId(), e.sessionId(), e.startedAt(), e.success(), e.errorMessage(), e.durationMs());
+        e.scheduleId(),
+        e.legacyTaskKey(),
+        e.legacyMigrated(),
+        e.sessionId(),
+        e.startedAt(),
+        e.success(),
+        e.errorMessage(),
+        e.durationMs());
   }
 }

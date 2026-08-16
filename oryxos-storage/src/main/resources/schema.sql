@@ -47,30 +47,35 @@ CREATE INDEX IF NOT EXISTS idx_sessions_profile ON sessions (profile_name);
 -- scheduled_tasks：定时任务登记 + 运行状态（28 节）。定义来源是 skill/Profile 的 schedules（重启从文件重新注册）；
 -- 本表存"任务状态 + 下次触发"，重启后状态/历史仍在，管理台可看可管（启用/停用、立即执行）。
 CREATE TABLE IF NOT EXISTS scheduled_tasks (
-    task_id VARCHAR(255) PRIMARY KEY,
+    schedule_id VARCHAR(36) PRIMARY KEY,
     profile_name VARCHAR(255) NOT NULL,
+    schedule_key VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255) NOT NULL,
     cron VARCHAR(128) NOT NULL,
     zone VARCHAR(64),
     message TEXT,
     enabled BOOLEAN NOT NULL DEFAULT 1,
+    retired BOOLEAN NOT NULL DEFAULT 0,
     next_run_at TIMESTAMP,
     last_run_at TIMESTAMP,
     last_status VARCHAR(16),
     run_count INTEGER NOT NULL DEFAULT 0,
-    updated_at TIMESTAMP NOT NULL
+    updated_at TIMESTAMP NOT NULL,
+    UNIQUE (profile_name, schedule_key)
 );
 
 -- task_executions：定时任务每次执行的历史（28 节；成功失败都记，重启不丢，管理台可回看）
 CREATE TABLE IF NOT EXISTS task_executions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id VARCHAR(255) NOT NULL,
+    schedule_id VARCHAR(36),
+    legacy_task_key VARCHAR(255),
+    legacy_migrated BOOLEAN NOT NULL DEFAULT 0,
     session_id VARCHAR(512),
     started_at TIMESTAMP NOT NULL,
     success BOOLEAN NOT NULL,
     error_message TEXT,
     duration_ms INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_task_executions_task ON task_executions (task_id);
 
 -- agent_executions：Agent 维度的每次执行历史（第 32 节；手动触发 / 定时触发都记，含起止时间与状态）
 -- ended_at 为空表示"运行中"；成功失败都记，重启不丢，管理台按 Agent 回看。

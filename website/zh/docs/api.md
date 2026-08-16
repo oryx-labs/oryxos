@@ -539,13 +539,29 @@ null
 
 ### 列出定时任务
 
+新客户端必须使用 v2：`scheduleId` 是全局稳定的运行态身份，`key` 只在单个 Agent 内唯一。
+
+### v2 运行态 API
+
+- **GET** `/api/v2/schedules`
+- **POST** `/api/v2/schedules/{scheduleId}/run`
+- **PUT** `/api/v2/schedules/{scheduleId}`
+- **GET** `/api/v2/schedules/{scheduleId}/executions?limit=20`
+- **POST** `/api/v2/agents/{profileName}/schedules/{key}/run`
+
+任务列表返回 `scheduleId`、`profileName`、`key`、`name` 和运行态字段。执行历史返回 `scheduleId`；由旧库迁入的记录会带 `legacyMigrated: true` 与 `legacyTaskKey`。
+
+### 已弃用的 v1 兼容 API
+
+下面的 v1 路径参数仍按旧配置 `key` 解析，只在全库唯一匹配时兼容；多个 Agent 使用相同 key 时一律返回 HTTP 409，不会静默选择其中一条。
+
 **GET** `/api/v1/schedules`
 
 ```json
-// data —— ScheduleView[]
+// data —— LegacyScheduleView[]
 [
   {
-    "taskId": "weather-daily:morning",
+    "taskId": "morning",
     "profileName": "weather-daily",
     "cron": "0 0 8 * * *",
     "zone": "Asia/Shanghai",
@@ -569,8 +585,10 @@ null
 // data —— ExecutionView[]
 [
   {
-    "taskId": "weather-daily:morning",
-    "sessionId": "schedule:weather-daily:morning",
+    "scheduleId": "ae3d1f7b-245c-4c37-bbf7-38a6db55bfce",
+    "legacyTaskKey": null,
+    "legacyMigrated": false,
+    "sessionId": "schedule:ae3d1f7b-245c-4c37-bbf7-38a6db55bfce",
     "startedAt": "2026-07-22T00:00:00Z",
     "success": true,
     "errorMessage": null,
@@ -588,7 +606,7 @@ null
 ```json
 // data —— ExecutionView[]
 [
-  { "taskId": "weather-daily:morning", "sessionId": "schedule:weather-daily:morning", "startedAt": "2026-07-22T09:30:00Z", "success": true, "errorMessage": null, "durationMs": 1730 }
+  { "scheduleId": "ae3d1f7b-245c-4c37-bbf7-38a6db55bfce", "legacyTaskKey": null, "legacyMigrated": false, "sessionId": "schedule:ae3d1f7b-245c-4c37-bbf7-38a6db55bfce", "startedAt": "2026-07-22T09:30:00Z", "success": true, "errorMessage": null, "durationMs": 1730 }
 ]
 ```
 
@@ -602,9 +620,9 @@ null
 ```
 
 ```json
-// data —— ScheduleView[]（更新后的任务列表）
+// data —— LegacyScheduleView[]（更新后的任务列表）
 [
-  { "taskId": "weather-daily:morning", "profileName": "weather-daily", "cron": "0 0 8 * * *", "zone": "Asia/Shanghai", "message": "推送今天的天气和穿衣建议", "enabled": false, "nextRunAt": null, "lastRunAt": "2026-07-22T00:00:00Z", "lastStatus": "success", "runCount": 12 }
+  { "taskId": "morning", "profileName": "weather-daily", "cron": "0 0 8 * * *", "zone": "Asia/Shanghai", "message": "推送今天的天气和穿衣建议", "enabled": false, "nextRunAt": null, "lastRunAt": "2026-07-22T00:00:00Z", "lastStatus": "success", "runCount": 12 }
 ]
 ```
 

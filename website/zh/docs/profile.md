@@ -52,7 +52,8 @@ bootstrap:
   - USER.md
 
 schedules:
-  - id: morning-check
+  - key: morning-check
+    name: 晨间检查
     cron: "0 0 8 * * *"
     zone: Asia/Shanghai
     message: 执行早晨健康检查。
@@ -185,11 +186,12 @@ Bootstrap 文件按列出的顺序注入 system prompt，提供跨所有 Agent �
 
 ## Schedules
 
-`schedules` 声明该 Agent 的定时触发任务。每条到点时以 Agent 正文作为任务触发一次。定时任务也可通过 `/api/v1/schedules` 接口和管理台列出、立即运行、启用/停用。
+`schedules` 声明该 Agent 的定时触发任务。每条必须定义 Agent 内的 `key` 与展示 `name`；OryxOS 会为运行态生成稳定且全局唯一的 `scheduleId`。列表、立即运行、历史和启停请使用 `/api/v2/schedules` 与管理台。
 
 ```yaml
 schedules:
-  - id: morning-check
+  - key: morning-check
+    name: 晨间检查
     cron: "0 0 8 * * *"     # Spring cron：秒 分 时 日 月 周
     zone: Asia/Shanghai
     message: 执行早晨健康检查。

@@ -111,8 +111,8 @@ public class AgentLifecycleService {
       2. name 必须是「{name}」；provider.name 必须是「{provider}」；model 必须是「{model}」（若该 provider 下没有这个 exact 模型名，就填该 provider 下合理的默认模型名）。
       3. tools 只能从下面【可用工具】里按需挑选，**绝不允许编造清单以外的工具名**。常见映射：查网页/接口数据用 http_get / http_post；\
       抓网页正文用 fetch_webpage；读写文件用 read_file / write_file；跑脚本用 shell。
-      4. schedules 每条的字段只有：id（任务标识）、cron（Spring 6 段 cron，如 "0 0 9 * * *" 表示每天 9 点）、zone（时区，如 Asia/Shanghai）、\
-      message（到点发给 Agent 的触发语）。**不要用 timezone、action 等清单外字段名。**
+      4. schedules 每条必须包含：key（Agent 内唯一的配置键）、name（展示名称）、cron（Spring 6 段 cron，如 "0 0 9 * * *" 表示每天 9 点）、\
+      zone（时区，如 Asia/Shanghai）、message（到点发给 Agent 的触发语）。不要输出 legacy id、timezone、action 等字段。
       5. 通知：{notify}
       6. MCP：如果任务需要用到下面【可用 MCP Server】里"已连接"的某个 server 提供的能力，把该 server 名加进 frontmatter 的 \
       mcp_servers 列表，**并且**把它提供的具体工具名也加进 tools 列表（两者都要写，只写一个不生效）；未连接 / 清单外的 server \
@@ -140,7 +140,7 @@ public class AgentLifecycleService {
       需求：
       """;
 
-  /** few-shot 范例：真实工具（http_get + notify）+ 正确 schedules 字段（id/cron/zone/message）。 */
+  /** few-shot 范例：真实工具（http_get + notify）+ 正确 schedules 字段（key/name/cron/zone/message）。 */
   private static final String AUTHOR_EXAMPLE =
       """
       ---
@@ -159,7 +159,8 @@ public class AgentLifecycleService {
         max_iterations: 10
         max_history_turns: 20
       schedules:
-        - id: morning-weather
+        - key: morning-weather
+          name: Morning weather
           cron: "0 0 9 * * *"
           zone: Asia/Shanghai
           message: 查询今天的天气并把穿搭提示发到团队群

@@ -223,7 +223,9 @@ tools:
   - save_memory
   - recall_memory
 schedules:
-  - cron: "0 9 * * *"
+  - key: daily-brief
+    name: Daily brief
+    cron: "0 0 9 * * *"
 settings:
   max_iterations: 10
   max_history_turns: 20

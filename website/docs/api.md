@@ -535,17 +535,29 @@ Marks the session as archived. Data is retained in SQLite; the session is exclud
 
 ## Schedules
 
-Scheduled tasks are derived from the `schedules` block in each Agent's `AGENT.md`. The web manager can list, inspect, trigger, and toggle them.
+Scheduled tasks are derived from the `schedules` block in each Agent's `AGENT.md`. New clients must use the v2 endpoints below: `scheduleId` is the stable runtime identity, while `key` is only Agent-local. The v1 endpoints in the following legacy section resolve a key only when it is unambiguous; otherwise they return `409`.
+
+### v2 runtime API
+
+- `GET /api/v2/schedules`
+- `POST /api/v2/schedules/{scheduleId}/run`
+- `PUT /api/v2/schedules/{scheduleId}`
+- `GET /api/v2/schedules/{scheduleId}/executions?limit=20`
+- `POST /api/v2/agents/{profileName}/schedules/{key}/run`
+
+Each v2 schedule contains `scheduleId`, `profileName`, `key`, `name`, and its runtime state. Execution rows include `legacyMigrated` and `legacyTaskKey` for history imported from the pre-v2 schema.
+
+### Deprecated v1 compatibility API
 
 ### List schedules
 
 **GET** `/api/v1/schedules`
 
 ```json
-// data — ScheduleView[]
+// data — LegacyScheduleView[]
 [
   {
-    "taskId": "weather-daily:morning",
+    "taskId": "morning",
     "profileName": "weather-daily",
     "cron": "0 0 8 * * *",
     "zone": "Asia/Shanghai",
@@ -569,8 +581,10 @@ Returns execution history for a task (`limit` caps the rows).
 // data — ExecutionView[]
 [
   {
-    "taskId": "weather-daily:morning",
-    "sessionId": "schedule:weather-daily:morning",
+    "scheduleId": "ae3d1f7b-245c-4c37-bbf7-38a6db55bfce",
+    "legacyTaskKey": null,
+    "legacyMigrated": false,
+    "sessionId": "schedule:ae3d1f7b-245c-4c37-bbf7-38a6db55bfce",
     "startedAt": "2026-07-22T00:00:00Z",
     "success": true,
     "errorMessage": null,
@@ -588,7 +602,7 @@ Triggers the task immediately and returns the resulting execution record(s).
 ```json
 // data — ExecutionView[]
 [
-  { "taskId": "weather-daily:morning", "sessionId": "schedule:weather-daily:morning", "startedAt": "2026-07-22T09:30:00Z", "success": true, "errorMessage": null, "durationMs": 1730 }
+  { "scheduleId": "ae3d1f7b-245c-4c37-bbf7-38a6db55bfce", "legacyTaskKey": null, "legacyMigrated": false, "sessionId": "schedule:ae3d1f7b-245c-4c37-bbf7-38a6db55bfce", "startedAt": "2026-07-22T09:30:00Z", "success": true, "errorMessage": null, "durationMs": 1730 }
 ]
 ```
 
@@ -602,9 +616,9 @@ Triggers the task immediately and returns the resulting execution record(s).
 ```
 
 ```json
-// data — ScheduleView[] (the updated schedule list)
+// data — LegacyScheduleView[] (the updated schedule list)
 [
-  { "taskId": "weather-daily:morning", "profileName": "weather-daily", "cron": "0 0 8 * * *", "zone": "Asia/Shanghai", "message": "推送今天的天气和穿衣建议", "enabled": false, "nextRunAt": null, "lastRunAt": "2026-07-22T00:00:00Z", "lastStatus": "success", "runCount": 12 }
+  { "taskId": "morning", "profileName": "weather-daily", "cron": "0 0 8 * * *", "zone": "Asia/Shanghai", "message": "推送今天的天气和穿衣建议", "enabled": false, "nextRunAt": null, "lastRunAt": "2026-07-22T00:00:00Z", "lastStatus": "success", "runCount": 12 }
 ]
 ```
 

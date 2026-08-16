@@ -520,9 +520,9 @@ Channel 是 Agent 对外的消息接入入口，主要解决"消息进来、响�
 
 **状态持久化与可管理（第 28 节补齐）。** 光"到点自动跑"还不够——运营方要能看见有哪些定时任务、跑过几次、上次成没成，也要能手动补跑一次、临时停掉一个任务。为此把任务状态和执行历史落 SQLite（重启不丢），并做成管理台的一等公民：
 
-- **两张表**（手工建表脚本，见 9.2）：`scheduled_tasks` 存任务登记信息与运行状态（`task_id` 主键、`profile_name`、`cron`、`zone`、`message`、`enabled`、`next_run_at`、`last_run_at`、`last_status`、`run_count`），`task_executions` 存每次执行的历史（成功失败都记：`task_id`、`session_id`、`started_at`、`success`、`error_message`、`duration_ms`）。定义来源仍是 skill/Profile 的 `schedules`——这两张表只存"状态 + 历史"，不作为定义源，重启时从文件重新注册。
-- **契约在 core、实现在 storage**（依赖倒置）：`ScheduledTaskStore` 接口（`register`/`recordExecution`/`isEnabled`/`setEnabled`/`list`/`executions`）放 `oryxos-core`，`AgentScheduler` 依赖它；JPA 实现 `JpaScheduledTaskStore` 放 `oryxos-storage`。`AgentScheduler` 启动扫描时顺带 `register` 登记，每次 `execute` 成功失败都 `recordExecution` 留痕（与宪法 V 审计同源）；`runOnce` 先看 `isEnabled`（停用则跳过、不记执行），管理台"立即执行"走 `runNow` 手动触发一次（无视启用状态）。
-- **四个管理端点**（`ScheduleApiController`，前缀 `/api/v1/schedules`）：`GET /schedules` 列任务与状态、`GET /schedules/{id}/executions` 查执行历史、`POST /schedules/{id}/run` 立即执行一次、`PUT /schedules/{id}` 启用/停用。管理台"定时任务"页调这四个端点，可查可管——这是第 28 节相对第 26 节"管理台只读"的一处明确扩展（仅限定时任务这一子系统的运行控制）。
+- **两张表**（手工建表脚本，见 9.2）：`scheduled_tasks` 存任务登记信息与运行状态（全局 `schedule_id` 主键、`profile_name`、Agent 内的 `schedule_key`、展示 `display_name`、`cron`、`zone`、`message` 与运行态字段）；`task_executions` 存每次执行的历史（`schedule_id`、`session_id`、`started_at`、`success`、`error_message`、`duration_ms`）。定义来源仍是 Agent 的 `schedules`——这两张表只存“状态 + 历史”，不作为定义源，重启时从文件重新协调。
+- **契约在 core、实现在 storage**（依赖倒置）：`ScheduledTaskStore` 接口（`reconcile`/`retire`/`recordExecution`/`isEnabled`/`setEnabled`/`list`/`executions`）放 `oryxos-core`，`AgentScheduler` 依赖它；JPA 实现 `JpaScheduledTaskStore` 放 `oryxos-storage`。`reconcile(profileName, key, ...)` 为同一配置任务复用稳定 `scheduleId`，调度锁、启停、立即执行和历史均使用该 ID；删改 key 时旧记录退役而不删历史。
+- **v2 管理端点**（前缀 `/api/v2`）：`GET /schedules`、`GET /schedules/{scheduleId}/executions`、`POST /schedules/{scheduleId}/run`、`PUT /schedules/{scheduleId}`，以及按定义精确定位的 `POST /agents/{profileName}/schedules/{key}/run`。管理台只调用 v2；v1 仍可按旧 key 兼容，但当多个 Agent 使用同一 key 时返回 HTTP 409，绝不再静默选择第一条。
 
 **核心阶段 vs 扩展阶段的边界。** 核心阶段的 `schedules` **定义**只能写在 `AGENT.md` frontmatter 里，跟着进程启动一起注册，改 cron / 新增任务要重启（或触发重新加载）才生效；第 28 节补齐的是任务的**状态持久化与运行控制**（查看 / 执行历史 / 立即执行 / 启用停用），不含通过 API 增删改 cron 定义。"业务方通过 Web Service 上传一个 Agent 目录（`AGENT.md` 带 `schedules` frontmatter）、由此定义一个新 Agent 并让它定时自动运行"这个完整闭环，依赖的是 7.3 里扩展阶段才补齐的两个能力——Agent 目录上传接口（含一句话生成）、`AgentScheduler` 的运行时增删接口——核心阶段这条链路要靠手动丢目录走通，扩展阶段补上后才是纯 API、免重启的闭环。
 
@@ -612,12 +612,15 @@ session list
 
 | 字段 | 说明 |
 |------|------|
-| `task_id` | 主键，schedule 的 id（Profile/Skill 的 `schedules` 里声明） |
+| `schedule_id` | 全局运行态主键；由 SQLite 为 `(profile_name, schedule_key)` 生成并保持稳定 |
 | `profile_name` | 归属 Profile |
+| `schedule_key` | Agent 内配置键；同一 Profile 内唯一 |
+| `display_name` | 展示名称，不参与运行态定位 |
 | `cron` | cron 表达式 |
 | `zone` | 时区 |
 | `message` | 到点发给 Agent 的消息 |
 | `enabled` | 是否启用（管理台开关，默认启用） |
+| `retired` | 配置被删除或改 key 后标记为退役；不参与调度和活动列表，但状态与历史保留 |
 | `next_run_at` | 下次触发时刻 |
 | `last_run_at` | 上次触发时刻 |
 | `last_status` | 上次结果 `success` / `failed` |
@@ -629,7 +632,7 @@ session list
 | 字段 | 说明 |
 |------|------|
 | `id` | 主键，自增 |
-| `task_id` | 关联 `scheduled_tasks` |
+| `schedule_id` | 关联 `scheduled_tasks`；迁移前无法可靠关联的历史可为空 |
 | `session_id` | 本次触发所用的钟推 Session |
 | `started_at` | 开始时间 |
 | `success` | 是否成功 |

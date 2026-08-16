@@ -52,7 +52,8 @@ bootstrap:
   - USER.md
 
 schedules:
-  - id: morning-check
+  - key: morning-check
+    name: Morning check
     cron: "0 0 8 * * *"
     zone: Asia/Shanghai
     message: Run the morning health check.
@@ -186,11 +187,12 @@ Bootstrap files are prepended to the system prompt in the order listed. They app
 
 ## Schedules
 
-`schedules` declares cron-triggered runs of the agent. Each entry fires the agent's body as the task at the given time. Scheduled tasks can also be listed, run on demand, and enabled/disabled through the `/api/v1/schedules` API and the admin console.
+`schedules` declares cron-triggered runs of the agent. Each entry requires an Agent-local `key` and a display `name`; OryxOS assigns a stable global `scheduleId` for runtime operations. Use `/api/v2/schedules` and the admin console for listing, running, history, and enable/disable.
 
 ```yaml
 schedules:
-  - id: morning-check
+  - key: morning-check
+    name: Morning check
     cron: "0 0 8 * * *"     # Spring cron: sec min hour day month weekday
     zone: Asia/Shanghai
     message: Run the morning health check.

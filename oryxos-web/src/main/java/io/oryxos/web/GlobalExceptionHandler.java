@@ -8,6 +8,7 @@ import io.oryxos.web.controller.dto.SkillReferenceConflictView;
 import io.oryxos.web.error.AgentTimeoutException;
 import io.oryxos.web.error.ProviderUnavailableException;
 import io.oryxos.web.error.ResourceNotFoundException;
+import io.oryxos.web.error.ScheduleKeyAmbiguityException;
 import io.oryxos.web.error.SessionNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,6 +74,15 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ApiResponse<Void>> handleSessionUpdateConflict(
       SessionUpdateConflictException ex) {
     LOG.warn("Session update conflict: {}", sanitize(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(ApiResponse.error(HttpStatus.CONFLICT.value(), ex.getMessage()));
+  }
+
+  /** 409 - a deprecated v1 schedule key identifies multiple schedules. */
+  @ExceptionHandler(ScheduleKeyAmbiguityException.class)
+  public ResponseEntity<ApiResponse<Void>> handleScheduleKeyAmbiguity(
+      ScheduleKeyAmbiguityException ex) {
+    LOG.warn("Ambiguous schedule key: {}", sanitize(ex.getMessage()));
     return ResponseEntity.status(HttpStatus.CONFLICT)
         .body(ApiResponse.error(HttpStatus.CONFLICT.value(), ex.getMessage()));
   }

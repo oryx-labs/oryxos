@@ -61,6 +61,7 @@ import io.oryxos.storage.LlmProviderRepository;
 import io.oryxos.storage.MemoryEntryRepository;
 import io.oryxos.storage.NotifyChannelRepository;
 import io.oryxos.storage.SandboxWhitelistRepository;
+import io.oryxos.storage.ScheduleSchemaUpgrade;
 import io.oryxos.storage.ScheduledTaskRepository;
 import io.oryxos.storage.SessionRepository;
 import io.oryxos.storage.TaskExecutionRepository;
@@ -100,12 +101,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -562,9 +565,22 @@ public class OryxOsRuntime {
   }
 
   /** 28 节：定时任务状态与执行历史落 SQLite（重启不丢），并支撑管理台的查看/立即执行/启用停用。 */
+  /**
+   * Runs after schema.sql and before any scheduler store or scheduler bean can observe the tables.
+   * The upgrader derives idempotence solely from the live SQLite columns; it has no migration table.
+   */
+  @Bean
+  @DependsOn("dataSourceScriptDatabaseInitializer")
+  ScheduleSchemaUpgrade scheduleSchemaUpgrade(DataSource dataSource) {
+    return new ScheduleSchemaUpgrade(dataSource);
+  }
+
   @Bean
   ScheduledTaskStore scheduledTaskStore(
-      ScheduledTaskRepository taskRepository, TaskExecutionRepository executionRepository) {
+      ScheduleSchemaUpgrade scheduleSchemaUpgrade,
+      ScheduledTaskRepository taskRepository,
+      TaskExecutionRepository executionRepository) {
+    scheduleSchemaUpgrade.upgrade();
     return new JpaScheduledTaskStore(taskRepository, executionRepository);
   }
 

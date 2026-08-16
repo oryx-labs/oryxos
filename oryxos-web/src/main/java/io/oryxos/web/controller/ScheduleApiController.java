@@ -2,11 +2,16 @@ package io.oryxos.web.controller;
 
 import io.oryxos.core.agent.AgentScheduler;
 import io.oryxos.core.agent.ScheduledTaskStore;
+import io.oryxos.core.agent.ScheduledTaskView;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.ExecutionView;
-import io.oryxos.web.controller.dto.ScheduleView;
+import io.oryxos.web.controller.dto.LegacyScheduleView;
 import io.oryxos.web.controller.dto.SetEnabledRequest;
+import io.oryxos.web.error.ResourceNotFoundException;
+import io.oryxos.web.error.ScheduleKeyAmbiguityException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,8 +52,10 @@ public class ScheduleApiController {
 
   /** 列出全部定时任务及其运行状态。 */
   @GetMapping
-  public ApiResponse<List<ScheduleView>> list() {
-    return ApiResponse.ok(taskStore.list().stream().map(ScheduleView::from).toList());
+  public ApiResponse<List<LegacyScheduleView>> list() {
+    List<ScheduledTaskView> schedules = taskStore.list();
+    rejectAmbiguousLegacyKeys(schedules);
+    return ApiResponse.ok(schedules.stream().map(LegacyScheduleView::from).toList());
   }
 
   /** 查某任务最近的执行历史（默认最多 100 条）。 */
@@ -57,29 +64,51 @@ public class ScheduleApiController {
       @PathVariable String id,
       @RequestParam(name = "limit", defaultValue = "" + DEFAULT_EXECUTION_LIMIT) int limit) {
     int capped = limit <= 0 || limit > DEFAULT_EXECUTION_LIMIT ? DEFAULT_EXECUTION_LIMIT : limit;
+    String scheduleId = resolveScheduleId(id);
     return ApiResponse.ok(
-        taskStore.executions(id, capped).stream().map(ExecutionView::from).toList());
+        taskStore.executions(scheduleId, capped).stream().map(ExecutionView::from).toList());
   }
 
-  /** 立即执行一次（手动触发，无视启用状态）。任务不存在时 scheduler 抛 IllegalArgumentException→400。 */
+  /** 立即执行一次（手动触发，无视启用状态）。 */
   @PostMapping("/{id}/run")
   public ApiResponse<List<ExecutionView>> run(@PathVariable String id) {
-    scheduler.runNow(id);
+    String scheduleId = resolveScheduleId(id);
+    scheduler.runNow(scheduleId);
     // 执行完把这次（及历史）结果回给调用方，省一次二次查询
     return ApiResponse.ok(
-        taskStore.executions(id, DEFAULT_EXECUTION_LIMIT).stream()
+        taskStore.executions(scheduleId, DEFAULT_EXECUTION_LIMIT).stream()
             .map(ExecutionView::from)
             .toList());
   }
 
   /** 启用/停用一条定时任务。 */
   @PutMapping("/{id}")
-  public ApiResponse<List<ScheduleView>> setEnabled(
+  public ApiResponse<List<LegacyScheduleView>> setEnabled(
       @PathVariable String id, @RequestBody(required = false) SetEnabledRequest body) {
     if (body == null || body.enabled() == null) {
       throw new IllegalArgumentException("请求体缺少 enabled（true 启用 / false 停用）");
     }
-    taskStore.setEnabled(id, body.enabled());
-    return ApiResponse.ok(taskStore.list().stream().map(ScheduleView::from).toList());
+    taskStore.setEnabled(resolveScheduleId(id), body.enabled());
+    return ApiResponse.ok(taskStore.list().stream().map(LegacyScheduleView::from).toList());
+  }
+
+  private String resolveScheduleId(String key) {
+    List<ScheduledTaskView> matches = taskStore.findByKey(key);
+    if (matches.isEmpty()) {
+      throw new ResourceNotFoundException("Schedule key not found: " + key);
+    }
+    if (matches.size() > 1) {
+      throw new ScheduleKeyAmbiguityException(key);
+    }
+    return matches.getFirst().scheduleId();
+  }
+
+  private static void rejectAmbiguousLegacyKeys(List<ScheduledTaskView> schedules) {
+    Set<String> seen = new HashSet<>();
+    for (ScheduledTaskView schedule : schedules) {
+      if (!seen.add(schedule.key())) {
+        throw new ScheduleKeyAmbiguityException(schedule.key());
+      }
+    }
   }
 }

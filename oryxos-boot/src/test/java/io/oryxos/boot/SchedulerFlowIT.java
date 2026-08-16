@@ -43,7 +43,7 @@ import org.springframework.http.ResponseEntity;
 class SchedulerFlowIT {
 
   /** 与 `.oryxos/profiles/weather-daily.yaml` 里的 schedule id 对齐；换 Profile 时同步改这里。 */
-  private static final String TASK_ID = "weather-daily-morning";
+  private static final String SCHEDULE_KEY = "weather-daily-morning";
 
   private final ObjectMapper mapper = new ObjectMapper();
 
@@ -55,7 +55,8 @@ class SchedulerFlowIT {
   @DisplayName("钟推立即执行一次_状态历史入库且逐表对账")
   void runNowOnce_stateAndHistoryPersisted_andAuditReconciled() throws Exception {
     // 立即执行一次钟推（走 execute 同一路径，免等 cron 到点）
-    JsonNode execs = post("/api/v1/schedules/" + TASK_ID + "/run");
+    JsonNode task = findTask(get("/api/v2/schedules"), SCHEDULE_KEY);
+    JsonNode execs = post("/api/v2/schedules/" + task.get("scheduleId").asText() + "/run");
     assertFalse(execs.isEmpty(), "触发后应有执行历史");
     JsonNode latest = execs.get(0);
     assertTrue(latest.get("success").asBoolean(), "本次钟推应成功");
@@ -64,7 +65,7 @@ class SchedulerFlowIT {
     assertFalse(sid.isBlank(), "钟推应关联一个 session");
 
     // 任务状态更新入库
-    JsonNode task = findTask(get("/api/v1/schedules"), TASK_ID);
+    task = findTask(get("/api/v2/schedules"), SCHEDULE_KEY);
     assertTrue(task.get("runCount").asLong() >= 1, "run_count 应累加");
     assertEquals("success", task.get("lastStatus").asText(), "last_status 应为 success");
 
@@ -73,13 +74,13 @@ class SchedulerFlowIT {
     assertTrue(toolInvocations.findBySessionId(sid).size() >= 0, "钟推的工具调用（若有）应按 session 关联落审计");
   }
 
-  private static JsonNode findTask(JsonNode list, String taskId) {
+  private static JsonNode findTask(JsonNode list, String key) {
     for (JsonNode n : list) {
-      if (taskId.equals(n.get("taskId").asText())) {
+      if (key.equals(n.get("key").asText())) {
         return n;
       }
     }
-    throw new AssertionError("列表里应含任务 " + taskId + "（检查 .oryxos Profile 的 schedule id）");
+    throw new AssertionError("列表里应含任务 " + key + "（检查 .oryxos Profile 的 schedule key）");
   }
 
   private JsonNode post(String path) throws Exception {

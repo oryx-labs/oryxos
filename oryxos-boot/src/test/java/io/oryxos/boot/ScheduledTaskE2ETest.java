@@ -43,7 +43,7 @@ import org.springframework.test.context.DynamicPropertySource;
 class ScheduledTaskE2ETest {
 
   private static final Path ROOT = seedWorkspace();
-  private static final String TASK_ID = "daily-inspect";
+  private static final String SCHEDULE_KEY = "daily-inspect";
 
   private final ObjectMapper mapper = new ObjectMapper();
 
@@ -71,7 +71,8 @@ class ScheduledTaskE2ETest {
             - save_memory
             - recall_memory
           schedules:
-            - id: daily-inspect
+            - key: daily-inspect
+              name: Daily inspection
               cron: "0 0 0 1 1 *"
               zone: Asia/Shanghai
               message: 记录一次定时任务巡检
@@ -98,22 +99,23 @@ class ScheduledTaskE2ETest {
   void bootRegistersTask_runOnce_thenStateHistoryMemoryAllMatch_disableTakesEffect()
       throws Exception {
     // ① 启动即登记：列表里查得到该任务，初始启用、还没跑过
-    JsonNode before = findTask(getData("/api/v1/schedules"), TASK_ID);
+    JsonNode before = findTask(getData("/api/v2/schedules"), SCHEDULE_KEY);
     assertTrue(before.get("enabled").asBoolean(), "新任务应默认启用");
     assertEquals(0, before.get("runCount").asLong(), "还没触发过，run_count 应为 0");
 
     // ② 立即执行一次（手动触发一次真实 ReAct）
-    JsonNode execs = postData("/api/v1/schedules/" + TASK_ID + "/run");
+    String scheduleId = before.get("scheduleId").asText();
+    JsonNode execs = postData("/api/v2/schedules/" + scheduleId + "/run");
     assertFalse(execs.isEmpty(), "触发后应有一条执行历史");
     assertTrue(execs.get(0).get("success").asBoolean(), "本次执行应成功");
 
     // ③ 任务状态更新：run_count=1、last_status=success
-    JsonNode after = findTask(getData("/api/v1/schedules"), TASK_ID);
+    JsonNode after = findTask(getData("/api/v2/schedules"), SCHEDULE_KEY);
     assertEquals(1, after.get("runCount").asLong(), "触发一次后 run_count 应为 1");
     assertEquals("success", after.get("lastStatus").asText(), "last_status 应为 success");
 
     // ④ 执行历史端点查得到（成功、带 sessionId）
-    JsonNode history = getData("/api/v1/schedules/" + TASK_ID + "/executions");
+    JsonNode history = getData("/api/v2/schedules/" + scheduleId + "/executions");
     assertTrue(history.size() >= 1, "执行历史应查得到");
     assertFalse(history.get(0).get("sessionId").asText().isBlank(), "执行应关联到一个 session");
 
@@ -124,15 +126,15 @@ class ScheduledTaskE2ETest {
 
     // ⑥ 停用后列表里 enabled=false
     JsonNode afterDisable =
-        findTask(putData("/api/v1/schedules/" + TASK_ID, "{\"enabled\":false}"), TASK_ID);
+        findTask(putData("/api/v2/schedules/" + scheduleId, "{\"enabled\":false}"), SCHEDULE_KEY);
     assertFalse(afterDisable.get("enabled").asBoolean(), "停用后 enabled 应为 false");
   }
 
-  private static JsonNode findTask(JsonNode list, String taskId) {
+  private static JsonNode findTask(JsonNode list, String key) {
     return stream(list)
-        .filter(n -> taskId.equals(n.get("taskId").asText()))
+        .filter(n -> key.equals(n.get("key").asText()))
         .findFirst()
-        .orElseThrow(() -> new AssertionError("列表里应含任务 " + taskId));
+        .orElseThrow(() -> new AssertionError("列表里应含任务 " + key));
   }
 
   private JsonNode postData(String path) throws Exception {

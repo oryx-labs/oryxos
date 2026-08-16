@@ -5,12 +5,11 @@ import io.oryxos.core.agent.ScheduledTaskView;
 import io.oryxos.core.agent.TaskExecutionView;
 import java.time.Instant;
 import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.UUID;
+import org.springframework.transaction.annotation.Transactional;
 
-/**
- * {@link ScheduledTaskStore} 的 JPA 实现（28 节）：任务状态入 scheduled_tasks、执行历史入 task_executions。
- *
- * <p>register 幂等 upsert（已存在则保留 enabled 与 run_count）；recordExecution 写一条历史并更新任务状态。
- */
+/** JPA-backed runtime state and execution history for configured schedules. */
 public class JpaScheduledTaskStore implements ScheduledTaskStore {
 
   private final ScheduledTaskRepository tasks;
@@ -22,111 +21,144 @@ public class JpaScheduledTaskStore implements ScheduledTaskStore {
   }
 
   @Override
-  public void register(
-      String taskId,
+  public String reconcile(
       String profileName,
+      String key,
+      String name,
       String cron,
       String zone,
       String message,
       Instant nextRunAt) {
-    ScheduledTask task = tasks.findById(taskId).orElse(null);
+    ScheduledTask task = tasks.findByProfileNameAndScheduleKey(profileName, key).orElse(null);
     if (task == null) {
       task = new ScheduledTask();
-      task.setTaskId(taskId);
-      task.setEnabled(true); // 新任务默认启用
+      task.setScheduleId(UUID.randomUUID().toString());
+      task.setProfileName(profileName);
+      task.setScheduleKey(key);
+      task.setEnabled(true);
       task.setRunCount(0);
     }
-    task.setProfileName(profileName);
+    task.setRetired(false);
+    task.setDisplayName(name);
     task.setCron(cron);
     task.setZone(zone);
     task.setMessage(message);
     task.setNextRunAt(nextRunAt);
     task.setUpdatedAt(Instant.now());
     tasks.save(task);
+    return task.getScheduleId();
   }
 
   @Override
+  @Transactional
   public void recordExecution(
-      String taskId,
+      String scheduleId,
       String sessionId,
       Instant startedAt,
       boolean success,
       String errorMessage,
       long durationMs,
       Instant nextRunAt) {
-    TaskExecution exec = new TaskExecution();
-    exec.setTaskId(taskId);
-    exec.setSessionId(sessionId);
-    exec.setStartedAt(startedAt);
-    exec.setSuccess(success);
-    exec.setErrorMessage(errorMessage);
-    exec.setDurationMs(durationMs);
-    executions.save(exec);
+    ScheduledTask task = requireSchedule(scheduleId);
+    TaskExecution execution = new TaskExecution();
+    execution.setScheduleId(scheduleId);
+    execution.setLegacyMigrated(false);
+    execution.setSessionId(sessionId);
+    execution.setStartedAt(startedAt);
+    execution.setSuccess(success);
+    execution.setErrorMessage(errorMessage);
+    execution.setDurationMs(durationMs);
+    executions.save(execution);
 
-    tasks
-        .findById(taskId)
-        .ifPresent(
-            task -> {
-              task.setLastRunAt(startedAt);
-              task.setLastStatus(success ? "success" : "failed");
-              task.setRunCount(task.getRunCount() + 1);
-              task.setNextRunAt(nextRunAt);
-              task.setUpdatedAt(Instant.now());
-              tasks.save(task);
-            });
+    task.setLastRunAt(startedAt);
+    task.setLastStatus(success ? "success" : "failed");
+    task.setRunCount(task.getRunCount() + 1);
+    task.setNextRunAt(nextRunAt);
+    task.setUpdatedAt(Instant.now());
+    tasks.save(task);
   }
 
   @Override
-  public boolean isEnabled(String taskId) {
-    return tasks.findById(taskId).map(ScheduledTask::isEnabled).orElse(true); // fail-open
+  public boolean isEnabled(String scheduleId) {
+    ScheduledTask task = requireSchedule(scheduleId);
+    return !task.isRetired() && task.isEnabled();
   }
 
   @Override
-  public void setEnabled(String taskId, boolean enabled) {
-    tasks
-        .findById(taskId)
-        .ifPresent(
-            task -> {
-              task.setEnabled(enabled);
-              task.setUpdatedAt(Instant.now());
-              tasks.save(task);
-            });
+  public void setEnabled(String scheduleId, boolean enabled) {
+    ScheduledTask task = requireSchedule(scheduleId);
+    task.setEnabled(enabled);
+    task.setUpdatedAt(Instant.now());
+    tasks.save(task);
+  }
+
+  @Override
+  public void retire(String profileName, String key) {
+    tasks.findByProfileNameAndScheduleKey(profileName, key).ifPresent(
+        task -> {
+          task.setRetired(true);
+          task.setUpdatedAt(Instant.now());
+          tasks.save(task);
+        });
   }
 
   @Override
   public List<ScheduledTaskView> list() {
-    return tasks.findAll().stream().map(JpaScheduledTaskStore::toTaskView).toList();
+    return tasks.findByRetiredFalse().stream().map(JpaScheduledTaskStore::toTaskView).toList();
   }
 
   @Override
-  public List<TaskExecutionView> executions(String taskId, int limit) {
-    return executions.findByTaskIdOrderByStartedAtDesc(taskId).stream()
+  public List<ScheduledTaskView> findByKey(String key) {
+    return tasks.findByScheduleKeyAndRetiredFalse(key).stream()
+        .map(JpaScheduledTaskStore::toTaskView)
+        .toList();
+  }
+
+  @Override
+  public boolean exists(String scheduleId) {
+    return tasks.existsById(scheduleId);
+  }
+
+  @Override
+  public List<TaskExecutionView> executions(String scheduleId, int limit) {
+    requireSchedule(scheduleId);
+    return executions.findByScheduleIdOrderByStartedAtDesc(scheduleId).stream()
         .limit(limit)
         .map(JpaScheduledTaskStore::toExecutionView)
         .toList();
   }
 
-  private static ScheduledTaskView toTaskView(ScheduledTask t) {
+  private static ScheduledTaskView toTaskView(ScheduledTask task) {
     return new ScheduledTaskView(
-        t.getTaskId(),
-        t.getProfileName(),
-        t.getCron(),
-        t.getZone(),
-        t.getMessage(),
-        t.isEnabled(),
-        t.getNextRunAt(),
-        t.getLastRunAt(),
-        t.getLastStatus(),
-        t.getRunCount());
+        task.getScheduleId(),
+        task.getProfileName(),
+        task.getScheduleKey(),
+        task.getDisplayName(),
+        task.getCron(),
+        task.getZone(),
+        task.getMessage(),
+        task.isEnabled(),
+        task.getNextRunAt(),
+        task.getLastRunAt(),
+        task.getLastStatus(),
+        task.getRunCount());
   }
 
-  private static TaskExecutionView toExecutionView(TaskExecution e) {
+  private static TaskExecutionView toExecutionView(TaskExecution execution) {
     return new TaskExecutionView(
-        e.getTaskId(),
-        e.getSessionId(),
-        e.getStartedAt(),
-        e.isSuccess(),
-        e.getErrorMessage(),
-        e.getDurationMs());
+        execution.getScheduleId(),
+        execution.getLegacyTaskKey(),
+        execution.isLegacyMigrated(),
+        execution.getSessionId(),
+        execution.getStartedAt(),
+        execution.isSuccess(),
+        execution.getErrorMessage(),
+        execution.getDurationMs());
+  }
+
+  private ScheduledTask requireSchedule(String scheduleId) {
+    return tasks
+        .findById(scheduleId)
+        .orElseThrow(() -> new NoSuchElementException("Unknown scheduleId: " + scheduleId));
   }
 }

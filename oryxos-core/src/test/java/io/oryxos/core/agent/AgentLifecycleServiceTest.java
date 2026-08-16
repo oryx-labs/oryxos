@@ -119,7 +119,7 @@ class AgentLifecycleServiceTest {
   @DisplayName("register 带 schedules 的 Agent 注册定时（三录入同一段代码）")
   void register_withSchedules_registersTimer() throws Exception {
     Path dir = Path.of("agents", "cron");
-    Profile p = profile("cron", new ScheduleConfig("m", "0 0 9 * * *", "Asia/Shanghai", "x"));
+    Profile p = profile("cron", new ScheduleConfig("m", "m", "0 0 9 * * *", "Asia/Shanghai", "x"));
     doReturn(p).when(agentLoader).deriveProfile(dir);
 
     service.register(dir);
@@ -132,7 +132,7 @@ class AgentLifecycleServiceTest {
   @DisplayName("删除必须先停定时_再动索引和目录")
   void delete_unregistersThenRemovesThenArchives() {
     Profile p =
-        profile("weather-daily", new ScheduleConfig("m", "0 0 9 * * *", "Asia/Shanghai", "x"));
+        profile("weather-daily", new ScheduleConfig("m", "m", "0 0 9 * * *", "Asia/Shanghai", "x"));
     when(profileRegistry.get("weather-daily")).thenReturn(Optional.of(p));
 
     service.delete("weather-daily");
@@ -146,8 +146,8 @@ class AgentLifecycleServiceTest {
   @Test
   @DisplayName("update 改 schedules 先注销旧再注册新")
   void update_scheduleChanged_unregistersBeforeRegister() throws Exception {
-    Profile old = profile("w", new ScheduleConfig("m", "0 0 9 * * *", "Asia/Shanghai", "旧"));
-    Profile updated = profile("w", new ScheduleConfig("m", "0 0 10 * * *", "Asia/Shanghai", "新"));
+    Profile old = profile("w", new ScheduleConfig("m", "m", "0 0 9 * * *", "Asia/Shanghai", "旧"));
+    Profile updated = profile("w", new ScheduleConfig("m", "m", "0 0 10 * * *", "Asia/Shanghai", "新"));
     when(profileRegistry.get("w")).thenReturn(Optional.of(old));
     Path dir = Path.of("agents", "w");
     when(agentStore.writeAll(eq("w"), any())).thenReturn(dir);

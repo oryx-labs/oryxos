@@ -8,8 +8,10 @@ import java.time.Instant;
  * <p>定义来源仍是 skill/Profile 的 schedules；本视图投影自 SQLite 里持久化的任务状态（重启后仍在）。
  */
 public record ScheduledTaskView(
-    String taskId,
+    String scheduleId,
     String profileName,
+    String key,
+    String name,
     String cron,
     String zone,
     String message,
