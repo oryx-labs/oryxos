@@ -62,6 +62,10 @@ public final class ScheduleSchemaUpgrade {
 
   private final DataSource dataSource;
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification =
+          "The injected DataSource is an intentionally shared connection factory and cannot be defensively copied.")
   public ScheduleSchemaUpgrade(DataSource dataSource) {
     this.dataSource = dataSource;
   }
@@ -69,8 +73,8 @@ public final class ScheduleSchemaUpgrade {
   /** Upgrade a recognized old schema, skip the current schema, and reject any other shape. */
   public void upgrade() {
     try (Connection connection = dataSource.getConnection()) {
-      Set<String> taskColumns = tableColumns(connection, "scheduled_tasks");
-      Set<String> executionColumns = tableColumns(connection, "task_executions");
+      Set<String> taskColumns = scheduledTaskColumns(connection);
+      Set<String> executionColumns = taskExecutionColumns(connection);
       if (taskColumns.isEmpty() && executionColumns.isEmpty()) {
         return;
       }
@@ -110,10 +114,10 @@ public final class ScheduleSchemaUpgrade {
   private static boolean isCurrent(
       Connection connection, Set<String> taskColumns, Set<String> executionColumns)
       throws SQLException {
-    return taskColumns.equals(CURRENT_TASK_COLUMNS)
-        && executionColumns.equals(CURRENT_EXECUTION_COLUMNS)
-        && hasPrimaryKey(connection, "scheduled_tasks", "schedule_id")
-        && hasUniqueIndex(connection, "scheduled_tasks", Set.of("profile_name", "schedule_key"));
+    return CURRENT_TASK_COLUMNS.equals(taskColumns)
+        && CURRENT_EXECUTION_COLUMNS.equals(executionColumns)
+        && hasScheduledTaskPrimaryKey(connection)
+        && hasScheduleIdentityUniqueIndex(connection);
   }
 
   private static boolean isPreRetirementCurrent(
@@ -121,18 +125,17 @@ public final class ScheduleSchemaUpgrade {
       throws SQLException {
     Set<String> preRetirementTaskColumns = new HashSet<>(CURRENT_TASK_COLUMNS);
     preRetirementTaskColumns.remove("retired");
-    return taskColumns.equals(preRetirementTaskColumns)
-        && executionColumns.equals(CURRENT_EXECUTION_COLUMNS)
-        && hasPrimaryKey(connection, "scheduled_tasks", "schedule_id")
-        && hasUniqueIndex(connection, "scheduled_tasks", Set.of("profile_name", "schedule_key"));
+    return preRetirementTaskColumns.equals(taskColumns)
+        && CURRENT_EXECUTION_COLUMNS.equals(executionColumns)
+        && hasScheduledTaskPrimaryKey(connection)
+        && hasScheduleIdentityUniqueIndex(connection);
   }
 
-  private static boolean hasPrimaryKey(Connection connection, String table, String column)
-      throws SQLException {
+  private static boolean hasScheduledTaskPrimaryKey(Connection connection) throws SQLException {
     try (Statement statement = connection.createStatement();
-        ResultSet rows = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+        ResultSet rows = statement.executeQuery("PRAGMA table_info(scheduled_tasks)")) {
       while (rows.next()) {
-        if (column.equals(rows.getString("name")) && rows.getInt("pk") == 1) {
+        if ("schedule_id".equals(rows.getString("name")) && rows.getInt("pk") == 1) {
           return true;
         }
       }
@@ -140,24 +143,25 @@ public final class ScheduleSchemaUpgrade {
     }
   }
 
-  private static boolean hasUniqueIndex(Connection connection, String table, Set<String> columns)
-      throws SQLException {
+  private static boolean hasScheduleIdentityUniqueIndex(Connection connection) throws SQLException {
     try (Statement statement = connection.createStatement();
-        ResultSet indexes = statement.executeQuery("PRAGMA index_list(" + table + ")")) {
+        ResultSet indexes = statement.executeQuery("PRAGMA index_list(scheduled_tasks)")) {
       while (indexes.next()) {
         if (indexes.getInt("unique") != 1) {
           continue;
         }
         String indexName = indexes.getString("name");
         Set<String> indexedColumns = new HashSet<>();
-        try (Statement indexStatement = connection.createStatement();
-            ResultSet indexColumns =
-                indexStatement.executeQuery("PRAGMA index_info(" + indexName + ")")) {
-          while (indexColumns.next()) {
-            indexedColumns.add(indexColumns.getString("name"));
+        try (PreparedStatement indexStatement =
+            connection.prepareStatement("SELECT name FROM pragma_index_info(?)")) {
+          indexStatement.setString(1, indexName);
+          try (ResultSet indexColumns = indexStatement.executeQuery()) {
+            while (indexColumns.next()) {
+              indexedColumns.add(indexColumns.getString("name"));
+            }
           }
         }
-        if (indexedColumns.equals(columns)) {
+        if (indexedColumns.equals(Set.of("profile_name", "schedule_key"))) {
           return true;
         }
       }
@@ -184,8 +188,8 @@ public final class ScheduleSchemaUpgrade {
     try (Statement statement = connection.createStatement()) {
       statement.execute("BEGIN IMMEDIATE");
       begun = true;
-      long taskRowCount = rowCount(connection, "scheduled_tasks");
-      long executionRowCount = rowCount(connection, "task_executions");
+      long taskRowCount = scheduledTaskRowCount(connection);
+      long executionRowCount = taskExecutionRowCount(connection);
       createReplacementTables(statement);
       Map<String, String> legacyToScheduleId = copyTasks(connection);
       copyExecutions(connection, legacyToScheduleId);
@@ -243,7 +247,7 @@ public final class ScheduleSchemaUpgrade {
   }
 
   private static Map<String, String> copyTasks(Connection connection) throws SQLException {
-    Map<String, String> legacyToScheduleId = new HashMap<>();
+    Map<String, String> legacyToScheduleId = new HashMap<>(16);
     try (Statement select = connection.createStatement();
         ResultSet rows = select.executeQuery("SELECT * FROM scheduled_tasks");
         PreparedStatement insert =
@@ -311,10 +315,10 @@ public final class ScheduleSchemaUpgrade {
     }
   }
 
-  private static Set<String> tableColumns(Connection connection, String table) throws SQLException {
+  private static Set<String> scheduledTaskColumns(Connection connection) throws SQLException {
     Set<String> columns = new HashSet<>();
     try (Statement statement = connection.createStatement();
-        ResultSet rows = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
+        ResultSet rows = statement.executeQuery("PRAGMA table_info(scheduled_tasks)")) {
       while (rows.next()) {
         columns.add(rows.getString("name"));
       }
@@ -322,11 +326,32 @@ public final class ScheduleSchemaUpgrade {
     return columns;
   }
 
-  private static long rowCount(Connection connection, String table) throws SQLException {
+  private static Set<String> taskExecutionColumns(Connection connection) throws SQLException {
+    Set<String> columns = new HashSet<>();
     try (Statement statement = connection.createStatement();
-        ResultSet rows = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
+        ResultSet rows = statement.executeQuery("PRAGMA table_info(task_executions)")) {
+      while (rows.next()) {
+        columns.add(rows.getString("name"));
+      }
+    }
+    return columns;
+  }
+
+  private static long scheduledTaskRowCount(Connection connection) throws SQLException {
+    try (Statement statement = connection.createStatement();
+        ResultSet rows = statement.executeQuery("SELECT COUNT(*) FROM scheduled_tasks")) {
       if (!rows.next()) {
-        throw new SQLException("Could not count rows in " + table);
+        throw new SQLException("Could not count rows in scheduled_tasks");
+      }
+      return rows.getLong(1);
+    }
+  }
+
+  private static long taskExecutionRowCount(Connection connection) throws SQLException {
+    try (Statement statement = connection.createStatement();
+        ResultSet rows = statement.executeQuery("SELECT COUNT(*) FROM task_executions")) {
+      if (!rows.next()) {
+        throw new SQLException("Could not count rows in task_executions");
       }
       return rows.getLong(1);
     }
@@ -335,8 +360,8 @@ public final class ScheduleSchemaUpgrade {
   private static void verifyRowCounts(
       Connection connection, long expectedTaskRows, long expectedExecutionRows)
       throws SQLException {
-    long actualTaskRows = rowCount(connection, "scheduled_tasks");
-    long actualExecutionRows = rowCount(connection, "task_executions");
+    long actualTaskRows = scheduledTaskRowCount(connection);
+    long actualExecutionRows = taskExecutionRowCount(connection);
     if (actualTaskRows != expectedTaskRows || actualExecutionRows != expectedExecutionRows) {
       throw new SQLException(
           "Scheduled-task migration changed row counts: tasks "

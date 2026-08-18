@@ -50,7 +50,7 @@ public class JpaScheduledTaskStore implements ScheduledTaskStore {
   }
 
   @Override
-  @Transactional
+  @Transactional(rollbackFor = Exception.class)
   public void recordExecution(
       String scheduleId,
       String sessionId,
