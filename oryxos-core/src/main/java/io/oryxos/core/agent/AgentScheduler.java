@@ -139,7 +139,8 @@ public class AgentScheduler {
           taskStore.list().stream()
               .filter(
                   task ->
-                      task.profileName().equals(profile.name()) && task.key().equals(schedule.key()))
+                      task.profileName().equals(profile.name())
+                          && task.key().equals(schedule.key()))
               .map(ScheduledTaskView::scheduleId)
               .toList();
       for (String scheduleId : scheduleIds) {
@@ -165,14 +166,19 @@ public class AgentScheduler {
         taskStore.list().stream()
             .filter(candidate -> candidate.scheduleId().equals(scheduleId))
             .findFirst()
-            .orElseThrow(() -> new IllegalArgumentException("Schedule does not exist: " + scheduleId));
+            .orElseThrow(
+                () -> new IllegalArgumentException("Schedule does not exist: " + scheduleId));
     Profile profile =
         profileRegistry
             .get(task.profileName())
             .orElseThrow(
                 () ->
                     new IllegalArgumentException(
-                        "Schedule owner does not exist: " + task.profileName() + " (" + scheduleId + ")"));
+                        "Schedule owner does not exist: "
+                            + task.profileName()
+                            + " ("
+                            + scheduleId
+                            + ")"));
     ScheduleConfig schedule =
         profile.schedules().stream()
             .filter(candidate -> candidate.key().equals(task.key()))
@@ -198,7 +204,9 @@ public class AgentScheduler {
             .map(ScheduledTaskView::scheduleId)
             .findFirst()
             .orElseThrow(
-                () -> new IllegalArgumentException("Schedule does not exist: " + profileName + "/" + key));
+                () ->
+                    new IllegalArgumentException(
+                        "Schedule does not exist: " + profileName + "/" + key));
     runNow(scheduleId);
   }
 
@@ -327,7 +335,8 @@ public class AgentScheduler {
           System.currentTimeMillis() - start,
           nextExecution(schedule));
     } catch (RuntimeException exception) {
-      LOG.warn("Could not record execution for schedule {}: {}", scheduleId, exception.getMessage());
+      LOG.warn(
+          "Could not record execution for schedule {}: {}", scheduleId, exception.getMessage());
     }
   }
 

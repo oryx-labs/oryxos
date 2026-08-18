@@ -38,7 +38,8 @@ class AgentSchedulerIdentityTest {
     InMemoryTaskStore store = new InMemoryTaskStore();
     Profile alpha = profile("alpha", schedule("daily", "Alpha daily", "alpha message"));
     Profile beta = profile("beta", schedule("daily", "Beta daily", "beta message"));
-    AgentScheduler scheduler = scheduler(store, new ProfileRegistry(Map.of("alpha", alpha, "beta", beta)));
+    AgentScheduler scheduler =
+        scheduler(store, new ProfileRegistry(Map.of("alpha", alpha, "beta", beta)));
 
     scheduler.registerAll();
 
@@ -57,7 +58,8 @@ class AgentSchedulerIdentityTest {
     scheduler.registerProfile(initial);
     String scheduleId = store.scheduleId("alpha", "daily");
     store.setEnabled(scheduleId, false);
-    store.recordExecution(scheduleId, "legacy-session", Instant.EPOCH, true, null, 1, Instant.EPOCH);
+    store.recordExecution(
+        scheduleId, "legacy-session", Instant.EPOCH, true, null, 1, Instant.EPOCH);
 
     scheduler.unregisterProfile(initial);
     Profile reloaded = profile("alpha", schedule("daily", "Renamed daily", "second message"));
@@ -107,11 +109,7 @@ class AgentSchedulerIdentityTest {
             });
     AgentScheduler scheduler =
         new AgentScheduler(
-            taskScheduler,
-            new ProfileRegistry(Map.of("alpha", initial)),
-            service,
-            sessions,
-            store);
+            taskScheduler, new ProfileRegistry(Map.of("alpha", initial)), service, sessions, store);
 
     scheduler.registerProfile(initial);
     scheduler.unregisterProfile(initial);
@@ -129,7 +127,8 @@ class AgentSchedulerIdentityTest {
     ProfileRegistry profiles = new ProfileRegistry(Map.of("alpha", alpha, "beta", beta));
     AgentService service = mock(AgentService.class);
     SessionManager sessions = mock(SessionManager.class);
-    when(sessions.getOrCreate(any(), any(), any())).thenAnswer(invocation -> new Session("s", invocation.getArgument(2)));
+    when(sessions.getOrCreate(any(), any(), any()))
+        .thenAnswer(invocation -> new Session("s", invocation.getArgument(2)));
     AgentScheduler scheduler = scheduler(store, profiles, service, sessions);
     scheduler.registerAll();
 
@@ -143,7 +142,10 @@ class AgentSchedulerIdentityTest {
   }
 
   private static AgentScheduler scheduler(
-      InMemoryTaskStore store, ProfileRegistry profiles, AgentService service, SessionManager sessions) {
+      InMemoryTaskStore store,
+      ProfileRegistry profiles,
+      AgentService service,
+      SessionManager sessions) {
     TaskScheduler taskScheduler = mock(TaskScheduler.class);
     @SuppressWarnings("unchecked")
     ScheduledFuture<?> future = mock(ScheduledFuture.class);
@@ -236,7 +238,16 @@ class AgentSchedulerIdentityTest {
               task.runCount() + 1));
       executions
           .computeIfAbsent(scheduleId, ignored -> new ArrayList<>())
-          .add(new TaskExecutionView(scheduleId, null, false, sessionId, startedAt, success, errorMessage, durationMs));
+          .add(
+              new TaskExecutionView(
+                  scheduleId,
+                  null,
+                  false,
+                  sessionId,
+                  startedAt,
+                  success,
+                  errorMessage,
+                  durationMs));
     }
 
     @Override
@@ -274,7 +285,9 @@ class AgentSchedulerIdentityTest {
 
     @Override
     public List<ScheduledTaskView> list() {
-      return tasksById.values().stream().filter(task -> !retiredIds.contains(task.scheduleId())).toList();
+      return tasksById.values().stream()
+          .filter(task -> !retiredIds.contains(task.scheduleId()))
+          .toList();
     }
 
     @Override

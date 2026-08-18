@@ -98,7 +98,8 @@ class AgentSchedulerTest {
     SimpleTriggerContext context =
         new SimpleTriggerContext(Instant.EPOCH, Instant.EPOCH, Instant.EPOCH);
     assertEquals(
-        new CronTrigger(CRON, ZoneId.of(ZONE)).nextExecution(context), trigger.nextExecution(context));
+        new CronTrigger(CRON, ZoneId.of(ZONE)).nextExecution(context),
+        trigger.nextExecution(context));
     assertNotEquals(
         new CronTrigger(CRON, ZoneId.of("America/New_York")).nextExecution(context),
         trigger.nextExecution(context));
@@ -170,8 +171,10 @@ class AgentSchedulerTest {
     Profile beta = profileNamed("beta-agent", sc("beta-task"));
     Session alphaSession = new Session("alpha-sid", "alpha-agent");
     Session betaSession = new Session("beta-sid", "beta-agent");
-    when(sessionManager.getOrCreate("scheduler", "scheduler", "alpha-agent")).thenReturn(alphaSession);
-    when(sessionManager.getOrCreate("scheduler", "scheduler", "beta-agent")).thenReturn(betaSession);
+    when(sessionManager.getOrCreate("scheduler", "scheduler", "alpha-agent"))
+        .thenReturn(alphaSession);
+    when(sessionManager.getOrCreate("scheduler", "scheduler", "beta-agent"))
+        .thenReturn(betaSession);
 
     scheduler.runOnce(alpha, sc("alpha-task"), "alpha-schedule");
     scheduler.runOnce(beta, sc("beta-task"), "beta-schedule");

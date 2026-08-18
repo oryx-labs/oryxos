@@ -147,7 +147,8 @@ class AgentLifecycleServiceTest {
   @DisplayName("update 改 schedules 先注销旧再注册新")
   void update_scheduleChanged_unregistersBeforeRegister() throws Exception {
     Profile old = profile("w", new ScheduleConfig("m", "m", "0 0 9 * * *", "Asia/Shanghai", "旧"));
-    Profile updated = profile("w", new ScheduleConfig("m", "m", "0 0 10 * * *", "Asia/Shanghai", "新"));
+    Profile updated =
+        profile("w", new ScheduleConfig("m", "m", "0 0 10 * * *", "Asia/Shanghai", "新"));
     when(profileRegistry.get("w")).thenReturn(Optional.of(old));
     Path dir = Path.of("agents", "w");
     when(agentStore.writeAll(eq("w"), any())).thenReturn(dir);

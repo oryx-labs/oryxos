@@ -200,8 +200,7 @@ public class ProfileLoader {
         throw new ProfileValidationException("Profile 定时配置 id 不能为空: " + source);
       }
       if (configuredKey != null && legacyId != null && !configuredKey.equals(legacyId)) {
-        throw new ProfileValidationException(
-            "Profile 定时配置 id 与 key 必须相同: " + source);
+        throw new ProfileValidationException("Profile 定时配置 id 与 key 必须相同: " + source);
       }
 
       String key = configuredKey != null ? configuredKey : legacyId;
@@ -209,7 +208,8 @@ public class ProfileLoader {
         throw new ProfileValidationException("Profile 定时配置缺少 key: " + source);
       }
       String configuredName = asString(entry.get("name"));
-      String name = configuredName != null ? configuredName : configuredKey == null ? legacyId : null;
+      String name =
+          configuredName != null ? configuredName : configuredKey == null ? legacyId : null;
       if (name == null || name.isBlank()) {
         throw new ProfileValidationException("Profile 定时配置缺少 name: " + source);
       }

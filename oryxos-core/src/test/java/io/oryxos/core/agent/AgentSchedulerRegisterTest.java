@@ -36,7 +36,8 @@ class AgentSchedulerRegisterTest {
     taskStore = mock(ScheduledTaskStore.class);
     ScheduledFuture<?> future = mock(ScheduledFuture.class);
     doReturn(future).when(taskScheduler).schedule(any(Runnable.class), any(Trigger.class));
-    when(taskStore.reconcile(any(), any(), any(), any(), any(), any(), any())).thenReturn(SCHEDULE_ID);
+    when(taskStore.reconcile(any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(SCHEDULE_ID);
     when(taskStore.list())
         .thenReturn(
             List.of(
@@ -80,7 +81,8 @@ class AgentSchedulerRegisterTest {
   @Test
   void registerProfileLeavesCancellableHandleByScheduleId() {
     scheduler.registerProfile(
-        profileWithSchedule("ops", new ScheduleConfig("morning", "Morning run", CRON, ZONE, "run now")));
+        profileWithSchedule(
+            "ops", new ScheduleConfig("morning", "Morning run", CRON, ZONE, "run now")));
 
     assertTrue(scheduler.hasScheduledTask(SCHEDULE_ID));
     assertFalse(scheduler.hasScheduledTask("morning"));
@@ -89,7 +91,8 @@ class AgentSchedulerRegisterTest {
   @Test
   void unregisterProfileCancelsAndRemovesTheScheduleIdHandle() {
     Profile profile =
-        profileWithSchedule("ops", new ScheduleConfig("morning", "Morning run", CRON, ZONE, "run now"));
+        profileWithSchedule(
+            "ops", new ScheduleConfig("morning", "Morning run", CRON, ZONE, "run now"));
     scheduler.registerProfile(profile);
     assertTrue(scheduler.hasScheduledTask(SCHEDULE_ID));
 
@@ -101,9 +104,11 @@ class AgentSchedulerRegisterTest {
   @Test
   void reconcilesProfileKeyAndDefinitionBeforeScheduling() {
     scheduler.registerProfile(
-        profileWithSchedule("ops", new ScheduleConfig("morning", "Morning run", CRON, ZONE, "run now")));
+        profileWithSchedule(
+            "ops", new ScheduleConfig("morning", "Morning run", CRON, ZONE, "run now")));
 
     verify(taskStore)
-        .reconcile(eq("ops"), eq("morning"), eq("Morning run"), eq(CRON), eq(ZONE), eq("run now"), any());
+        .reconcile(
+            eq("ops"), eq("morning"), eq("Morning run"), eq(CRON), eq(ZONE), eq("run now"), any());
   }
 }
