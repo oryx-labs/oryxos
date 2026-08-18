@@ -85,6 +85,10 @@ public class AgentScheduler {
    * Reconciles each configured task before its trigger is installed. Reconciliation preserves the
    * stable scheduleId for the same (profileName, key), including its enabled state and history.
    */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification =
+          "Every dynamic log value is passed through sanitizeLogValue; SpotBugs does not track the sanitizer across method calls.")
   public void registerProfile(Profile profile) {
     for (ScheduleConfig schedule : profile.schedules()) {
       try {
@@ -116,13 +120,16 @@ public class AgentScheduler {
         }
         LOG.info(
             "Registered schedule {} (profile={} key={} cron={} zone={})",
-            scheduleId,
-            profile.name(),
-            schedule.key(),
-            schedule.cron(),
-            schedule.zone());
+            sanitizeLogValue(scheduleId),
+            sanitizeLogValue(profile.name()),
+            sanitizeLogValue(schedule.key()),
+            sanitizeLogValue(schedule.cron()),
+            sanitizeLogValue(schedule.zone()));
       } catch (RuntimeException exception) {
-        LOG.warn("Invalid schedule {} was skipped: {}", schedule.key(), exception.getMessage());
+        LOG.warn(
+            "Invalid schedule {} was skipped: {}",
+            sanitizeLogValue(schedule.key()),
+            sanitizeLogValue(exception.getMessage()));
       }
     }
   }
@@ -215,20 +222,25 @@ public class AgentScheduler {
     executeIfCurrent(profile, schedule, scheduleId, currentGeneration(scheduleId));
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "The scheduleId is stripped of CR and LF before logging.")
   private void runOnce(
       Profile profile, ScheduleConfig schedule, String scheduleId, long capturedGeneration) {
     Lock lock = lockFor(scheduleId);
     if (!lock.tryLock()) {
-      LOG.info("Schedule {} is still running; skipping this trigger", scheduleId);
+      LOG.info("Schedule {} is still running; skipping this trigger", sanitizeLogValue(scheduleId));
       return;
     }
     try {
       if (!isCurrentGeneration(scheduleId, capturedGeneration)) {
-        LOG.debug("Schedule {} callback belongs to a retired configuration; skipping", scheduleId);
+        LOG.debug(
+            "Schedule {} callback belongs to a retired configuration; skipping",
+            sanitizeLogValue(scheduleId));
         return;
       }
       if (!taskStore.isEnabled(scheduleId)) {
-        LOG.info("Schedule {} is disabled; skipping this trigger", scheduleId);
+        LOG.info("Schedule {} is disabled; skipping this trigger", sanitizeLogValue(scheduleId));
         return;
       }
       executeLocked(profile, schedule, scheduleId);
@@ -237,16 +249,21 @@ public class AgentScheduler {
     }
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "The scheduleId is stripped of CR and LF before logging.")
   private void executeIfCurrent(
       Profile profile, ScheduleConfig schedule, String scheduleId, long capturedGeneration) {
     Lock lock = lockFor(scheduleId);
     if (!lock.tryLock()) {
-      LOG.info("Schedule {} is still running; skipping this trigger", scheduleId);
+      LOG.info("Schedule {} is still running; skipping this trigger", sanitizeLogValue(scheduleId));
       return;
     }
     try {
       if (!isCurrentGeneration(scheduleId, capturedGeneration)) {
-        LOG.debug("Schedule {} changed while it was being started; skipping", scheduleId);
+        LOG.debug(
+            "Schedule {} changed while it was being started; skipping",
+            sanitizeLogValue(scheduleId));
         return;
       }
       executeLocked(profile, schedule, scheduleId);
@@ -255,6 +272,9 @@ public class AgentScheduler {
     }
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "The scheduleId is stripped of CR and LF before logging.")
   private void executeLocked(Profile profile, ScheduleConfig schedule, String scheduleId) {
     Instant startedAt = Instant.now();
     long start = System.currentTimeMillis();
@@ -270,13 +290,16 @@ public class AgentScheduler {
       success = true;
     } catch (Exception exception) {
       error = exception.getMessage();
-      LOG.error("Schedule {} failed", scheduleId, exception);
+      LOG.error("Schedule {} failed", sanitizeLogValue(scheduleId), exception);
     } finally {
       recordExecution(schedule, scheduleId, sessionId, startedAt, success, error, start);
       finishAgentExecution(agentExecutionId, sessionId, success, error);
     }
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "The scheduleId is stripped of CR and LF before logging.")
   private void retire(String scheduleId, String profileName, String key) {
     Lock lock = lockFor(scheduleId);
     lock.lock();
@@ -285,7 +308,7 @@ public class AgentScheduler {
       ScheduledFuture<?> future = scheduledTasks.remove(scheduleId);
       if (future != null) {
         future.cancel(false);
-        LOG.info("Unregistered schedule {}", scheduleId);
+        LOG.info("Unregistered schedule {}", sanitizeLogValue(scheduleId));
       }
       taskStore.retire(profileName, key);
     } finally {
@@ -305,6 +328,9 @@ public class AgentScheduler {
     return currentGeneration(scheduleId) == capturedGeneration;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "The exception message is stripped of CR and LF before logging.")
   private long startAgentExecution(Profile profile, Instant startedAt) {
     if (agentExecutionStore == null) {
       return -1;
@@ -312,11 +338,16 @@ public class AgentScheduler {
     try {
       return agentExecutionStore.start(profile.name(), "schedule", startedAt);
     } catch (RuntimeException exception) {
-      LOG.warn("Could not create Agent execution record: {}", exception.getMessage());
+      LOG.warn(
+          "Could not create Agent execution record: {}", sanitizeLogValue(exception.getMessage()));
       return -1;
     }
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification =
+          "The scheduleId and exception message are stripped of CR and LF before logging.")
   private void recordExecution(
       ScheduleConfig schedule,
       String scheduleId,
@@ -336,10 +367,15 @@ public class AgentScheduler {
           nextExecution(schedule));
     } catch (RuntimeException exception) {
       LOG.warn(
-          "Could not record execution for schedule {}: {}", scheduleId, exception.getMessage());
+          "Could not record execution for schedule {}: {}",
+          sanitizeLogValue(scheduleId),
+          sanitizeLogValue(exception.getMessage()));
     }
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "The exception message is stripped of CR and LF before logging.")
   private void finishAgentExecution(
       long agentExecutionId, String sessionId, boolean success, String error) {
     if (agentExecutionStore == null || agentExecutionId < 0) {
@@ -348,7 +384,8 @@ public class AgentScheduler {
     try {
       agentExecutionStore.finish(agentExecutionId, sessionId, success, error, Instant.now());
     } catch (RuntimeException exception) {
-      LOG.warn("Could not finish Agent execution record: {}", exception.getMessage());
+      LOG.warn(
+          "Could not finish Agent execution record: {}", sanitizeLogValue(exception.getMessage()));
     }
   }
 
@@ -368,5 +405,9 @@ public class AgentScheduler {
 
   private ZoneId resolveZone(String zone) {
     return zone == null || zone.isBlank() ? ZoneId.systemDefault() : ZoneId.of(zone);
+  }
+
+  static String sanitizeLogValue(String value) {
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 }

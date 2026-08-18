@@ -200,6 +200,11 @@ class AgentSchedulerTest {
   }
 
   @Test
+  void logValuesCannotInjectAdditionalLines() {
+    assertEquals("daily__forged-entry", AgentScheduler.sanitizeLogValue("daily\r\nforged-entry"));
+  }
+
+  @Test
   void noSchedulesMakesRegistrationANoop() {
     when(profileRegistry.all()).thenReturn(List.of(profileWith(List.of())));
 
