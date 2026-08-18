@@ -30,7 +30,8 @@ public final class ScheduleSchemaUpgrade {
           "run_count",
           "updated_at");
   private static final Set<String> LEGACY_EXECUTION_COLUMNS =
-      Set.of("id", "task_id", "session_id", "started_at", "success", "error_message", "duration_ms");
+      Set.of(
+          "id", "task_id", "session_id", "started_at", "success", "error_message", "duration_ms");
   private static final Set<String> CURRENT_TASK_COLUMNS =
       Set.of(
           "schedule_id",
@@ -107,7 +108,8 @@ public final class ScheduleSchemaUpgrade {
   }
 
   private static boolean isCurrent(
-      Connection connection, Set<String> taskColumns, Set<String> executionColumns) throws SQLException {
+      Connection connection, Set<String> taskColumns, Set<String> executionColumns)
+      throws SQLException {
     return taskColumns.equals(CURRENT_TASK_COLUMNS)
         && executionColumns.equals(CURRENT_EXECUTION_COLUMNS)
         && hasPrimaryKey(connection, "scheduled_tasks", "schedule_id")
@@ -164,7 +166,8 @@ public final class ScheduleSchemaUpgrade {
   }
 
   private static boolean isLegacy(Set<String> taskColumns, Set<String> executionColumns) {
-    return taskColumns.equals(LEGACY_TASK_COLUMNS) && executionColumns.equals(LEGACY_EXECUTION_COLUMNS);
+    return taskColumns.equals(LEGACY_TASK_COLUMNS)
+        && executionColumns.equals(LEGACY_EXECUTION_COLUMNS);
   }
 
   private static IllegalStateException unsupported(
@@ -330,7 +333,8 @@ public final class ScheduleSchemaUpgrade {
   }
 
   private static void verifyRowCounts(
-      Connection connection, long expectedTaskRows, long expectedExecutionRows) throws SQLException {
+      Connection connection, long expectedTaskRows, long expectedExecutionRows)
+      throws SQLException {
     long actualTaskRows = rowCount(connection, "scheduled_tasks");
     long actualExecutionRows = rowCount(connection, "task_executions");
     if (actualTaskRows != expectedTaskRows || actualExecutionRows != expectedExecutionRows) {

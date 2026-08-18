@@ -243,8 +243,8 @@ public final class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   /**
-   * 若为 IPv4-mapped 或 NAT64 well-known prefix，返回嵌入的 IPv4；否则原样返回。JDK 常把 mapped 字面量直接解成
-   * {@link java.net.Inet4Address}，此展开主要兜住仍以 16 字节返回的形态与 NAT64。
+   * 若为 IPv4-mapped 或 NAT64 well-known prefix，返回嵌入的 IPv4；否则原样返回。JDK 常把 mapped 字面量直接解成 {@link
+   * java.net.Inet4Address}，此展开主要兜住仍以 16 字节返回的形态与 NAT64。
    */
   private static InetAddress unwrapEmbeddedIpv4(InetAddress addr) {
     byte[] b = addr.getAddress();

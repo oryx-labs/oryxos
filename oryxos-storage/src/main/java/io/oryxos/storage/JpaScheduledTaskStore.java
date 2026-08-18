@@ -94,12 +94,14 @@ public class JpaScheduledTaskStore implements ScheduledTaskStore {
 
   @Override
   public void retire(String profileName, String key) {
-    tasks.findByProfileNameAndScheduleKey(profileName, key).ifPresent(
-        task -> {
-          task.setRetired(true);
-          task.setUpdatedAt(Instant.now());
-          tasks.save(task);
-        });
+    tasks
+        .findByProfileNameAndScheduleKey(profileName, key)
+        .ifPresent(
+            task -> {
+              task.setRetired(true);
+              task.setUpdatedAt(Instant.now());
+              tasks.save(task);
+            });
   }
 
   @Override

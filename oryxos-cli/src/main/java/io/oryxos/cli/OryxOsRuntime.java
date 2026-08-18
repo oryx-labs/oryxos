@@ -567,7 +567,8 @@ public class OryxOsRuntime {
   /** 28 节：定时任务状态与执行历史落 SQLite（重启不丢），并支撑管理台的查看/立即执行/启用停用。 */
   /**
    * Runs after schema.sql and before any scheduler store or scheduler bean can observe the tables.
-   * The upgrader derives idempotence solely from the live SQLite columns; it has no migration table.
+   * The upgrader derives idempotence solely from the live SQLite columns; it has no migration
+   * table.
    */
   @Bean
   @DependsOn("dataSourceScriptDatabaseInitializer")

@@ -23,7 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v2")
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
     value = {"EI_EXPOSE_REP2", "SPRING_ENDPOINT"},
-    justification = "The injected services are shared Spring singletons and the endpoint is internal-only.")
+    justification =
+        "The injected services are shared Spring singletons and the endpoint is internal-only.")
 public class ScheduleV2ApiController {
 
   private static final int DEFAULT_EXECUTION_LIMIT = 100;

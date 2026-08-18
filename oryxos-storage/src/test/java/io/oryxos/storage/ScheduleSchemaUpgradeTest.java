@@ -116,7 +116,8 @@ class ScheduleSchemaUpgradeTest {
     try (Connection connection = dataSource.getConnection();
         Statement statement = connection.createStatement();
         ResultSet resultSet =
-            statement.executeQuery("SELECT retired FROM scheduled_tasks WHERE schedule_key = 'daily'")) {
+            statement.executeQuery(
+                "SELECT retired FROM scheduled_tasks WHERE schedule_key = 'daily'")) {
       assertThat(columnNames(connection, "scheduled_tasks")).contains("retired");
       assertThat(count(connection, "scheduled_tasks")).isEqualTo(1);
       assertThat(resultSet.next()).isTrue();
@@ -187,7 +188,8 @@ class ScheduleSchemaUpgradeTest {
         """);
   }
 
-  private static void createPreRetirementCurrentSchema(SQLiteDataSource dataSource) throws Exception {
+  private static void createPreRetirementCurrentSchema(SQLiteDataSource dataSource)
+      throws Exception {
     execute(
         dataSource,
         """
@@ -224,7 +226,8 @@ class ScheduleSchemaUpgradeTest {
   }
 
   private static void execute(SQLiteDataSource dataSource, String... statements) throws Exception {
-    try (Connection connection = dataSource.getConnection(); Statement statement = connection.createStatement()) {
+    try (Connection connection = dataSource.getConnection();
+        Statement statement = connection.createStatement()) {
       for (String sql : statements) {
         statement.execute(sql);
       }
@@ -239,7 +242,8 @@ class ScheduleSchemaUpgradeTest {
     }
   }
 
-  private static java.util.List<String> columnNames(Connection connection, String table) throws Exception {
+  private static java.util.List<String> columnNames(Connection connection, String table)
+      throws Exception {
     try (Statement statement = connection.createStatement();
         ResultSet resultSet = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
       java.util.List<String> names = new java.util.ArrayList<>();

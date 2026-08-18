@@ -45,7 +45,8 @@ class JpaScheduledTaskStoreTest {
     String betaId =
         store.reconcile("beta", "daily", "Beta morning", "0 0 9 * * *", null, "b", nextRun);
     String alphaReloadedId =
-        store.reconcile("alpha", "daily", "Renamed Alpha", "0 0 10 * * *", null, "changed", nextRun);
+        store.reconcile(
+            "alpha", "daily", "Renamed Alpha", "0 0 10 * * *", null, "changed", nextRun);
 
     assertThat(alphaId).isNotBlank().isNotEqualTo(betaId);
     assertThat(alphaReloadedId).isEqualTo(alphaId);
@@ -80,8 +81,7 @@ class JpaScheduledTaskStoreTest {
     stubReconcile();
     stubFindById();
     String scheduleId =
-        store.reconcile(
-            "alpha", "daily", "Alpha morning", "0 0 9 * * *", null, "a", Instant.now());
+        store.reconcile("alpha", "daily", "Alpha morning", "0 0 9 * * *", null, "a", Instant.now());
 
     store.recordExecution(scheduleId, "session", Instant.now(), true, null, 12L, Instant.now());
 
@@ -99,8 +99,7 @@ class JpaScheduledTaskStoreTest {
     stubActiveList();
     stubFindById();
     String originalId =
-        store.reconcile(
-            "alpha", "daily", "Daily", "0 0 9 * * *", null, "daily", Instant.now());
+        store.reconcile("alpha", "daily", "Daily", "0 0 9 * * *", null, "daily", Instant.now());
 
     store.retire("alpha", "daily");
 
@@ -113,7 +112,10 @@ class JpaScheduledTaskStoreTest {
             "alpha", "daily", "Daily restored", "0 0 9 * * *", null, "daily", Instant.now());
 
     assertThat(reactivatedId).isEqualTo(originalId);
-    assertThat(store.list()).singleElement().extracting(ScheduledTaskView::name).isEqualTo("Daily restored");
+    assertThat(store.list())
+        .singleElement()
+        .extracting(ScheduledTaskView::name)
+        .isEqualTo("Daily restored");
   }
 
   private void stubReconcile() {
@@ -139,7 +141,9 @@ class JpaScheduledTaskStoreTest {
         .thenAnswer(
             invocation ->
                 persistedTasks.values().stream()
-                    .filter(task -> task.getScheduleId().equals(invocation.getArgument(0, String.class)))
+                    .filter(
+                        task ->
+                            task.getScheduleId().equals(invocation.getArgument(0, String.class)))
                     .findFirst());
   }
 
@@ -151,8 +155,7 @@ class JpaScheduledTaskStoreTest {
                     .filter(
                         task ->
                             !task.isRetired()
-                                && task
-                                    .getScheduleKey()
+                                && task.getScheduleKey()
                                     .equals(invocation.getArgument(0, String.class)))
                     .toList());
   }
@@ -160,7 +163,8 @@ class JpaScheduledTaskStoreTest {
   private void stubActiveList() {
     when(tasks.findByRetiredFalse())
         .thenAnswer(
-            invocation -> persistedTasks.values().stream().filter(task -> !task.isRetired()).toList());
+            invocation ->
+                persistedTasks.values().stream().filter(task -> !task.isRetired()).toList());
   }
 
   private static String identity(String profileName, String key) {
