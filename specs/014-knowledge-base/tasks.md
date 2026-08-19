@@ -146,7 +146,7 @@ US5 远程桩与 US6 无 key 自测最后收口契约与 CI。
 - [x] T029 [US1] 本地库文档目录自动纳入 `read_file` 白名单（FR-017）：沿用 `oryxos.root`
       换根自动纳入机制 + `RealPathBoundary` 校验；远程命中标注不可跟读；补
       `oryxos-tool/src/test/java/io/oryxos/tool/sandbox/` 白名单联动测试
-- [ ] T030 [US1] 端到端验证 quickstart §C：命中带出处 / 原文跟读 / 无关问题不干扰 /
+- [x] T030 [US1] 端到端验证 quickstart §C：命中带出处 / 原文跟读 / 无关问题不干扰 /
       检索入 `tool_invocations` 审计（US1 场景 6），修复暴露的问题
 
 **Checkpoint**: MVP 达成——mock 环境下 US1 六个验收场景全部通过。
