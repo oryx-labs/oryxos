@@ -82,16 +82,31 @@ public class HttpTools {
    * 跳内网"的绕过。返回最终响应体（{@code type} 为 String 或 byte[]）。
    */
   private <T> T read(String url, Class<T> type) {
+    return read(url, null, type);
+  }
+
+  /**
+   * 同 {@link #read(String, Class)}，并可带自定义请求头（供 {@code http_request} GET 使用）。跨源重定向剥离敏感头，对齐 {@link
+   * #write}。
+   */
+  private <T> T read(String url, String headers, Class<T> type) {
     String current = url;
+    String hopHeaders = headers;
     for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
       sandbox.enforce(new SandboxAction(ActionType.HTTP_READ, current)); // 每跳校验
-      ResponseEntity<T> resp = hopClient.get().uri(current).retrieve().toEntity(type);
+      RestClient.RequestBodySpec spec = hopClient.method(HttpMethod.GET).uri(current);
+      applyCustomHeaders(spec, hopHeaders);
+      ResponseEntity<T> resp = spec.retrieve().toEntity(type);
       if (resp.getStatusCode().is3xxRedirection()) {
         String location = resp.getHeaders().getFirst("Location");
         if (location == null || location.isBlank()) {
           return resp.getBody(); // 3xx 但无 Location：返回现有响应体
         }
-        current = URI.create(current).resolve(location).toString();
+        String next = URI.create(current).resolve(location).toString();
+        if (!sameOrigin(current, next)) {
+          hopHeaders = stripSensitiveHeaders(hopHeaders);
+        }
+        current = next;
         continue;
       }
       return resp.getBody();
@@ -255,7 +270,7 @@ public class HttpTools {
     HttpMethod httpMethod = HttpMethod.valueOf(verb.toUpperCase(Locale.ROOT));
     // 按方法分级：GET 走读路径（放行 + 内网黑名单 + 逐跳重定向重校验），其余写方法走域名白名单 + 逐跳重定向重校验
     if (HttpMethod.GET.equals(httpMethod)) {
-      return read(url, String.class);
+      return read(url, headers, String.class);
     }
     return write(httpMethod, url, headers, body, false);
   }

@@ -74,6 +74,33 @@ class HttpToolsTest {
   }
 
   @Test
+  @DisplayName("http_request GET 应转发自定义 headers（不得静默丢弃）")
+  void httpRequestGetForwardsCustomHeaders() throws IOException {
+    List<String> seenAuth = new ArrayList<>();
+    HttpServer authServer = HttpServer.create(new InetSocketAddress(0), 0);
+    authServer.createContext(
+        "/secure",
+        exchange -> {
+          seenAuth.add(exchange.getRequestHeaders().getFirst("Authorization"));
+          byte[] response = "ok".getBytes(StandardCharsets.UTF_8);
+          exchange.sendResponseHeaders(200, response.length);
+          exchange.getResponseBody().write(response);
+          exchange.close();
+        });
+    authServer.start();
+    try {
+      String target = "http://127.0.0.1:" + authServer.getAddress().getPort() + "/secure";
+      String body =
+          tools.httpRequest("GET", target, "Authorization: Bearer test-token\nX-Trace: 1", null);
+
+      assertEquals("ok", body);
+      assertEquals(List.of("Bearer test-token"), seenAuth, "GET 必须带上 Authorization");
+    } finally {
+      authServer.stop(0);
+    }
+  }
+
+  @Test
   @DisplayName("http_post 提交 JSON body 并取回响应")
   void httpPostSubmitsBody() {
     String result = tools.httpPost(url(), "{\"city\":\"beijing\"}");
