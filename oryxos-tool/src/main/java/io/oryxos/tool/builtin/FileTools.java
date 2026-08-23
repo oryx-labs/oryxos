@@ -59,6 +59,7 @@ public class FileTools {
   public String writeFile(
       @ToolParam(description = "要写入的文件路径") String path,
       @ToolParam(description = "要写入的内容") String content) {
+    MemoryMdGuard.rejectMutation(path);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     try {
       Path file = Path.of(path);
@@ -101,6 +102,7 @@ public class FileTools {
       @ToolParam(description = "要编辑的文件路径") String path,
       @ToolParam(description = "要被替换的原文本（必须在文件中唯一出现）") String oldString,
       @ToolParam(description = "替换后的新文本") String newString) {
+    MemoryMdGuard.rejectMutation(path);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     Path file = Path.of(path);
     if (!Files.isRegularFile(file)) {
@@ -250,6 +252,7 @@ public class FileTools {
   public String appendFile(
       @ToolParam(description = "文件路径") String path,
       @ToolParam(description = "要追加的内容") String content) {
+    MemoryMdGuard.rejectMutation(path);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     try {
       Path file = Path.of(path);
@@ -267,6 +270,7 @@ public class FileTools {
 
   @Tool(name = "delete_file", description = "删除一个文件（拒绝删除目录）")
   public String deleteFile(@ToolParam(description = "要删除的文件路径") String path) {
+    MemoryMdGuard.rejectMutation(path);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     Path file = Path.of(path);
     // NOFOLLOW_LINKS：只拦真实目录；指向目录的 symlink（如 Agent Skill 绑定）应删链接本身，不跟随目标
@@ -285,6 +289,8 @@ public class FileTools {
   @Tool(name = "move_file", description = "移动 / 重命名文件（源与目标都过白名单，目标已存在则覆盖）")
   public String moveFile(
       @ToolParam(description = "源路径") String from, @ToolParam(description = "目标路径") String to) {
+    MemoryMdGuard.rejectMutation(from);
+    MemoryMdGuard.rejectMutation(to);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, from));
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, to));
     Path src = Path.of(from);
@@ -316,6 +322,7 @@ public class FileTools {
   @Tool(name = "copy_file", description = "复制文件（源读 + 目标写，都过白名单，目标已存在则覆盖）")
   public String copyFile(
       @ToolParam(description = "源路径") String from, @ToolParam(description = "目标路径") String to) {
+    MemoryMdGuard.rejectMutation(to);
     sandbox.enforce(new SandboxAction(ActionType.FILE_READ, from));
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, to));
     Path src = Path.of(from);

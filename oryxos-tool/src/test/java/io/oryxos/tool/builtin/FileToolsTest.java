@@ -181,6 +181,29 @@ class FileToolsTest {
   }
 
   @Test
+  @DisplayName("文件工具拒绝直接改写 MEMORY.md（须走 save_memory）")
+  void fileToolsRejectDirectMemoryMdMutation() throws IOException {
+    Path memory = dir.resolve("agents/demo/MEMORY.md");
+    Files.createDirectories(memory.getParent());
+    Files.writeString(memory, "## 核心记忆\n- keep\n## 归档记忆\n");
+    String path = memory.toString();
+    Path other = dir.resolve("other.txt");
+    Files.writeString(other, "x");
+
+    assertThrows(IllegalArgumentException.class, () -> tools.writeFile(path, "hijack"));
+    assertThrows(IllegalArgumentException.class, () -> tools.editFile(path, "keep", "hijack"));
+    assertThrows(IllegalArgumentException.class, () -> tools.appendFile(path, "hijack\n"));
+    assertThrows(IllegalArgumentException.class, () -> tools.deleteFile(path));
+    assertThrows(
+        IllegalArgumentException.class, () -> tools.moveFile(path, dir.resolve("x.md").toString()));
+    assertThrows(IllegalArgumentException.class, () -> tools.copyFile(other.toString(), path));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> tools.writeFile(dir.resolve("memory.md").toString(), "case"));
+    assertEquals("## 核心记忆\n- keep\n## 归档记忆\n", Files.readString(memory), "拒绝后内容不得变");
+  }
+
+  @Test
   @DisplayName("write_file 落盘前复检 FILE_WRITE（防校验窗口内路径逃逸）")
   void writeFileRechecksPathBeforeWrite() {
     AtomicInteger fileWrites = new AtomicInteger();
