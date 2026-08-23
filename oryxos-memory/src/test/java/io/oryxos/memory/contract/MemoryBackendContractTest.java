@@ -239,9 +239,10 @@ class MemoryBackendContractTest {
     }
 
     @Override
-    public void append(String content, MemoryScope scope) {
+    public MemoryEntryView append(String content, MemoryScope scope) {
       Map<String, List<String>> target = scope == MemoryScope.CORE ? coreByAgent : archiveByAgent;
       target.computeIfAbsent(agent(), key -> new ArrayList<>()).add(content);
+      return new MemoryEntryView(content, java.time.Instant.now());
     }
 
     @Override

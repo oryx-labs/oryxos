@@ -74,9 +74,9 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
   }
 
   @Override
-  public void append(String content, MemoryScope scope) {
-    String entry =
-        "- [" + LocalDateTime.now().format(TIMESTAMP) + "] " + sanitizeEntryContent(content);
+  public MemoryEntryView append(String content, MemoryScope scope) {
+    LocalDateTime now = LocalDateTime.now();
+    String entry = "- [" + now.format(TIMESTAMP) + "] " + sanitizeEntryContent(content);
     Path file = memoryFile();
     // 读-改-写必须整段互斥：并发会话/定时任务同时 append 时，不加锁会互相覆盖对方刚写的条目。
     synchronized (lockFor(file)) {
@@ -90,6 +90,7 @@ public class MarkdownMemoryStore implements LongTermMemoryStore {
       }
       write(file, CORE_HEADER + "\n" + core + "\n" + ARCHIVE_HEADER + "\n" + archive);
     }
+    return new MemoryEntryView(entry, now.atZone(ZoneId.systemDefault()).toInstant());
   }
 
   /**

@@ -66,7 +66,7 @@ public class Mem0MemoryStore implements LongTermMemoryStore {
   }
 
   @Override
-  public void append(String content, MemoryScope scope) {
+  public MemoryEntryView append(String content, MemoryScope scope) {
     // core 必须原文保真（infer:false）；archival 交 mem0 提炼与冲突消解（infer:true）
     Map<String, Object> body = new HashMap<>(8);
     body.put("messages", List.of(Map.of("role", "user", "content", content)));
@@ -83,6 +83,7 @@ public class Mem0MemoryStore implements LongTermMemoryStore {
                 .body(body)
                 .retrieve()
                 .toBodilessEntity());
+    return new MemoryEntryView(content, java.time.Instant.now());
   }
 
   @Override

@@ -21,8 +21,9 @@ public class InMemoryMemoryStore implements LongTermMemoryStore {
   private final List<String> archive = new ArrayList<>();
 
   @Override
-  public void append(String content, MemoryScope scope) {
+  public MemoryEntryView append(String content, MemoryScope scope) {
     (scope == MemoryScope.CORE ? core : archive).add(content);
+    return new MemoryEntryView(content, java.time.Instant.now());
   }
 
   @Override

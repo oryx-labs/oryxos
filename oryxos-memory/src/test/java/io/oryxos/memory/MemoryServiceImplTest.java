@@ -106,6 +106,50 @@ class MemoryServiceImplTest {
   }
 
   @Test
+  @DisplayName("并发 remember 各自入队自己的条目（不依赖 getLast）")
+  void concurrentRememberEnqueuesOwnEntries() throws Exception {
+    MemoryVectorIndex index = mock(MemoryVectorIndex.class);
+    MemoryServiceImpl service = new MemoryServiceImpl(new MarkdownMemoryStore(root), null, index);
+    int n = 20;
+    java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+    java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(n);
+    java.util.concurrent.ExecutorService pool =
+        java.util.concurrent.Executors.newFixedThreadPool(8);
+    try {
+      for (int i = 0; i < n; i++) {
+        final String marker = "concurrent-entry-" + i;
+        pool.execute(
+            () -> {
+              try {
+                start.await();
+                service.remember(marker, MemoryScope.ARCHIVAL);
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              } finally {
+                done.countDown();
+              }
+            });
+      }
+      start.countDown();
+      assertTrue(done.await(10, java.util.concurrent.TimeUnit.SECONDS));
+    } finally {
+      pool.shutdownNow();
+    }
+    ArgumentCaptor<io.oryxos.core.memory.MemoryEntryView> entry =
+        ArgumentCaptor.forClass(io.oryxos.core.memory.MemoryEntryView.class);
+    verify(index, org.mockito.Mockito.times(n)).enqueue(anyString(), entry.capture());
+    java.util.Set<String> markers = new java.util.HashSet<>();
+    for (io.oryxos.core.memory.MemoryEntryView view : entry.getAllValues()) {
+      for (int i = 0; i < n; i++) {
+        if (view.content().contains("concurrent-entry-" + i)) {
+          markers.add("concurrent-entry-" + i);
+        }
+      }
+    }
+    assertEquals(n, markers.size(), "每个并发写入都应入队自己的条目，不得互相覆盖 getLast");
+  }
+
+  @Test
   @DisplayName("reconcileIndex 委托索引对账_DELEGATED 档为 no-op")
   void reconcileIndexDelegatesAndSkipsDelegated() {
     MemoryVectorIndex index = mock(MemoryVectorIndex.class);

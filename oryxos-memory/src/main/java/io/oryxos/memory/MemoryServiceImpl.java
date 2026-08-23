@@ -60,17 +60,15 @@ public class MemoryServiceImpl implements MemoryService {
       value = "CRLF_INJECTION_LOGS",
       justification = "日志中的异常消息已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
   public void remember(String content, MemoryScope scope) {
-    store.append(content, scope);
+    MemoryEntryView written = store.append(content, scope);
     if (scope != MemoryScope.ARCHIVAL
         || index == null
         || store.capabilities() != MemoryRecallCapability.HYBRID_BUILTIN) {
       return; // core 不入索引（FR-005）；DELEGATED 档索引归外部服务
     }
     try {
-      List<MemoryEntryView> entries = store.archivalEntries();
-      if (!entries.isEmpty()) {
-        index.enqueue(currentAgent(), entries.getLast());
-      }
+      // 用 append 返回值入队——勿再 archivalEntries().getLast()（并发会话会错绑/漏记）
+      index.enqueue(currentAgent(), written);
     } catch (RuntimeException e) {
       log.warn("记忆索引入队失败（本体已落库，随对账补齐）: {}", sanitize(e.getMessage()));
     }

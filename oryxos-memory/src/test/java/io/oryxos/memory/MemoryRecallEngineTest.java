@@ -66,8 +66,10 @@ class MemoryRecallEngineTest {
     }
 
     @Override
-    public void append(String content, MemoryScope scope) {
-      archival.add(new MemoryEntryView(content, Instant.now()));
+    public MemoryEntryView append(String content, MemoryScope scope) {
+      MemoryEntryView view = new MemoryEntryView(content, Instant.now());
+      archival.add(view);
+      return view;
     }
 
     @Override

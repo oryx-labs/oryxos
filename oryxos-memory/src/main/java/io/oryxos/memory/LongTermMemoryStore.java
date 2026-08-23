@@ -18,7 +18,8 @@ import java.util.List;
  */
 public interface LongTermMemoryStore {
 
-  void append(String content, MemoryScope scope);
+  /** 追加一条记忆；返回刚写入的条目视图（供索引入队，避免并发下再读 {@link #archivalEntries()}{@code .getLast()} 错绑）。 */
+  MemoryEntryView append(String content, MemoryScope scope);
 
   /** 核心区全量 + 归档区（截断后）。 */
   String load();

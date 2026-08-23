@@ -38,12 +38,16 @@ public class SqliteMemoryStore implements LongTermMemoryStore {
   }
 
   @Override
-  public void append(String content, MemoryScope scope) {
+  public MemoryEntryView append(String content, MemoryScope scope) {
     MemoryEntry entry = new MemoryEntry();
     entry.setAgentName(agentName());
     entry.setScope(scope.name());
     entry.setContent(content);
     repository.save(entry);
+    // 不依赖 save 返回值（测试 mock 可能返回 null）；createdAt 未填时用 now，对账不依赖精确时刻
+    java.time.Instant time =
+        entry.getCreatedAt() != null ? entry.getCreatedAt() : java.time.Instant.now();
+    return new MemoryEntryView(entry.getContent(), time);
   }
 
   @Override
