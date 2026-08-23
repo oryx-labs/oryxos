@@ -238,8 +238,9 @@ public class FileTools {
   public String makeDir(@ToolParam(description = "要创建的目录路径") String path) {
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     try {
-      sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
       Files.createDirectories(Path.of(path));
+      // 建目录后复检：与 write_file / download_file 同款——防首次校验到 createDirectories 间路径被换成外向软链
+      sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
       return "已创建目录: " + path;
     } catch (IOException e) {
       throw new UncheckedIOException("创建目录失败: " + path, e);

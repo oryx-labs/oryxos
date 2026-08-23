@@ -200,6 +200,28 @@ class FileToolsTest {
   }
 
   @Test
+  @DisplayName("make_dir 建目录后复检 FILE_WRITE（防校验窗口内路径逃逸）")
+  void makeDirRechecksPathAfterCreateDirectories() {
+    AtomicInteger fileWrites = new AtomicInteger();
+    Path nested = dir.resolve("nested");
+    Sandbox sandbox =
+        action -> {
+          if (action.type() == ActionType.FILE_WRITE) {
+            int n = fileWrites.incrementAndGet();
+            if (n >= 2) {
+              // 复检必须在 createDirectories 之后：此时目标目录应已存在
+              assertTrue(Files.isDirectory(nested), "复检应发生在 createDirectories 之后");
+              throw new SandboxViolationException("复检拒绝: " + action.target());
+            }
+          }
+        };
+    FileTools guarded = new FileTools(sandbox);
+
+    assertThrows(SandboxViolationException.class, () -> guarded.makeDir(nested.toString()));
+    assertEquals(2, fileWrites.get(), "应在建目录前与 createDirectories 后各 enforce 一次 FILE_WRITE");
+  }
+
+  @Test
   @DisplayName("read_file 读取前复检 FILE_READ")
   void readFileRechecksPathBeforeRead() throws IOException {
     Path target = dir.resolve("secret.txt");
