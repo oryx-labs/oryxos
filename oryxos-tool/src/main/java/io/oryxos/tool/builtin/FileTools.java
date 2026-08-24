@@ -1,5 +1,6 @@
 package io.oryxos.tool.builtin;
 
+import io.oryxos.core.memory.MemoryMdGuard;
 import io.oryxos.tool.sandbox.ActionType;
 import io.oryxos.tool.sandbox.Sandbox;
 import io.oryxos.tool.sandbox.SandboxAction;

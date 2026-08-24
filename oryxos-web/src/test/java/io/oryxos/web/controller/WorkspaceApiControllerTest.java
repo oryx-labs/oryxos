@@ -122,6 +122,23 @@ class WorkspaceApiControllerTest {
   }
 
   @Test
+  @DisplayName("工作区写入口禁止直写 MEMORY.md（须走 save_memory）")
+  void writeMemoryMdIsRejected() throws Exception {
+    Path memory = Files.createDirectories(oryxosRoot.resolve("agents/demo"));
+    Files.writeString(memory.resolve("MEMORY.md"), "## 核心记忆\n- keep\n## 归档记忆\n");
+
+    mvc.perform(
+            post("/api/v1/workspace/file")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"path\":\"agents/demo/MEMORY.md\",\"content\":\"## 核心记忆\\n## 归档记忆\\n- hijack\"}"))
+        .andExpect(status().isBadRequest());
+    org.junit.jupiter.api.Assertions.assertEquals(
+        "## 核心记忆\n- keep\n## 归档记忆\n",
+        Files.readString(oryxosRoot.resolve("agents/demo/MEMORY.md")));
+  }
+
+  @Test
   @DisplayName("工作区写入口禁止写 Agent skills 绑定视图")
   void writeThroughAgentSkillsIsRejected() throws Exception {
     mvc.perform(

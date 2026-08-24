@@ -1,13 +1,13 @@
-package io.oryxos.tool.builtin;
+package io.oryxos.core.memory;
 
 import java.nio.file.Path;
 import java.util.Locale;
 
 /**
  * 长期记忆文件只能经 {@code save_memory} 写入——{@code MarkdownMemoryStore#sanitizeEntryContent}
- * 只覆盖那条路径；文件工具直写会绕过分区头消毒（#163），污染核心/归档召回。
+ * 只覆盖那条路径；其它入口直写会绕过分区头消毒（#163），污染核心/归档召回。
  */
-final class MemoryMdGuard {
+public final class MemoryMdGuard {
 
   /** 小写文件名；比较时用 {@link Locale#ROOT}。 */
   private static final String MEMORY_FILE_LOWER = "memory.md";
@@ -18,7 +18,7 @@ final class MemoryMdGuard {
       value = "IMPROPER_UNICODE",
       justification =
           "文件名是 ASCII「MEMORY.md」；Locale.ROOT 大小写折叠仅用于 Windows 大小写不敏感路径，非安全边界上的任意 Unicode 文本")
-  static void rejectMutation(String path) {
+  public static void rejectMutation(String path) {
     if (path == null || path.isBlank()) {
       return;
     }

@@ -2,6 +2,7 @@ package io.oryxos.web.controller;
 
 import io.oryxos.core.agent.AgentLifecycleService;
 import io.oryxos.core.fs.RealPathBoundary;
+import io.oryxos.core.memory.MemoryMdGuard;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.FileNode;
 import io.oryxos.web.controller.dto.WriteFileRequest;
@@ -135,6 +136,7 @@ public class WorkspaceApiController {
     if (path == null || path.isBlank()) {
       throw new IllegalArgumentException("path 为空"); // → 400
     }
+    MemoryMdGuard.rejectMutation(path);
     Path target = resolveWithinRoot(path);
     if (isAgentSkillsPath(target)) {
       throw new IllegalArgumentException("Agent skills/ 是绑定视图，禁止从工作区入口写入");
