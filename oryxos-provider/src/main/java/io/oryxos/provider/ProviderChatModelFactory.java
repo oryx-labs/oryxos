@@ -80,11 +80,15 @@ public class ProviderChatModelFactory {
   /**
    * 构造带连接超时的 {@link HttpClient}，强制 HTTP/1.1：JDK 21 HttpClient 默认尝试 HTTP/2 升级（Upgrade: h2c +
    * Transfer-Encoding: chunked），vLLM/Ollama（uvicorn）不认 h2c 升级，导致请求体丢失（'input': None）、服务端返回 400。
+   *
+   * <p>同时 {@code followRedirects(NEVER)}：默认 NORMAL 会跟随 302，恶意 provider baseUrl 可把管理台 /models 或
+   * ReAct chat 请求拐到元数据/内网（与 Skill import、HttpTools 策略对齐）。
    */
   static HttpClient httpClient(Duration connectTimeout) {
     return HttpClient.newBuilder()
         .connectTimeout(connectTimeout)
         .version(HttpClient.Version.HTTP_1_1)
+        .followRedirects(HttpClient.Redirect.NEVER)
         .build();
   }
 

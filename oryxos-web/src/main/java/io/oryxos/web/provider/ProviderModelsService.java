@@ -99,6 +99,8 @@ public class ProviderModelsService {
             HttpClient.newBuilder()
                 .connectTimeout(connectTimeout)
                 .version(HttpClient.Version.HTTP_1_1)
+                // 禁自动重定向：与 Skill import / HttpTools 同款——防恶意 baseUrl 302→元数据/内网（SSRF）
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .build());
     factory.setReadTimeout(readTimeout);
     return factory;

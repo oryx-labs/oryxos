@@ -19,4 +19,11 @@ class ProviderChatModelFactoryHttpVersionTest {
     HttpClient client = ProviderChatModelFactory.httpClient(Duration.ofSeconds(10));
     assertEquals(HttpClient.Version.HTTP_1_1, client.version());
   }
+
+  @Test
+  @DisplayName("工厂构造的HttpClient禁止自动跟随重定向（防恶意baseUrl SSRF）")
+  void httpClientDisablesAutoRedirects() {
+    HttpClient client = ProviderChatModelFactory.httpClient(Duration.ofSeconds(10));
+    assertEquals(HttpClient.Redirect.NEVER, client.followRedirects());
+  }
 }

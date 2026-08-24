@@ -3,6 +3,7 @@ package io.oryxos.web.provider;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -152,5 +153,46 @@ class ProviderModelsServiceTest {
     assertTimeoutPreemptively(
         Duration.ofSeconds(10),
         () -> assertThrows(ProviderUnavailableException.class, () -> timed.listModels("hang")));
+  }
+
+  @Test
+  @DisplayName("/models 遇到 302 不得自动跟随（防恶意 baseUrl 拐到内网/元数据）")
+  void modelsDoesNotFollowRedirects() throws Exception {
+    java.util.concurrent.atomic.AtomicInteger sinkHits =
+        new java.util.concurrent.atomic.AtomicInteger();
+    HttpServer sink = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    try {
+      sink.createContext(
+          "/v1/models",
+          exchange -> {
+            sinkHits.incrementAndGet();
+            byte[] body = "{\"data\":[{\"id\":\"stolen\"}]}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+          });
+      sink.start();
+      String sinkModels = "http://127.0.0.1:" + sink.getAddress().getPort() + "/v1/models";
+      server.createContext(
+          "/v1/models",
+          exchange -> {
+            exchange.getResponseHeaders().add("Location", sinkModels);
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+          });
+      when(registry.find("evil"))
+          .thenReturn(Optional.of(new ProviderDef("evil", "sk-x", baseUrl, null)));
+
+      try {
+        List<String> models = service.listModels("evil");
+        assertTrue(models.stream().noneMatch(id -> id.contains("stolen")), "即便不抛错也不得返回重定向目标体");
+      } catch (ProviderUnavailableException expected) {
+        // 3xx 被 RestClient 当成错误也算 fail-closed，可接受
+      }
+      assertEquals(0, sinkHits.get(), "不得跟随 Location 访问下一跳");
+    } finally {
+      sink.stop(0);
+    }
   }
 }
