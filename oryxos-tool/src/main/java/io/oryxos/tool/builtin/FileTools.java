@@ -239,6 +239,7 @@ public class FileTools {
 
   @Tool(name = "make_dir", description = "创建目录（含父目录，幂等）")
   public String makeDir(@ToolParam(description = "要创建的目录路径") String path) {
+    MemoryMdGuard.rejectMutation(path);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     try {
       Files.createDirectories(Path.of(path));

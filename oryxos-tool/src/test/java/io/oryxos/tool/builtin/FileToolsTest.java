@@ -194,6 +194,7 @@ class FileToolsTest {
     assertThrows(IllegalArgumentException.class, () -> tools.editFile(path, "keep", "hijack"));
     assertThrows(IllegalArgumentException.class, () -> tools.appendFile(path, "hijack\n"));
     assertThrows(IllegalArgumentException.class, () -> tools.deleteFile(path));
+    assertThrows(IllegalArgumentException.class, () -> tools.makeDir(path));
     assertThrows(
         IllegalArgumentException.class, () -> tools.moveFile(path, dir.resolve("x.md").toString()));
     assertThrows(IllegalArgumentException.class, () -> tools.copyFile(other.toString(), path));
