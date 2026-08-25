@@ -100,6 +100,38 @@ class NotifyToolsTest {
   }
 
   @Test
+  @DisplayName("format=markdown 写入 NotifyTarget.config 供 Adapter 解释（企微等）")
+  void formatPropagatesIntoNotifyTargetConfig() {
+    NotifyChannelRegistry registry = mock(NotifyChannelRegistry.class);
+    when(registry.find("ops-wecom"))
+        .thenReturn(
+            java.util.Optional.of(
+                new NotifyChannelDef(
+                    "ops-wecom",
+                    "wecom",
+                    "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=x",
+                    null)));
+    NotifyTools tools =
+        new NotifyTools(Map.of("wecom", adapter), new PermissiveSandbox(), registry);
+    var input = MAPPER.createObjectNode();
+    input.put("content", "**告警**");
+    input.put("channel", "ops-wecom");
+    input.put("format", "markdown");
+
+    ToolResult result = tools.execute(input);
+
+    assertTrue(result.success());
+    verify(adapter)
+        .send(
+            argThat(
+                t ->
+                    "wecom".equals(t.channelType())
+                        && "markdown".equals(t.config().get("format"))
+                        && t.config().get("url").contains("qyapi.weixin.qq.com")),
+            eq("**告警**"));
+  }
+
+  @Test
   @DisplayName("channel 缺省且注册表非空_取注册表第一个（不依赖 Profile 内联）")
   void omittedChannelUsesFirstRegistryEntry() {
     NotifyChannelRegistry registry = mock(NotifyChannelRegistry.class);

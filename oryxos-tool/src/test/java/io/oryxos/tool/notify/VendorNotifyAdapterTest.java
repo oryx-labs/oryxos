@@ -80,6 +80,33 @@ class VendorNotifyAdapterTest {
   }
 
   @Test
+  @DisplayName("企业微信：format=markdown 发官方 markdown 体")
+  void wecomMarkdownFormatMatchesVendorContract() throws IOException {
+    new WeComNotifyAdapter(poster)
+        .send(
+            new NotifyTarget("wecom", Map.of("url", url(), "format", "markdown")),
+            "**告警** <font color=\"warning\">1</font>");
+
+    JsonNode body = lastBody();
+    assertEquals("markdown", body.get("msgtype").asText());
+    assertEquals(
+        "**告警** <font color=\"warning\">1</font>", body.get("markdown").get("content").asText());
+  }
+
+  @Test
+  @DisplayName("企业微信：未知 format 点名拒绝且零请求")
+  void wecomRejectsUnknownFormat() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new WeComNotifyAdapter(poster)
+                .send(
+                    new NotifyTarget("wecom", Map.of("url", url(), "format", "template_card")),
+                    "x"));
+    assertEquals(0, received.size());
+  }
+
+  @Test
   @DisplayName("飞书/Lark：msg_type/content.text 格式")
   void feishuBodyMatchesVendorContract() throws IOException {
     new FeishuNotifyAdapter(poster).send(new NotifyTarget("feishu", Map.of("url", url())), "日报来了");

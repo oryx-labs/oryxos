@@ -74,7 +74,8 @@ public class NotifyTools implements OryxTool {
           "type": "object",
           "properties": {
             "content": {"type": "string", "description": "要推送的内容"},
-            "channel": {"type": "string", "description": "渠道名（全局 Notify 注册表中的 name）；缺省或 default 用注册表第一个渠道"}
+            "channel": {"type": "string", "description": "渠道名（全局 Notify 注册表中的 name）；缺省或 default 用注册表第一个渠道"},
+            "format": {"type": "string", "description": "消息格式：text（默认）或 markdown（企微群机器人等已支持的渠道）；未知值由对应 Adapter 拒绝"}
           },
           "required": ["content"]
         }""";
@@ -88,18 +89,19 @@ public class NotifyTools implements OryxTool {
     }
     String content = contentNode.asText();
     String channel = input.hasNonNull("channel") ? input.get("channel").asText() : null;
+    String format = input.hasNonNull("format") ? input.get("format").asText() : null;
     boolean useDefault = channel == null || channel.isBlank() || DEFAULT_CHANNEL.equals(channel);
 
     // 新模型（31 节）：注册表优先——缺省取第一个；显式名则 find
     if (useDefault) {
       List<NotifyChannelDef> registered = channelRegistry.list();
       if (!registered.isEmpty()) {
-        return sendRegistered(registered.get(0), content);
+        return sendRegistered(registered.get(0), content, format);
       }
     } else {
       Optional<NotifyChannelDef> registered = channelRegistry.find(channel);
       if (registered.isPresent()) {
-        return sendRegistered(registered.get(), content);
+        return sendRegistered(registered.get(), content, format);
       }
       // 名字不在注册表 → 落到下面的兼容路径（按 type 匹配 Agent 内联渠道）
     }
@@ -124,15 +126,15 @@ public class NotifyTools implements OryxTool {
     NotifyChannelAdapter adapter = adapters.get(resolved.type());
     if (adapter == null) {
       return ToolResult.error(
-          "渠道类型 " + resolved.type() + " 没有对应的通知实现（已装配: " + adapters.keySet() + "）", false);
+          "渠道类型 " + resolved.type() + " 没有对应实现（已装配: " + adapters.keySet() + "）", false);
     }
-    NotifyTarget target = new NotifyTarget(resolved.type(), resolved.config());
+    NotifyTarget target = new NotifyTarget(resolved.type(), withFormat(resolved.config(), format));
     sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, resolved.config().get("url")));
     adapter.send(target, content);
     return ToolResult.ok("已推送");
   }
 
-  private ToolResult sendRegistered(NotifyChannelDef def, String content) {
+  private ToolResult sendRegistered(NotifyChannelDef def, String content, String format) {
     NotifyChannelAdapter adapter = adapters.get(def.type());
     if (adapter == null) {
       return ToolResult.error(
@@ -140,8 +142,19 @@ public class NotifyTools implements OryxTool {
           false);
     }
     sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, def.url()));
-    adapter.send(new NotifyTarget(def.type(), Map.of("url", def.url())), content);
+    adapter.send(
+        new NotifyTarget(def.type(), withFormat(Map.of("url", def.url()), format)), content);
     return ToolResult.ok("已推送");
+  }
+
+  /** 把可选 format 写入渠道 config（不覆盖已有 format 键，除非调用方显式传入非空）。 */
+  private static Map<String, String> withFormat(Map<String, String> base, String format) {
+    if (format == null || format.isBlank()) {
+      return base;
+    }
+    java.util.HashMap<String, String> merged = new java.util.HashMap<>(base);
+    merged.put("format", format.strip());
+    return Map.copyOf(merged);
   }
 
   /** channel 空白或 "default" → 第一个渠道；否则按 NotifyChannel.type 匹配（clarify 1）。 */
