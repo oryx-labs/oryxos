@@ -204,6 +204,18 @@ class FileToolsTest {
   }
 
   @Test
+  @DisplayName("文件工具拒绝经 MEMORY.md 子路径建目录（防 DoS save_memory）")
+  void fileToolsRejectMemoryMdAncestorPath() throws IOException {
+    Path agentDir = dir.resolve("agents/fresh");
+    Files.createDirectories(agentDir);
+    Path underMemory = agentDir.resolve("MEMORY.md/child.txt");
+
+    assertThrows(
+        IllegalArgumentException.class, () -> tools.writeFile(underMemory.toString(), "hijack"));
+    assertTrue(Files.notExists(agentDir.resolve("MEMORY.md")), "拒绝后不得把 MEMORY.md 建成目录");
+  }
+
+  @Test
   @DisplayName("write_file 落盘前复检 FILE_WRITE（防校验窗口内路径逃逸）")
   void writeFileRechecksPathBeforeWrite() {
     AtomicInteger fileWrites = new AtomicInteger();

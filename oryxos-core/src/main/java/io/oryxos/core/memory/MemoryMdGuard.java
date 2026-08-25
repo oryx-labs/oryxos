@@ -22,9 +22,11 @@ public final class MemoryMdGuard {
     if (path == null || path.isBlank()) {
       return;
     }
-    Path name = Path.of(path).getFileName();
-    if (name != null && MEMORY_FILE_LOWER.equals(name.toString().toLowerCase(Locale.ROOT))) {
-      throw new IllegalArgumentException("拒绝直接改写 MEMORY.md，请使用 save_memory: " + path);
+    // 任意路径段命中即可：write_file("…/MEMORY.md/x.txt") 会 createDirectories 把 MEMORY.md 建成目录
+    for (Path segment : Path.of(path)) {
+      if (MEMORY_FILE_LOWER.equals(segment.toString().toLowerCase(Locale.ROOT))) {
+        throw new IllegalArgumentException("拒绝直接改写 MEMORY.md，请使用 save_memory: " + path);
+      }
     }
   }
 }
