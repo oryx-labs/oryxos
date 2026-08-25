@@ -1,5 +1,6 @@
 package io.oryxos.tool.notify;
 
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -16,6 +17,11 @@ import java.util.Map;
  */
 public class WeComNotifyAdapter implements NotifyChannelAdapter {
 
+  private static final String FORMAT_TEXT = "text";
+  private static final String FORMAT_MARKDOWN = "markdown";
+  private static final String CONFIG_FORMAT = "format";
+  private static final String CONFIG_MSGTYPE = "msgtype";
+
   private final NotifyPoster poster;
 
   public WeComNotifyAdapter(NotifyPoster poster) {
@@ -29,15 +35,18 @@ public class WeComNotifyAdapter implements NotifyChannelAdapter {
       throw new IllegalArgumentException("wecom 渠道缺少 url 配置（notify_channels 条目需要 url 键）");
     }
     String format = resolveFormat(target.config());
-    if ("markdown".equals(format)) {
-      poster.postJson(url, Map.of("msgtype", "markdown", "markdown", Map.of("content", content)));
+    if (FORMAT_MARKDOWN.equals(format)) {
+      poster.postJson(
+          url,
+          Map.of(CONFIG_MSGTYPE, FORMAT_MARKDOWN, FORMAT_MARKDOWN, Map.of("content", content)));
       return;
     }
-    if (!"text".equals(format)) {
+    if (!FORMAT_TEXT.equals(format)) {
       throw new IllegalArgumentException(
           "wecom 不支持 format/msgtype=" + format + "（当前支持: text, markdown）");
     }
-    poster.postJson(url, Map.of("msgtype", "text", "text", Map.of("content", content)));
+    poster.postJson(
+        url, Map.of(CONFIG_MSGTYPE, FORMAT_TEXT, FORMAT_TEXT, Map.of("content", content)));
   }
 
   /** {@code format} 优先，其次兼容 {@code msgtype}；缺省 text。比较用 Locale.ROOT 小写。 */
@@ -46,13 +55,13 @@ public class WeComNotifyAdapter implements NotifyChannelAdapter {
       justification =
           "format/msgtype are ASCII protocol tokens; Locale.ROOT lowercasing is the correct case-fold.")
   private static String resolveFormat(Map<String, String> config) {
-    String format = config.get("format");
+    String format = config.get(CONFIG_FORMAT);
     if (format == null || format.isBlank()) {
-      format = config.get("msgtype");
+      format = config.get(CONFIG_MSGTYPE);
     }
     if (format == null || format.isBlank()) {
-      return "text";
+      return FORMAT_TEXT;
     }
-    return format.toLowerCase(java.util.Locale.ROOT).strip();
+    return format.toLowerCase(Locale.ROOT).strip();
   }
 }
