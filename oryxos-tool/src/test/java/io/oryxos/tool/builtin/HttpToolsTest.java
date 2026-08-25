@@ -245,6 +245,65 @@ class HttpToolsTest {
   }
 
   @Test
+  @DisplayName("http_request 跨源 302 不得把 X-API-Key 带到下一跳（白名单内主机亦然）")
+  void httpRequestCrossOriginRedirectStripsXApiKey() throws IOException {
+    HttpServer entry = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    HttpServer sink = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    AtomicInteger sinkHits = new AtomicInteger();
+    List<String> sinkApiKeys = new ArrayList<>();
+    List<String> sinkTrace = new ArrayList<>();
+    try {
+      sink.createContext(
+          "/",
+          exchange -> {
+            sinkHits.incrementAndGet();
+            String apiKey = exchange.getRequestHeaders().getFirst("X-API-Key");
+            if (apiKey != null) {
+              sinkApiKeys.add(apiKey);
+            }
+            String trace = exchange.getRequestHeaders().getFirst("X-Trace-Id");
+            if (trace != null) {
+              sinkTrace.add(trace);
+            }
+            byte[] response = "ok".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+          });
+      String sinkUrl = "http://127.0.0.1:" + sink.getAddress().getPort() + "/sink";
+      entry.createContext(
+          "/",
+          exchange -> {
+            exchange.getResponseHeaders().add("Location", sinkUrl);
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+          });
+      entry.start();
+      sink.start();
+
+      Sandbox whitelist =
+          new WhitelistSandbox(
+              new FileSandboxProperties(List.of()),
+              new ShellSandboxProperties(List.of()),
+              new HttpSandboxProperties(List.of("localhost", "127.0.0.1")));
+      HttpTools guarded = new HttpTools(whitelist, RestClient.create());
+      String start = "http://localhost:" + entry.getAddress().getPort() + "/";
+
+      String body =
+          guarded.httpRequest(
+              "POST", start, "X-API-Key: secret-api-key\nX-Trace-Id: keep-me", "{\"x\":1}");
+
+      assertEquals("ok", body);
+      assertEquals(1, sinkHits.get());
+      assertTrue(sinkApiKeys.isEmpty(), "跨源重定向不得转发 X-API-Key");
+      assertEquals(List.of("keep-me"), sinkTrace, "非敏感自定义头仍可转发");
+    } finally {
+      entry.stop(0);
+      sink.stop(0);
+    }
+  }
+
+  @Test
   @DisplayName("http_request 跨源 302 不得把 POST body 带到下一跳（改 GET）")
   void httpRequest302DoesNotReplayPostBody() throws IOException {
     HttpServer entry = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
