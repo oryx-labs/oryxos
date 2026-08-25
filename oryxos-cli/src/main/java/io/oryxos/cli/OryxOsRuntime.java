@@ -545,6 +545,9 @@ public class OryxOsRuntime {
    *
    * <p>提取为 static 方法便于单测直接验证超时行为（无需启 Spring 容器），模式同 {@code
    * ProviderChatModelFactory.timeoutFactory()}。
+   *
+   * <p>同时 {@code followRedirects(NEVER)}：默认 NORMAL 会跟随 302；Mem0 等客户端会附带 {@code
+   * Authorization}/{@code X-API-Key}，恶意或被劫持的 {@code memory.mem0.base-url} 可把请求拐到内网/元数据。
    */
   static JdkClientHttpRequestFactory toolHttpRequestFactory() {
     Duration connectTimeout =
@@ -556,7 +559,10 @@ public class OryxOsRuntime {
             Long.getLong(TOOL_HTTP_READ_TIMEOUT_PROP, DEFAULT_TOOL_HTTP_READ_TIMEOUT_SECONDS));
     JdkClientHttpRequestFactory factory =
         new JdkClientHttpRequestFactory(
-            HttpClient.newBuilder().connectTimeout(connectTimeout).build());
+            HttpClient.newBuilder()
+                .connectTimeout(connectTimeout)
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build());
     factory.setReadTimeout(readTimeout);
     return factory;
   }

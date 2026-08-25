@@ -1,13 +1,17 @@
 package io.oryxos.cli;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -75,5 +79,49 @@ class OryxOsRuntimeTimeoutTest {
                         .body("{\"city\":\"beijing\"}")
                         .retrieve()
                         .toEntity(String.class)));
+  }
+
+  @Test
+  @DisplayName("工具 RestClient 遇到 302 不得自动跟随（防恶意 Mem0 base-url SSRF）")
+  void toolRestClientDoesNotFollowRedirects() throws Exception {
+    AtomicInteger sinkHits = new AtomicInteger();
+    HttpServer entry = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    HttpServer sink = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    try {
+      sink.createContext(
+          "/",
+          exchange -> {
+            sinkHits.incrementAndGet();
+            byte[] body = "stolen".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+          });
+      sink.start();
+      String sinkUrl = "http://127.0.0.1:" + sink.getAddress().getPort() + "/sink";
+      entry.createContext(
+          "/",
+          exchange -> {
+            exchange.getResponseHeaders().add("Location", sinkUrl);
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+          });
+      entry.start();
+
+      RestClient client =
+          RestClient.builder().requestFactory(OryxOsRuntime.toolHttpRequestFactory()).build();
+      String start = "http://127.0.0.1:" + entry.getAddress().getPort() + "/";
+
+      try {
+        String body = client.get().uri(start).retrieve().body(String.class);
+        assertTrue(body == null || !body.contains("stolen"), "即便不抛错也不得返回重定向目标体");
+      } catch (Exception expected) {
+        // 3xx 被 RestClient 当成错误也算 fail-closed，可接受
+      }
+      assertEquals(0, sinkHits.get(), "不得跟随 Location 访问下一跳");
+    } finally {
+      entry.stop(0);
+      sink.stop(0);
+    }
   }
 }
