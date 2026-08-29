@@ -13,8 +13,8 @@ import java.util.Set;
  * <p>覆盖 {@code channels.yaml}（{@code ChannelAdminService}）与 {@code mcp_servers.yaml}（{@code
  * McpServerAdminService}）。
  *
- * <p>除词法路径段检查外，还会经 {@link RealPathBoundary} 解析已存在祖先的真实路径，避免 {@code alias.yaml →
- * channels.yaml} 这类软链绕过（对齐 {@code MemoryMdGuard}）。
+ * <p>除词法路径段检查外，还会经 {@link RealPathBoundary} 解析已存在祖先的真实路径，避免 {@code alias.yaml → channels.yaml}
+ * 这类软链绕过（对齐 {@code MemoryMdGuard}）。
  */
 public final class AdminConfigFileGuard {
 

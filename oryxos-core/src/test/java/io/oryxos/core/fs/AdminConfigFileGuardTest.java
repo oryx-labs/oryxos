@@ -47,7 +47,7 @@ class AdminConfigFileGuardTest {
   void allowsOrdinaryPaths() {
     assertDoesNotThrow(() -> AdminConfigFileGuard.rejectMutation("agents/demo/notes.md"));
     assertDoesNotThrow(() -> AdminConfigFileGuard.rejectMutation("channels.yaml.bak"));
-    assertDoesNotThrow(() -> AdminConfigFileGuard.rejectMutation(null));
+    assertDoesNotThrow(() -> AdminConfigFileGuard.rejectMutation((String) null));
     assertDoesNotThrow(() -> AdminConfigFileGuard.rejectMutation("  "));
     assertDoesNotThrow(() -> AdminConfigFileGuard.rejectMutation((Path) null));
   }
@@ -62,7 +62,8 @@ class AdminConfigFileGuardTest {
 
     assertThrows(IllegalArgumentException.class, () -> AdminConfigFileGuard.rejectMutation(alias));
     assertThrows(
-        IllegalArgumentException.class, () -> AdminConfigFileGuard.rejectMutation(alias.toString()));
+        IllegalArgumentException.class,
+        () -> AdminConfigFileGuard.rejectMutation(alias.toString()));
   }
 
   @Test

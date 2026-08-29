@@ -72,7 +72,8 @@ class WorkspaceMutationGuardTest {
     assumeCanSymlink(alias, agentMd);
 
     assertThrows(
-        IllegalArgumentException.class, () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite(alias));
+        IllegalArgumentException.class,
+        () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite(alias));
     assertThrows(
         IllegalArgumentException.class,
         () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite(alias.toString()));
@@ -85,7 +86,8 @@ class WorkspaceMutationGuardTest {
     assumeCanSymlink(alias, Path.of("AGENT.md"));
 
     assertThrows(
-        IllegalArgumentException.class, () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite(alias));
+        IllegalArgumentException.class,
+        () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite(alias));
   }
 
   private static void assumeCanSymlink(Path link, Path target) {
