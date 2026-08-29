@@ -279,7 +279,7 @@ class HttpToolsTest {
   }
 
   @Test
-  @DisplayName("stripSensitiveHeaders 剥离 Private-Token / JOB-TOKEN / X-Auth-Token，保留非凭证头")
+  @DisplayName("stripSensitiveHeaders 剥离 Private-Token / JOB-TOKEN / X-Auth-Token / X-Access-Token / Deploy-Token，保留非凭证头")
   void stripSensitiveHeadersDropsVendorApiTokens() {
     String kept =
         HttpTools.stripSensitiveHeaders(
@@ -287,6 +287,8 @@ class HttpToolsTest {
             Private-Token: glpat-secret
             JOB-TOKEN: ci-job-secret
             X-Auth-Token: session-secret
+            X-Access-Token: ghp-secret
+            Deploy-Token: gitlab-deploy-secret
             X-Trace-Id: keep-me
             Accept: application/json
             """);
@@ -296,6 +298,8 @@ class HttpToolsTest {
     assertFalse(kept.toLowerCase().contains("private-token"), kept);
     assertFalse(kept.toLowerCase().contains("job-token"), kept);
     assertFalse(kept.toLowerCase().contains("x-auth-token"), kept);
+    assertFalse(kept.toLowerCase().contains("x-access-token"), kept);
+    assertFalse(kept.toLowerCase().contains("deploy-token"), kept);
   }
 
   @Test
@@ -350,6 +354,74 @@ class HttpToolsTest {
       assertEquals("ok", body);
       assertEquals(1, sinkHits.get());
       assertTrue(sinkTokens.isEmpty(), "跨源重定向不得转发 Private-Token");
+      assertEquals(List.of("keep-me"), sinkTrace, "非敏感自定义头仍可转发");
+    } finally {
+      entry.stop(0);
+      sink.stop(0);
+    }
+  }
+
+  @Test
+  @DisplayName("http_request 跨源 302 不得把 X-Access-Token / Deploy-Token 带到下一跳")
+  void httpRequestCrossOriginRedirectStripsXAccessAndDeployToken() throws IOException {
+    HttpServer entry = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    HttpServer sink = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    AtomicInteger sinkHits = new AtomicInteger();
+    List<String> sinkAccess = new ArrayList<>();
+    List<String> sinkDeploy = new ArrayList<>();
+    List<String> sinkTrace = new ArrayList<>();
+    try {
+      sink.createContext(
+          "/",
+          exchange -> {
+            sinkHits.incrementAndGet();
+            String access = exchange.getRequestHeaders().getFirst("X-Access-Token");
+            if (access != null) {
+              sinkAccess.add(access);
+            }
+            String deploy = exchange.getRequestHeaders().getFirst("Deploy-Token");
+            if (deploy != null) {
+              sinkDeploy.add(deploy);
+            }
+            String trace = exchange.getRequestHeaders().getFirst("X-Trace-Id");
+            if (trace != null) {
+              sinkTrace.add(trace);
+            }
+            byte[] response = "ok".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+          });
+      String sinkUrl = "http://127.0.0.1:" + sink.getAddress().getPort() + "/sink";
+      entry.createContext(
+          "/",
+          exchange -> {
+            exchange.getResponseHeaders().add("Location", sinkUrl);
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+          });
+      entry.start();
+      sink.start();
+
+      Sandbox whitelist =
+          new WhitelistSandbox(
+              new FileSandboxProperties(List.of()),
+              new ShellSandboxProperties(List.of()),
+              new HttpSandboxProperties(List.of("localhost", "127.0.0.1")));
+      HttpTools guarded = new HttpTools(whitelist, RestClient.create());
+      String start = "http://localhost:" + entry.getAddress().getPort() + "/";
+
+      String body =
+          guarded.httpRequest(
+              "POST",
+              start,
+              "X-Access-Token: ghp-secret\nDeploy-Token: deploy-secret\nX-Trace-Id: keep-me",
+              "{\"x\":1}");
+
+      assertEquals("ok", body);
+      assertEquals(1, sinkHits.get());
+      assertTrue(sinkAccess.isEmpty(), "跨源重定向不得转发 X-Access-Token");
+      assertTrue(sinkDeploy.isEmpty(), "跨源重定向不得转发 Deploy-Token");
       assertEquals(List.of("keep-me"), sinkTrace, "非敏感自定义头仍可转发");
     } finally {
       entry.stop(0);
