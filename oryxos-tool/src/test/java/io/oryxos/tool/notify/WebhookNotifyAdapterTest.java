@@ -205,4 +205,35 @@ class WebhookNotifyAdapterTest {
       sink.stop(0);
     }
   }
+
+  @Test
+  @DisplayName("302 无 Location 时不得静默成功")
+  void redirect302WithoutLocationFailsLoud() throws IOException {
+    HttpServer entry = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    try {
+      entry.createContext(
+          "/",
+          exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+          });
+      entry.start();
+
+      WebhookNotifyAdapter guarded =
+          new WebhookNotifyAdapter(
+              new NotifyPoster(
+                  new WhitelistSandbox(
+                      new FileSandboxProperties(List.of()),
+                      new ShellSandboxProperties(List.of()),
+                      new HttpSandboxProperties(List.of("localhost", "127.0.0.1")))));
+      String start = "http://localhost:" + entry.getAddress().getPort() + "/";
+
+      IllegalStateException ex =
+          assertThrows(IllegalStateException.class, () -> guarded.send(webhookTarget(start), "x"));
+      assertTrue(ex.getMessage().contains("Location"), ex.getMessage());
+    } finally {
+      entry.stop(0);
+    }
+  }
 }

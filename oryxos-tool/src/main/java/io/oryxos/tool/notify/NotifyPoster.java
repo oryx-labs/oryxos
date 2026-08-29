@@ -56,7 +56,7 @@ public final class NotifyPoster {
       if (resp.getStatusCode().is3xxRedirection()) {
         String location = resp.getHeaders().getFirst("Location");
         if (location == null || location.isBlank()) {
-          return;
+          throw new IllegalStateException("通知推送收到重定向但缺少 Location: " + current);
         }
         if (switchesToGet(resp.getStatusCode().value())) {
           hopMethod = HttpMethod.GET;
