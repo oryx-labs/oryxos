@@ -230,11 +230,7 @@ public class ProfileLoader {
       validateCronAndZone(key, cron.strip(), zone, source);
       schedules.add(
           new Profile.ScheduleConfig(
-              key,
-              name,
-              cron.strip(),
-              zone,
-              asString(entry.get("message"))));
+              key, name, cron.strip(), zone, asString(entry.get("message"))));
     }
     return schedules;
   }
