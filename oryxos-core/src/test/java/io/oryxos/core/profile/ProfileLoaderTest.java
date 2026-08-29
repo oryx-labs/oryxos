@@ -240,6 +240,29 @@ class ProfileLoaderTest {
   }
 
   @Test
+  void schedules条目非对象时报错点名() throws IOException {
+    write(
+        "scalar-sched.yaml",
+        """
+        name: scalar-sched
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - morning
+        """);
+
+    ProfileValidationException ex =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("scalar-sched.yaml")));
+
+    assertTrue(ex.getMessage().contains("scalar-sched"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("schedules"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("非对象条目"), ex.getMessage());
+  }
+
+  @Test
   void notify_channels合法对象仍可加载() throws IOException {
     write(
         "ok-notify.yaml",
@@ -256,6 +279,27 @@ class ProfileLoaderTest {
     Profile profile = loader().parse(profilesDir.resolve("ok-notify.yaml"));
     assertEquals(1, profile.notifyChannels().size());
     assertEquals("webhook", profile.notifyChannels().get(0).type());
+  }
+
+  @Test
+  void schedules合法对象仍可加载() throws IOException {
+    write(
+        "ok-sched.yaml",
+        """
+        name: ok-sched
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: morning
+            name: Morning job
+            cron: "0 0 8 * * *"
+            message: hi
+        """);
+
+    Profile profile = loader().parse(profilesDir.resolve("ok-sched.yaml"));
+    assertEquals(1, profile.schedules().size());
+    assertEquals("morning", profile.schedules().get(0).key());
   }
 
   @Test

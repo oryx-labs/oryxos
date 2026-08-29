@@ -193,7 +193,7 @@ public class ProfileLoader {
     for (Object item : list) {
       Map<String, Object> entry = asMap(item);
       if (entry == null) {
-        continue;
+        throw new ProfileValidationException("Profile " + source + " 的 schedules 存在非对象条目: " + item);
       }
       String legacyId = asString(entry.get("id"));
       String configuredKey = asString(entry.get("key"));
