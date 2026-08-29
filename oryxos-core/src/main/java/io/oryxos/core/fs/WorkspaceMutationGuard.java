@@ -106,6 +106,10 @@ public final class WorkspaceMutationGuard {
     rejectAgentMdLexical(projected.toString());
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification =
+          "AGENT.md is ASCII; Locale.ROOT fold matches case-insensitive filesystems for symlink leaf names.")
   private static void rejectAgentMdSymlinkLeaf(Path path) {
     Path absolute = path.toAbsolutePath().normalize();
     if (!Files.isSymbolicLink(absolute)) {
