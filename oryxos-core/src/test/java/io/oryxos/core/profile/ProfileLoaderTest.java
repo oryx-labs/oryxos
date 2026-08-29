@@ -263,6 +263,52 @@ class ProfileLoaderTest {
   }
 
   @Test
+  void notify_channels缺少type时报错点名() throws IOException {
+    write(
+        "missing-notify-type.yaml",
+        """
+        name: missing-notify-type
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        notify_channels:
+          - url: https://example.com/hook
+        """);
+
+    ProfileValidationException ex =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("missing-notify-type.yaml")));
+
+    assertTrue(ex.getMessage().contains("missing-notify-type"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("notify_channels"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("type"), ex.getMessage());
+  }
+
+  @Test
+  void notify_channels空type时报错点名() throws IOException {
+    write(
+        "blank-notify-type.yaml",
+        """
+        name: blank-notify-type
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        notify_channels:
+          - type: ""
+            url: https://example.com/hook
+        """);
+
+    ProfileValidationException ex =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("blank-notify-type.yaml")));
+
+    assertTrue(ex.getMessage().contains("blank-notify-type"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("type"), ex.getMessage());
+  }
+
+  @Test
   void notify_channels合法对象仍可加载() throws IOException {
     write(
         "ok-notify.yaml",

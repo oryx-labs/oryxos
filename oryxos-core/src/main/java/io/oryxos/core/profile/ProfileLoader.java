@@ -174,6 +174,10 @@ public class ProfileLoader {
             "Profile " + profileName + " 的 notify_channels 存在非对象条目: " + item);
       }
       String type = asString(entry.get("type"));
+      if (type == null || type.isBlank()) {
+        throw new ProfileValidationException(
+            "Profile " + profileName + " 的 notify_channels 缺少 type");
+      }
       // type 之外的键都是渠道特定配置（如 webhook 的 url）
       Map<String, String> config = new LinkedHashMap<>();
       for (Map.Entry<String, Object> kv : entry.entrySet()) {
