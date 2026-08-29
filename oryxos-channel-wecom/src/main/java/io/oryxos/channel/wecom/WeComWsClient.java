@@ -1,5 +1,6 @@
 package io.oryxos.channel.wecom;
 
+import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -184,7 +185,7 @@ final class WeComWsClient implements WebSocket.Listener {
     JsonNode root;
     try {
       root = MAPPER.readTree(raw);
-    } catch (Exception e) {
+    } catch (JacksonException e) {
       LOG.warn("企微帧 JSON 解析失败，已忽略");
       return;
     }
