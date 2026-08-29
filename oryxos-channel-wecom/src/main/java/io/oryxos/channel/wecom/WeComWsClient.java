@@ -13,9 +13,9 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -31,6 +31,12 @@ final class WeComWsClient implements WebSocket.Listener {
   static final String DEFAULT_WS_URL = "wss://openws.work.weixin.qq.com";
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(20);
   private static final long HEARTBEAT_INTERVAL_SEC = 30;
+  private static final String FIELD_ERRCODE = "errcode";
+  private static final String FIELD_ERRMSG = "errmsg";
+  private static final String CMD_AIBOT_SUBSCRIBE = "aibot_subscribe";
+  private static final String CMD_PING = "ping";
+  private static final String CMD_PONG = "pong";
+  private static final int ERRCODE_OK = 0;
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private final String botId;
@@ -73,7 +79,7 @@ final class WeComWsClient implements WebSocket.Listener {
     socket.set(ws);
     if (!subscribeLatch.await(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
       closeQuietly();
-      throw new IllegalStateException("企微长连接订阅超时（未收到 aibot_subscribe 回执）");
+      throw new IllegalStateException("企微长连接订阅超时（未收到 " + CMD_AIBOT_SUBSCRIBE + " 回执）");
     }
     if (subscribeError != null) {
       closeQuietly();
@@ -125,7 +131,7 @@ final class WeComWsClient implements WebSocket.Listener {
     ObjectNode headers = MAPPER.createObjectNode();
     headers.put("req_id", UUID.randomUUID().toString());
     ObjectNode frame = MAPPER.createObjectNode();
-    frame.put("cmd", "aibot_subscribe");
+    frame.put("cmd", CMD_AIBOT_SUBSCRIBE);
     frame.set("headers", headers);
     frame.set("body", body);
     try {
@@ -182,20 +188,12 @@ final class WeComWsClient implements WebSocket.Listener {
       LOG.warn("企微帧 JSON 解析失败，已忽略");
       return;
     }
-    if (!subscribed.get() && root.has("errcode")) {
-      int code = root.path("errcode").asInt(-1);
-      if (code == 0) {
-        subscribed.set(true);
-        startHeartbeat();
-        subscribeLatch.countDown();
-      } else {
-        subscribeError = root.path("errmsg").asText("errcode=" + code);
-        subscribeLatch.countDown();
-      }
+    if (!subscribed.get() && root.has(FIELD_ERRCODE)) {
+      handleSubscribeAck(root);
       return;
     }
     String cmd = root.path("cmd").asText("");
-    if ("pong".equals(cmd) || cmd.isBlank() && root.has("errcode")) {
+    if (isIgnorableControlFrame(cmd, root)) {
       return;
     }
     try {
@@ -205,15 +203,37 @@ final class WeComWsClient implements WebSocket.Listener {
     }
   }
 
+  private void handleSubscribeAck(JsonNode root) {
+    int code = root.path(FIELD_ERRCODE).asInt(-1);
+    if (code == ERRCODE_OK) {
+      subscribed.set(true);
+      startHeartbeat();
+      subscribeLatch.countDown();
+      return;
+    }
+    subscribeError = root.path(FIELD_ERRMSG).asText(FIELD_ERRCODE + "=" + code);
+    subscribeLatch.countDown();
+  }
+
+  private static boolean isIgnorableControlFrame(String cmd, JsonNode root) {
+    if (CMD_PONG.equals(cmd)) {
+      return true;
+    }
+    return cmd.isBlank() && root.has(FIELD_ERRCODE);
+  }
+
   private void startHeartbeat() {
     stopHeartbeat();
-    heartbeat =
-        Executors.newSingleThreadScheduledExecutor(
+    ScheduledThreadPoolExecutor pool =
+        new ScheduledThreadPoolExecutor(
+            1,
             r -> {
               Thread t = new Thread(r, "wecom-ws-heartbeat");
               t.setDaemon(true);
               return t;
             });
+    pool.setRemoveOnCancelPolicy(true);
+    heartbeat = pool;
     heartbeatTask =
         heartbeat.scheduleAtFixedRate(
             () -> {
@@ -221,7 +241,7 @@ final class WeComWsClient implements WebSocket.Listener {
                 ObjectNode headers = MAPPER.createObjectNode();
                 headers.put("req_id", UUID.randomUUID().toString());
                 ObjectNode frame = MAPPER.createObjectNode();
-                frame.put("cmd", "ping");
+                frame.put("cmd", CMD_PING);
                 frame.set("headers", headers);
                 sendJson(frame);
               } catch (RuntimeException e) {

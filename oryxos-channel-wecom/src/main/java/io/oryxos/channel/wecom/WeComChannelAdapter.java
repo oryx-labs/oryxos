@@ -31,6 +31,8 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
   /** OutboundGuard / 白名单用 https 形式主机名（与 wss 同域）。 */
   static final String OUTBOUND_URL = "https://openws.work.weixin.qq.com";
 
+  private static final String CMD_AIBOT_MSG_CALLBACK = "aibot_msg_callback";
+
   private static final Duration START_TIMEOUT = Duration.ofSeconds(20);
 
   private final ChannelConfig config;
@@ -142,7 +144,7 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
 
   private void handleFrame(JsonNode root) {
     String cmd = root.path("cmd").asText("");
-    if (!"aibot_msg_callback".equals(cmd)) {
+    if (!CMD_AIBOT_MSG_CALLBACK.equals(cmd)) {
       return;
     }
     JsonNode body = root.get("body");
