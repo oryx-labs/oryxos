@@ -24,15 +24,20 @@
         <spring-ai.version>1.1.8</spring-ai.version>
         <picocli.version>4.7.6</picocli.version>
         <sqlite-jdbc.version>3.53.2.1</sqlite-jdbc.version>
-        <pdfbox.version>3.0.5</pdfbox.version>
+        <pdfbox.version>3.0.8</pdfbox.version>
         <oapi-sdk.version>2.8.5</oapi-sdk.version>
 
         <!-- Infrastructure libraries -->
         <jackson-bom.version>2.21.5</jackson-bom.version>
         <log4j2.version>2.25.5</log4j2.version>
         <tomcat.version>10.1.59</tomcat.version>
+        <!-- CVE-2025-48924: ClassUtils.getClass StackOverflowError before 3.18.0 -->
+        <commons-lang3.version>3.18.0</commons-lang3.version>
         <logstash-logback.version>7.4</logstash-logback.version>
-        <springdoc.version>2.6.0</springdoc.version>
+        <!-- Boot 3.5.x line; 2.9+/3.x need Boot 4 -->
+        <springdoc.version>2.8.17</springdoc.version>
+        <!-- springdoc 2.8.17 still ships older swagger-ui; override for DOMPurify CVEs -->
+        <swagger-ui.version>5.32.13</swagger-ui.version>
 
         <!-- Quality / format / security plugins -->
         <spotless.version>2.43.0</spotless.version>
@@ -171,6 +176,11 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.webjars</groupId>
+                <artifactId>swagger-ui</artifactId>
+                <version>${swagger-ui.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
