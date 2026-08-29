@@ -265,7 +265,12 @@ public class FileTools {
     try {
       Files.createDirectories(Path.of(path));
       // 建目录后复检：与 write_file / download_file 同款——防首次校验到 createDirectories 间路径被换成外向软链
+      // 或换成仍在 root 内的 MEMORY / AdminConfig / Skill·Knowledge / bind 槽
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+      MemoryMdGuard.rejectMutation(path);
+      AdminConfigFileGuard.rejectMutation(path);
+      WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(path);
+      WorkspaceMutationGuard.rejectBindSlotCreate(path);
       return "已创建目录: " + path;
     } catch (IOException e) {
       throw new UncheckedIOException("创建目录失败: " + path, e);
@@ -309,8 +314,10 @@ public class FileTools {
       throw new IllegalArgumentException("拒绝删除目录（本工具只删文件）: " + path);
     }
     try {
-      // 删前复检：防首次校验到 delete 间路径/父目录被换成外向软链
+      // 删前复检：防首次校验到 delete 间路径/父目录被换成外向软链，或换成仍在 root 内的保留路径
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+      rejectReservedFileWrites(path);
+      WorkspaceMutationGuard.rejectBindLinkDetach(path);
       return Files.deleteIfExists(file) ? "已删除: " + path : "文件不存在: " + path;
     } catch (IOException e) {
       throw new UncheckedIOException("删除文件失败: " + path, e);
