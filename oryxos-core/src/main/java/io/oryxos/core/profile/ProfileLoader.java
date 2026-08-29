@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,6 +17,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.support.CronTrigger;
 import org.yaml.snakeyaml.Yaml;
 
 /**
@@ -224,15 +226,34 @@ public class ProfileLoader {
       if (cron == null || cron.isBlank()) {
         throw new ProfileValidationException("Profile 定时配置 " + key + " 缺少 cron: " + source);
       }
+      String zone = asString(entry.get("zone"));
+      validateCronAndZone(key, cron.strip(), zone, source);
       schedules.add(
           new Profile.ScheduleConfig(
               key,
               name,
               cron.strip(),
-              asString(entry.get("zone")),
+              zone,
               asString(entry.get("message"))));
     }
     return schedules;
+  }
+
+  /** 与 {@code AgentScheduler} 同口径：非法 cron / ZoneId 在加载期失败，避免注册时仅 WARN 跳过。 */
+  private static void validateCronAndZone(String key, String cron, String zone, String source) {
+    ZoneId zoneId;
+    try {
+      zoneId = zone == null || zone.isBlank() ? ZoneId.systemDefault() : ZoneId.of(zone);
+    } catch (RuntimeException e) {
+      throw new ProfileValidationException(
+          "Profile 定时配置 " + key + " 的 zone 无效: " + source + " (" + e.getMessage() + ")");
+    }
+    try {
+      new CronTrigger(cron, zoneId);
+    } catch (RuntimeException e) {
+      throw new ProfileValidationException(
+          "Profile 定时配置 " + key + " 的 cron 无效: " + source + " (" + e.getMessage() + ")");
+    }
   }
 
   private static Profile.Settings toSettings(Map<String, Object> map, String profileName) {

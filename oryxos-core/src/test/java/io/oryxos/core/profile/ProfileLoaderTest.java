@@ -303,6 +303,57 @@ class ProfileLoaderTest {
   }
 
   @Test
+  void schedules非法cron时报错点名() throws IOException {
+    write(
+        "bad-cron.yaml",
+        """
+        name: bad-cron
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: morning
+            name: Morning job
+            cron: "0 0 8 * *"
+            message: hi
+        """);
+
+    ProfileValidationException ex =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("bad-cron.yaml")));
+
+    assertTrue(ex.getMessage().contains("morning"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("cron"), ex.getMessage());
+  }
+
+  @Test
+  void schedules非法zone时报错点名() throws IOException {
+    write(
+        "bad-zone.yaml",
+        """
+        name: bad-zone
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: morning
+            name: Morning job
+            cron: "0 0 8 * * *"
+            zone: Not/AZone
+            message: hi
+        """);
+
+    ProfileValidationException ex =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("bad-zone.yaml")));
+
+    assertTrue(ex.getMessage().contains("morning"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("zone"), ex.getMessage());
+  }
+
+  @Test
   void 引用不存在的provider_报错信息包含该名字() throws IOException {
     write(
         "bad-provider.yaml",
