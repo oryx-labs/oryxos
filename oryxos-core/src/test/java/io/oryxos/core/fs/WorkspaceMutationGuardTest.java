@@ -43,6 +43,35 @@ class WorkspaceMutationGuardTest {
         () -> WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite("agents/demo/notes.md"));
     assertDoesNotThrow(
         () -> WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite("output/report.md"));
+    assertDoesNotThrow(() -> WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite((Path) null));
+  }
+
+  @Test
+  @DisplayName("软链叶子指向 skills 内容时拒绝")
+  void rejectsSymlinkLeafToSkillContent() throws IOException {
+    Path skillFile = temp.resolve("skills").resolve("report").resolve("SKILL.md");
+    Files.createDirectories(skillFile.getParent());
+    Files.writeString(skillFile, "---\nname: report\n---\n");
+    Path alias = temp.resolve("notes.md");
+    assumeCanSymlink(alias, skillFile);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(alias));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(alias.toString()));
+  }
+
+  @Test
+  @DisplayName("悬空软链目标含 skills 段时也拒绝")
+  void rejectsDanglingSymlinkIntoSkills() throws IOException {
+    Path alias = temp.resolve("notes.md");
+    assumeCanSymlink(alias, Path.of("skills/report/SKILL.md"));
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(alias));
   }
 
   @Test

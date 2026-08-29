@@ -34,12 +34,31 @@ public final class WorkspaceMutationGuard {
   /**
    * 拒绝写入共享 Skill/Knowledge 实体或 Agent 绑定视图下的任意内容路径（共享 skills、agent 绑定 skills、共享 knowledge、agent 绑定
    * knowledge）。
+   *
+   * <p>除词法检查外，经 {@link RealPathBoundary} 复检，避免 {@code notes.md → skills/...} 软链绕过。
    */
+  public static void rejectSkillKnowledgeContentWrite(String path) {
+    if (path == null || path.isBlank()) {
+      return;
+    }
+    rejectSkillKnowledgeLexical(path);
+    rejectSkillKnowledgeResolved(Path.of(path));
+  }
+
+  /** 对已解析路径做词法 + 真实路径双重检查。 */
+  public static void rejectSkillKnowledgeContentWrite(Path path) {
+    if (path == null) {
+      return;
+    }
+    rejectSkillKnowledgeLexical(path.toString());
+    rejectSkillKnowledgeResolved(path);
+  }
+
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "IMPROPER_UNICODE",
       justification =
           "Reserved path segments are ASCII; Locale.ROOT fold matches case-insensitive filesystems.")
-  public static void rejectSkillKnowledgeContentWrite(String path) {
+  private static void rejectSkillKnowledgeLexical(String path) {
     if (path == null || path.isBlank()) {
       return;
     }
@@ -49,6 +68,38 @@ public final class WorkspaceMutationGuard {
         || underAgentBindTree(segs, SKILLS)
         || underAgentBindTree(segs, KNOWLEDGE)) {
       throw new IllegalArgumentException("拒绝写入 Skill/Knowledge 路径（请用管理台绑定入口）: " + path);
+    }
+  }
+
+  private static void rejectSkillKnowledgeResolved(Path path) {
+    rejectSkillKnowledgeSymlinkLeaf(path);
+    Path projected;
+    try {
+      projected = RealPathBoundary.project(path).projectedReal();
+    } catch (UncheckedIOException | IllegalArgumentException e) {
+      return;
+    }
+    rejectSkillKnowledgeLexical(projected.toString());
+  }
+
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification =
+          "skills/knowledge segment names are ASCII; Locale.ROOT fold matches case-insensitive filesystems.")
+  private static void rejectSkillKnowledgeSymlinkLeaf(Path path) {
+    Path absolute = path.toAbsolutePath().normalize();
+    if (!Files.isSymbolicLink(absolute)) {
+      return;
+    }
+    try {
+      Path linkTarget = Files.readSymbolicLink(absolute);
+      rejectSkillKnowledgeLexical(linkTarget.toString());
+      Path parent = absolute.getParent();
+      if (parent != null) {
+        rejectSkillKnowledgeLexical(parent.resolve(linkTarget).normalize().toString());
+      }
+    } catch (IOException ignored) {
+      // 读链失败则保守放行词法已通过的路径
     }
   }
 
