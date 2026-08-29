@@ -1,5 +1,8 @@
 package io.oryxos.core.fs;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,11 +55,30 @@ public final class WorkspaceMutationGuard {
   /**
    * 拒绝文件工具直写 {@code agents/<name>/AGENT.md}——须走 {@code AgentLifecycleService.update} （校验 + 重注册
    * schedules）。
+   *
+   * <p>除词法检查外，经 {@link RealPathBoundary} 复检，避免 {@code notes.md → AGENT.md} 软链绕过。
    */
+  public static void rejectAgentMdDirectWrite(String path) {
+    if (path == null || path.isBlank()) {
+      return;
+    }
+    rejectAgentMdLexical(path);
+    rejectAgentMdResolved(Path.of(path));
+  }
+
+  /** 对已解析路径做词法 + 真实路径双重检查。 */
+  public static void rejectAgentMdDirectWrite(Path path) {
+    if (path == null) {
+      return;
+    }
+    rejectAgentMdLexical(path.toString());
+    rejectAgentMdResolved(path);
+  }
+
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "IMPROPER_UNICODE",
       justification = "AGENT.md is ASCII; Locale.ROOT fold matches case-insensitive filesystems.")
-  public static void rejectAgentMdDirectWrite(String path) {
+  private static void rejectAgentMdLexical(String path) {
     if (path == null || path.isBlank()) {
       return;
     }
@@ -70,6 +92,38 @@ public final class WorkspaceMutationGuard {
     if (fileIdx == segs.size() - 1 && AGENT_MD.equals(segs.get(fileIdx))) {
       throw new IllegalArgumentException(
           "拒绝直接改写 AGENT.md，请通过 Agent 管理 / lifecycle.update: " + path);
+    }
+  }
+
+  private static void rejectAgentMdResolved(Path path) {
+    rejectAgentMdSymlinkLeaf(path);
+    Path projected;
+    try {
+      projected = RealPathBoundary.project(path).projectedReal();
+    } catch (UncheckedIOException | IllegalArgumentException e) {
+      return;
+    }
+    rejectAgentMdLexical(projected.toString());
+  }
+
+  private static void rejectAgentMdSymlinkLeaf(Path path) {
+    Path absolute = path.toAbsolutePath().normalize();
+    if (!Files.isSymbolicLink(absolute)) {
+      return;
+    }
+    try {
+      Path linkTarget = Files.readSymbolicLink(absolute);
+      Path fileName = linkTarget.getFileName();
+      if (fileName != null && AGENT_MD.equals(fileName.toString().toLowerCase(Locale.ROOT))) {
+        throw new IllegalArgumentException(
+            "拒绝直接改写 AGENT.md，请通过 Agent 管理 / lifecycle.update: " + path);
+      }
+      Path parent = absolute.getParent();
+      if (parent != null) {
+        rejectAgentMdLexical(parent.resolve(linkTarget).normalize().toString());
+      }
+    } catch (IOException ignored) {
+      // 读链失败则保守放行词法已通过的路径
     }
   }
 
