@@ -61,6 +61,7 @@
         <module>oryxos-tool</module>
         <module>oryxos-channel-cli</module>
         <module>oryxos-channel-feishu</module>
+        <module>oryxos-channel-wecom</module>
         <module>oryxos-web</module>
         <module>oryxos-storage</module>
         <module>oryxos-cli</module>
@@ -112,6 +113,11 @@
             <dependency>
                 <groupId>io.oryxos</groupId>
                 <artifactId>oryxos-channel-feishu</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.oryxos</groupId>
+                <artifactId>oryxos-channel-wecom</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

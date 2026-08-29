@@ -885,6 +885,10 @@ public class OryxOsRuntime {
             io.oryxos.channel.feishu.FeishuChannelAdapter.TYPE,
             resolved ->
                 new io.oryxos.channel.feishu.FeishuChannelAdapter(
+                    resolved, profileRegistry, inboundMessageService, channelOutboundGuard),
+            io.oryxos.channel.wecom.WeComChannelAdapter.TYPE,
+            resolved ->
+                new io.oryxos.channel.wecom.WeComChannelAdapter(
                     resolved, profileRegistry, inboundMessageService, channelOutboundGuard)));
   }
 

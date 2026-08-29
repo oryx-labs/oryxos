@@ -1,11 +1,19 @@
-# OryxOS 入站 IM 渠道配置示例（017）
+# OryxOS 入站 IM 渠道配置示例（017 + 企微）
 # 复制到 .oryxos/channels.yaml 后按需修改；文件权限会被收紧为 rw-------。
 # 凭证一律用 ${ENV_VAR} 占位从环境变量注入，禁止明文写入本文件。
-# 一个条目 = 一个飞书自建应用 = 绑定一个 Agent（多 Agent 即多个应用、多个条目）。
+# 一个条目 = 一个平台应用/机器人 = 绑定一个 Agent。
 channels:
   - name: ops-feishu                    # 渠道名，唯一，[a-zA-Z0-9_-]+
-    type: feishu                        # 渠道类型（当前仅支持 feishu）
-    app_id: ${FEISHU_APP_ID}            # 飞书自建应用 App ID
-    app_secret: ${FEISHU_APP_SECRET}    # 飞书自建应用 App Secret
-    agent: ops-agent                    # 绑定的 Agent（.oryxos/agents/ 下目录名）
-    enabled: true                       # false = 停用（断开连接但保留配置）
+    type: feishu                        # 飞书自建应用长连接
+    app_id: ${FEISHU_APP_ID}
+    app_secret: ${FEISHU_APP_SECRET}
+    agent: ops-agent
+    enabled: true
+
+  # 企微智能机器人长连接（见 docs/WeComChannelSetup.md）
+  # - name: ops-wecom
+  #   type: wecom
+  #   app_id: ${WECOM_BOT_ID}             # BotID
+  #   app_secret: ${WECOM_BOT_SECRET}     # 长连接 Secret
+  #   agent: ops-agent
+  #   enabled: true

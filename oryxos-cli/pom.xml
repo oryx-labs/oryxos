@@ -34,6 +34,10 @@
         </dependency>
         <dependency>
             <groupId>io.oryxos</groupId>
+            <artifactId>oryxos-channel-wecom</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.oryxos</groupId>
             <artifactId>oryxos-provider</artifactId>
         </dependency>
         <dependency>
