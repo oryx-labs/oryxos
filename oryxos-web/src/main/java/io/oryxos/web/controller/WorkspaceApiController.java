@@ -174,8 +174,28 @@ public class WorkspaceApiController {
       if (parent != null) {
         Files.createDirectories(parent);
       }
-      // 写前复检：与 write_file / download_file 同款——防首次校验到 writeString 间父路径被换成外向软链
+      // 写前复检：防首次校验到 writeString 间路径被换成外向软链，或换成仍在 root 内的保留文件
       target = resolveWithinRoot(path);
+      MemoryMdGuard.rejectMutation(target);
+      AdminConfigFileGuard.rejectMutation(target);
+      WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(target.toString());
+      if (isAgentSkillsPath(target)) {
+        throw new IllegalArgumentException("Agent skills/ 是绑定视图，禁止从工作区入口写入");
+      }
+      if (isAgentKnowledgePath(target)) {
+        throw new IllegalArgumentException("Agent knowledge/ 是绑定视图，禁止从工作区入口写入");
+      }
+      if (RealPathBoundary.isWithin(oryxosRoot.resolve(SKILLS_DIR), target)) {
+        throw new IllegalArgumentException("共享 Skill 实体只能通过 Skill 管理入口更新");
+      }
+      if (RealPathBoundary.isWithin(oryxosRoot.resolve(KNOWLEDGE_DIR), target)) {
+        throw new IllegalArgumentException("共享 Knowledge 实体只能通过 Knowledge 管理入口更新");
+      }
+      Path agentDirRecheck = agentDirOfAgentFile(target);
+      if (agentDirRecheck != null) {
+        lifecycle.update(String.valueOf(agentDirRecheck.getFileName()), content);
+        return ApiResponse.ok(null);
+      }
       Files.writeString(target, content);
     } catch (IOException e) {
       throw new UncheckedIOException("写入文件失败: " + path, e);

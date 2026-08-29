@@ -358,6 +358,10 @@ public class HttpTools {
       // 写前复检：与 write_file 同款——createDirectories 之后、Files.write 之前。
       // 复检若放在建目录前，通过后父路径仍可被换成外向软链，写出白名单。
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+      MemoryMdGuard.rejectMutation(path);
+      AdminConfigFileGuard.rejectMutation(path);
+      WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(path);
+      WorkspaceMutationGuard.rejectAgentMdDirectWrite(path);
       Files.write(file, bytes);
       return "已下载到: " + path + "（" + bytes.length + " 字节）";
     } catch (IOException e) {

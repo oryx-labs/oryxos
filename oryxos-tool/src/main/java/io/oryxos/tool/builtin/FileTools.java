@@ -42,6 +42,14 @@ public class FileTools {
     this.sandbox = sandbox;
   }
 
+  /** 写路径保留文件守卫（MEMORY / AdminConfig / Skill·Knowledge / AGENT.md）。 */
+  private static void rejectReservedFileWrites(String path) {
+    MemoryMdGuard.rejectMutation(path);
+    AdminConfigFileGuard.rejectMutation(path);
+    WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(path);
+    WorkspaceMutationGuard.rejectAgentMdDirectWrite(path);
+  }
+
   @Tool(name = "read_file", description = "读取指定路径的文本文件内容")
   public String readFile(@ToolParam(description = "要读取的文件路径") String path) {
     sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
@@ -75,6 +83,7 @@ public class FileTools {
       }
       // 写前复检：与 download_file / grep 同款——防首次校验到 writeString 间路径被换成外向软链
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+      rejectReservedFileWrites(path);
       Files.writeString(file, content);
       return "已写入: " + path;
     } catch (IOException e) {
@@ -131,6 +140,7 @@ public class FileTools {
       }
       // 写前复检：与 write_file 同款
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+      rejectReservedFileWrites(path);
       Files.writeString(file, content.replace(oldString, newString));
       return "已编辑: " + path;
     } catch (IOException e) {
@@ -277,6 +287,7 @@ public class FileTools {
         Files.createDirectories(parent);
       }
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
+      rejectReservedFileWrites(path);
       Files.writeString(file, content, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
       return "已追加到: " + path;
     } catch (IOException e) {
@@ -335,6 +346,8 @@ public class FileTools {
       // 变更前复检：与 write_file 同款——防 createDirectories 窗口内目标父路径被换成外向软链
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, from));
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, to));
+      rejectReservedFileWrites(from);
+      rejectReservedFileWrites(to);
       Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
       return "已移动: " + from + " -> " + to;
     } catch (IOException e) {
@@ -371,6 +384,7 @@ public class FileTools {
       // 变更前复检：与 write_file 同款——防校验到 copy 间路径被换成外向软链
       sandbox.enforce(new SandboxAction(ActionType.FILE_READ, from));
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, to));
+      rejectReservedFileWrites(to);
       Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
       return "已复制: " + from + " -> " + to;
     } catch (IOException e) {
