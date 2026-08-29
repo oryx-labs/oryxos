@@ -279,7 +279,8 @@ class HttpToolsTest {
   }
 
   @Test
-  @DisplayName("stripSensitiveHeaders 剥离 Private-Token / JOB-TOKEN / X-Auth-Token / X-Access-Token / Deploy-Token，保留非凭证头")
+  @DisplayName(
+      "stripSensitiveHeaders 剥离 Private-Token / JOB-TOKEN / X-Auth-Token / X-Access-Token / Deploy-Token，保留非凭证头")
   void stripSensitiveHeadersDropsVendorApiTokens() {
     String kept =
         HttpTools.stripSensitiveHeaders(

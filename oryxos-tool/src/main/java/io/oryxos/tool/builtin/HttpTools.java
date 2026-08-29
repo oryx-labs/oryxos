@@ -219,8 +219,8 @@ public class HttpTools {
 
   /**
    * 去掉跨源重定向不应转发的头（Authorization / Proxy-Authorization / Cookie / Cookie2 / X-API-Key /
-   * Private-Token / JOB-TOKEN / X-Auth-Token / Api-Key / X-Access-Token / Deploy-Token）。同浏览器对跨站重定向的凭证剥离习惯；名单控在常见
-   * API 凭证头，避免误伤泛化的 {@code *Token*}。
+   * Private-Token / JOB-TOKEN / X-Auth-Token / Api-Key / X-Access-Token /
+   * Deploy-Token）。同浏览器对跨站重定向的凭证剥离习惯；名单控在常见 API 凭证头，避免误伤泛化的 {@code *Token*}。
    */
   static String stripSensitiveHeaders(String headers) {
     if (headers == null || headers.isBlank()) {
