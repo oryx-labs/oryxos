@@ -154,6 +154,51 @@ class WorkspaceApiControllerTest {
   }
 
   @Test
+  @DisplayName("file 读前复检路径，阻断目标被换成外向软链")
+  void fileRechecksPathBeforeRead() throws Exception {
+    Assumptions.assumeTrue(
+        FileSystems.getDefault().supportedFileAttributeViews().contains("posix"), "需要 POSIX 软链支持");
+    Path outside = Files.createDirectories(oryxosRoot.resolveSibling("outside-read-recheck"));
+    Files.writeString(outside.resolve("secret.txt"), "leaked");
+    String rel = "agents/demo/notes.md";
+    Path notes = oryxosRoot.resolve(rel);
+    Files.writeString(notes, "inside");
+
+    RealPathBoundary.requireWithin(oryxosRoot, notes.normalize());
+    Files.delete(notes);
+    Files.createSymbolicLink(notes, outside.resolve("secret.txt"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> RealPathBoundary.requireWithin(oryxosRoot, notes.normalize()));
+
+    mvc.perform(get("/api/v1/workspace/file").param("path", rel))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  @DisplayName("download 读前复检路径，阻断目标被换成外向软链")
+  void downloadRechecksPathBeforeRead() throws Exception {
+    Assumptions.assumeTrue(
+        FileSystems.getDefault().supportedFileAttributeViews().contains("posix"), "需要 POSIX 软链支持");
+    Path outside = Files.createDirectories(oryxosRoot.resolveSibling("outside-download-recheck"));
+    Files.writeString(outside.resolve("secret.bin"), "leaked");
+    String rel = "agents/demo/output/report.md";
+    Path report = oryxosRoot.resolve(rel);
+    Files.createDirectories(report.getParent());
+    Files.writeString(report, "inside");
+
+    RealPathBoundary.requireWithin(oryxosRoot, report.normalize());
+    Files.delete(report);
+    Files.createSymbolicLink(report, outside.resolve("secret.bin"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> RealPathBoundary.requireWithin(oryxosRoot, report.normalize()));
+
+    mvc.perform(get("/api/v1/workspace/download").param("path", rel))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   @DisplayName("工作区写入口禁止直写 MEMORY.md（须走 save_memory）")
   void writeMemoryMdIsRejected() throws Exception {
     Path memory = Files.createDirectories(oryxosRoot.resolve("agents/demo"));

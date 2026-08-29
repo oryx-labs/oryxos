@@ -91,6 +91,8 @@ public class WorkspaceApiController {
       throw new ResourceNotFoundException("文件不存在: " + path); // → 404
     }
     try {
+      // 读前复检：与 writeFile / tool 层 read_file 同款——防首次校验到 readString 间被换成外向软链
+      target = resolveWithinRoot(path);
       return ApiResponse.ok(Files.readString(target));
     } catch (IOException e) {
       throw new UncheckedIOException("读取文件失败: " + path, e);
@@ -108,6 +110,8 @@ public class WorkspaceApiController {
     if (!Files.isRegularFile(target)) {
       throw new ResourceNotFoundException("文件不存在: " + path); // → 404
     }
+    // 读前复检：与 file / writeFile 同款——防首次校验到打开附件间被换成外向软链
+    target = resolveWithinRoot(path);
     String filename = String.valueOf(target.getFileName());
     // 文件名可能含中文/空格：用 RFC 5987 编码进 Content-Disposition，避免乱码或截断
     String disposition =
