@@ -234,7 +234,7 @@ public class SkillApiController {
   }
 
   /**
-   * IPv4-mapped / NAT64 / 6to4 / Teredo / IPv4-compatible 先展开嵌入 IPv4，再套用内网/元数据判定；与 {@code
+   * IPv4-mapped / NAT64 / 6to4 / Teredo / ISATAP / IPv4-compatible 先展开嵌入 IPv4，再套用内网/元数据判定；与 {@code
    * WhitelistSandbox} 读路径 SSRF 兜底对齐。
    */
   private static boolean isBlockedSsrfAddress(InetAddress addr) {
@@ -289,6 +289,14 @@ public class SkillApiController {
         (byte) (~b[EMBEDDED_IPV4_TAIL_OFFSET + 1] & 0xFF),
         (byte) (~b[EMBEDDED_IPV4_TAIL_OFFSET + 2] & 0xFF),
         (byte) (~b[EMBEDDED_IPV4_TAIL_OFFSET + 3] & 0xFF)
+      };
+    }
+    if (isIsatapInterfaceId(b)) {
+      return new byte[] {
+        b[EMBEDDED_IPV4_TAIL_OFFSET],
+        b[EMBEDDED_IPV4_TAIL_OFFSET + 1],
+        b[EMBEDDED_IPV4_TAIL_OFFSET + 2],
+        b[EMBEDDED_IPV4_TAIL_OFFSET + 3]
       };
     }
     return NO_EMBEDDED_IPV4;
@@ -351,6 +359,15 @@ public class SkillApiController {
         && (b[1] & 0xFF) == 0x01
         && (b[2] & 0xFF) == 0x00
         && (b[3] & 0xFF) == 0x00;
+  }
+
+  /** ISATAP IID {@code 0000:5EFE} / {@code 0200:5EFE}（RFC 5214 §6.1）。 */
+  private static boolean isIsatapInterfaceId(byte[] b) {
+    int b8 = b[8] & 0xFF;
+    return (b8 == 0x00 || b8 == 0x02)
+        && b[9] == 0
+        && (b[10] & 0xFF) == 0x5E
+        && (b[11] & 0xFF) == 0xFE;
   }
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(

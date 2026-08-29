@@ -306,6 +306,8 @@ class WhitelistSandboxTest {
             "http://[2002:a9fe:a9fe::1]/x", // 6to4 → 169.254.169.254
             "http://[::a9fe:a9fe]/x", // IPv4-compatible → 169.254.169.254
             "http://[2001::5601:5601]/x", // Teredo → 169.254.169.254
+            "http://[2001:db8::5efe:a9fe:a9fe]/x", // ISATAP → 169.254.169.254
+            "http://[2001:db8::200:5efe:a9fe:a9fe]/x", // ISATAP u-bit → 169.254.169.254
             "http://localhost/x"
           }) {
         assertThrows(
@@ -329,6 +331,20 @@ class WhitelistSandboxTest {
     void teredoPublicIpv4Allowed() {
       assertDoesNotThrow(
           () -> sb.enforce(new SandboxAction(ActionType.HTTP_READ, "http://[2001::f7f7:f7f7]/x")));
+    }
+
+    @Test
+    @DisplayName("ISATAP 嵌入公网 IPv4 仍放行")
+    void isatapPublicIpv4Allowed() {
+      assertDoesNotThrow(
+          () ->
+              sb.enforce(
+                  new SandboxAction(ActionType.HTTP_READ, "http://[2001:db8::5efe:808:808]/x")));
+      assertDoesNotThrow(
+          () ->
+              sb.enforce(
+                  new SandboxAction(
+                      ActionType.HTTP_READ, "http://[2001:db8::200:5efe:808:808]/x")));
     }
   }
 

@@ -319,8 +319,8 @@ public final class WhitelistSandbox implements Sandbox, SandboxWhitelist {
 
   /**
    * 对解析结果做 SSRF 分类。IPv4-mapped（{@code ::ffff:0:0/96}）、NAT64 知名前缀（{@code 64:ff9b::/96}）、6to4（{@code
-   * 2002::/16}）、Teredo（{@code 2001:0000::/32}）与已弃用的 IPv4-compatible（{@code ::/96}）先展开嵌入
-   * IPv4，再套用回环/链路本地/站点内网/CGNAT 等判定。
+   * 2002::/16}）、Teredo（{@code 2001:0000::/32}）、ISATAP（IID {@code 0000:5EFE}/{@code 0200:5EFE}）与已弃用的
+   * IPv4-compatible（{@code ::/96}）先展开嵌入 IPv4，再套用回环/链路本地/站点内网/CGNAT 等判定。
    */
   private static boolean isBlockedSsrfAddress(InetAddress addr) {
     InetAddress effective = unwrapEmbeddedIpv4(addr);
@@ -337,8 +337,8 @@ public final class WhitelistSandbox implements Sandbox, SandboxWhitelist {
   }
 
   /**
-   * 若为 IPv4-mapped / NAT64 / 6to4 / Teredo / IPv4-compatible，返回嵌入的 IPv4；否则原样返回。JDK 常把 mapped
-   * 字面量直接解成 {@link java.net.Inet4Address}，此展开主要兜住仍以 16 字节返回的形态与隧道前缀。
+   * 若为 IPv4-mapped / NAT64 / 6to4 / Teredo / ISATAP / IPv4-compatible，返回嵌入的 IPv4；否则原样返回。JDK 常把
+   * mapped 字面量直接解成 {@link java.net.Inet4Address}，此展开主要兜住仍以 16 字节返回的形态与隧道前缀。
    */
   private static InetAddress unwrapEmbeddedIpv4(InetAddress addr) {
     byte[] b = addr.getAddress();
@@ -381,6 +381,15 @@ public final class WhitelistSandbox implements Sandbox, SandboxWhitelist {
         (byte) (~b[EMBEDDED_IPV4_TAIL_OFFSET + 3] & 0xFF)
       };
     }
+    if (isIsatapInterfaceId(b)) {
+      // RFC 5214：IID 0000:5EFE / 0200:5EFE，IPv4 在末 32 位（不取反）
+      return new byte[] {
+        b[EMBEDDED_IPV4_TAIL_OFFSET],
+        b[EMBEDDED_IPV4_TAIL_OFFSET + 1],
+        b[EMBEDDED_IPV4_TAIL_OFFSET + 2],
+        b[EMBEDDED_IPV4_TAIL_OFFSET + 3]
+      };
+    }
     return NO_EMBEDDED_IPV4;
   }
 
@@ -400,6 +409,18 @@ public final class WhitelistSandbox implements Sandbox, SandboxWhitelist {
         && (b[1] & 0xFF) == 0x01
         && (b[2] & 0xFF) == 0x00
         && (b[3] & 0xFF) == 0x00;
+  }
+
+  /**
+   * ISATAP 接口标识（RFC 5214 §6.1）：字节 8–11 为 {@code 0000:5EFE}，或 u 位置位时的 {@code 0200:5EFE}；嵌入 IPv4 在字节
+   * 12–15。
+   */
+  private static boolean isIsatapInterfaceId(byte[] b) {
+    int b8 = b[8] & 0xFF;
+    return (b8 == 0x00 || b8 == 0x02)
+        && b[9] == 0
+        && (b[10] & 0xFF) == 0x5E
+        && (b[11] & 0xFF) == 0xFE;
   }
 
   /** NAT64 知名前缀 {@code 64:ff9b::/96}（RFC 6052）。 */
