@@ -217,6 +217,48 @@ class ProfileLoaderTest {
   }
 
   @Test
+  void notify_channels条目非对象时报错点名() throws IOException {
+    write(
+        "scalar-notify.yaml",
+        """
+        name: scalar-notify
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        notify_channels:
+          - webhook
+        """);
+
+    ProfileValidationException ex =
+        assertThrows(
+            ProfileValidationException.class,
+            () -> loader().parse(profilesDir.resolve("scalar-notify.yaml")));
+
+    assertTrue(ex.getMessage().contains("scalar-notify"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("notify_channels"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("非对象条目"), ex.getMessage());
+  }
+
+  @Test
+  void notify_channels合法对象仍可加载() throws IOException {
+    write(
+        "ok-notify.yaml",
+        """
+        name: ok-notify
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        notify_channels:
+          - type: webhook
+            url: https://example.com/hook
+        """);
+
+    Profile profile = loader().parse(profilesDir.resolve("ok-notify.yaml"));
+    assertEquals(1, profile.notifyChannels().size());
+    assertEquals("webhook", profile.notifyChannels().get(0).type());
+  }
+
+  @Test
   void 引用不存在的provider_报错信息包含该名字() throws IOException {
     write(
         "bad-provider.yaml",

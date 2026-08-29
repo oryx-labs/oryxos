@@ -119,7 +119,8 @@ public class ProfileLoader {
         asStringList(map.get("tools"), "tools", name),
         asStringList(map.get("mcp_servers"), "mcp_servers", name),
         asStringList(map.get("channels"), "channels", name),
-        toNotifyChannels(requireListOrNull(map.get("notify_channels"), "notify_channels", name)),
+        toNotifyChannels(
+            requireListOrNull(map.get("notify_channels"), "notify_channels", name), name),
         toSchedules(requireListOrNull(map.get("schedules"), "schedules", name), source),
         asStringList(map.get("bootstrap"), "bootstrap", name),
         toSettings(asMap(map.get("settings")), name));
@@ -158,7 +159,8 @@ public class ProfileLoader {
     return new Profile.Identity(asString(map.get("agent_name")), asString(map.get("prompt")));
   }
 
-  private static List<Profile.NotifyChannel> toNotifyChannels(List<Object> list) {
+  private static List<Profile.NotifyChannel> toNotifyChannels(
+      List<Object> list, String profileName) {
     if (list == null) {
       return List.of();
     }
@@ -166,7 +168,8 @@ public class ProfileLoader {
     for (Object item : list) {
       Map<String, Object> entry = asMap(item);
       if (entry == null) {
-        continue;
+        throw new ProfileValidationException(
+            "Profile " + profileName + " 的 notify_channels 存在非对象条目: " + item);
       }
       String type = asString(entry.get("type"));
       // type 之外的键都是渠道特定配置（如 webhook 的 url）
