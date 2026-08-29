@@ -259,6 +259,7 @@ public class FileTools {
   public String makeDir(@ToolParam(description = "要创建的目录路径") String path) {
     MemoryMdGuard.rejectMutation(path);
     AdminConfigFileGuard.rejectMutation(path);
+    WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(path);
     WorkspaceMutationGuard.rejectBindSlotCreate(path);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     try {
@@ -299,6 +300,7 @@ public class FileTools {
   public String deleteFile(@ToolParam(description = "要删除的文件路径") String path) {
     MemoryMdGuard.rejectMutation(path);
     AdminConfigFileGuard.rejectMutation(path);
+    WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(path);
     WorkspaceMutationGuard.rejectBindLinkDetach(path);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     Path file = Path.of(path);
@@ -320,6 +322,7 @@ public class FileTools {
       @ToolParam(description = "源路径") String from, @ToolParam(description = "目标路径") String to) {
     MemoryMdGuard.rejectMutation(from);
     AdminConfigFileGuard.rejectMutation(from);
+    WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(from);
     WorkspaceMutationGuard.rejectBindLinkDetach(from);
     MemoryMdGuard.rejectMutation(to);
     AdminConfigFileGuard.rejectMutation(to);

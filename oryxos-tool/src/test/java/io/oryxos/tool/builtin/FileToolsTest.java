@@ -200,6 +200,18 @@ class FileToolsTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> tools.makeDir(dir.resolve("agents/demo/skills/report").toString()));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> tools.makeDir(dir.resolve("skills/occupied").toString()));
+    Path skillMd = dir.resolve("skills/report/SKILL.md");
+    Files.createDirectories(skillMd.getParent());
+    Files.writeString(skillMd, "keep\n");
+    assertThrows(IllegalArgumentException.class, () -> tools.deleteFile(skillMd.toString()));
+    assertTrue(Files.exists(skillMd), "共享 Skill 实体不得被 delete_file 删除");
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> tools.moveFile(skillMd.toString(), dir.resolve("other-stolen.md").toString()));
+    assertTrue(Files.exists(skillMd), "共享 Skill 实体不得被 move_file 挪走");
     Path link = dir.resolve("agents/demo/skills/report");
     Files.createDirectories(link.getParent());
     Path body = dir.resolve("skills/report");
