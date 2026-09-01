@@ -54,7 +54,6 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
   private volatile com.lark.oapi.Client apiClient;
   private volatile com.lark.oapi.ws.Client wsClient;
   private volatile FeishuMessageSender sender;
-  private volatile FeishuReactionManager reactionManager;
   private volatile FeishuCardBuilder cardBuilder;
   private volatile FeishuEventNormalizer normalizer;
   private volatile ChannelStatus.State state = ChannelStatus.State.DISCONNECTED;
@@ -103,7 +102,6 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
       sender =
           new FeishuMessageSender(
               apiClient, guard, API_BASE_URL, FeishuMessageSender.DEFAULT_CHUNK_SIZE);
-      reactionManager = new FeishuReactionManager(apiClient);
       cardBuilder = new FeishuCardBuilder();
       normalizer = new FeishuEventNormalizer(config.name(), fetchBotOpenId());
       EventDispatcher dispatcher =
@@ -185,12 +183,11 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
 
   @Override
   public StreamListener createStreamListener(InboundMessage msg) {
-    // 只有 sender/reactionManager/cardBuilder 都就绪才支持流式
+    // 只有 sender/cardBuilder 都就绪才支持流式
     FeishuMessageSender activeSender = sender;
-    FeishuReactionManager activeReaction = reactionManager;
     FeishuCardBuilder activeBuilder = cardBuilder;
 
-    if (activeSender == null || activeReaction == null || activeBuilder == null) {
+    if (activeSender == null || activeBuilder == null) {
       LOG.debug("渠道 {} 未就绪，不支持流式", sanitize(config.name()));
       return null;
     }
@@ -198,11 +195,9 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
     // 创建流式监听器
     return new FeishuStreamListener(
         activeSender,
-        activeReaction,
         activeBuilder,
         msg.chatId(),
-        msg.chatKind() == io.oryxos.core.channel.ChatKind.GROUP ? msg.messageId() : null,
-        msg.messageId());
+        msg.chatKind() == io.oryxos.core.channel.ChatKind.GROUP ? msg.messageId() : null);
   }
 
   /** 事件入口：归一化 → 编排；任何异常只留日志——抛出会触发平台重推循环（去重会拦但用户收不到回答）。 */

@@ -13,10 +13,10 @@ import org.slf4j.LoggerFactory;
  * <p>策略：
  *
  * <ul>
- *   <li>收到消息时：立即添加⌨️表情 + 发送初始卡片
+ *   <li>收到消息时：发送初始卡片（蓝色"正在思考"）
  *   <li>onToken：累积文本，每 2 秒或累积 100 字更新一次卡片
  *   <li>onToolStart/End：立即更新卡片（工具状态是关键节点）
- *   <li>完成时：移除表情 + 更新卡片为最终结果
+ *   <li>完成时：更新卡片为最终结果（绿色"回答"或红色"失败"）
  * </ul>
  *
  * <p>线程安全：StreamListener 的回调在 ReActLoop 的处理线程上同步执行，无并发问题。
@@ -29,14 +29,11 @@ public class FeishuStreamListener implements StreamListener {
   private static final int UPDATE_THRESHOLD_CHARS = 100; // 或累积100字符
 
   private final FeishuMessageSender sender;
-  private final FeishuReactionManager reactionManager;
   private final FeishuCardBuilder cardBuilder;
   private final String chatId;
   private final String replyToMessageId;
-  private final String userMessageId; // 用户消息 ID（用于添加表情）
 
   private String cardMessageId; // 卡片消息 ID
-  private String reactionId; // 表情 ID
 
   private final StringBuilder tokenBuffer = new StringBuilder();
   private final List<String> thinkingProcess = new CopyOnWriteArrayList<>();
@@ -48,46 +45,34 @@ public class FeishuStreamListener implements StreamListener {
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
-      justification = "sender/reactionManager/cardBuilder 是渠道适配器持有的单例，共享引用正是意图")
+      justification = "sender/cardBuilder 是渠道适配器持有的单例，共享引用正是意图")
   public FeishuStreamListener(
       FeishuMessageSender sender,
-      FeishuReactionManager reactionManager,
       FeishuCardBuilder cardBuilder,
       String chatId,
-      String replyToMessageId,
-      String userMessageId) {
+      String replyToMessageId) {
     this.sender = sender;
-    this.reactionManager = reactionManager;
     this.cardBuilder = cardBuilder;
     this.chatId = chatId;
     this.replyToMessageId = replyToMessageId;
-    this.userMessageId = userMessageId;
   }
 
   /**
-   * 启动流式监听：添加表情 + 发送初始卡片。
+   * 启动流式监听：发送初始卡片。
    *
    * <p>必须在开始处理前调用（InboundMessageService 调用 agentService.process 之前）。
    */
   public void start() {
-    // 1. 为用户消息添加⌨️表情
-    reactionId = reactionManager.addKeyboardReaction(userMessageId);
-
-    // 2. 发送初始卡片
+    // 发送初始卡片
     String initialCard = cardBuilder.buildInitialCard();
     cardMessageId = sender.sendCard(chatId, initialCard, replyToMessageId);
 
     lastUpdateTime = System.currentTimeMillis();
-
-    LOG.debug(
-        "飞书流式监听启动 chatId={} cardMessageId={} reactionId={}",
-        sanitize(chatId),
-        sanitize(cardMessageId),
-        sanitize(reactionId));
+    LOG.debug("飞书流式监听启动 chatId={} cardMessageId={}", sanitize(chatId), sanitize(cardMessageId));
   }
 
   /**
-   * 完成处理：移除表情 + 更新卡片为最终结果。
+   * 完成处理：更新卡片为最终结果。
    *
    * <p>必须在处理结束后调用（无论成功或失败）。
    *
@@ -96,12 +81,7 @@ public class FeishuStreamListener implements StreamListener {
    */
   public void finish(String finalAnswer, String error) {
     try {
-      // 1. 移除表情
-      if (reactionId != null) {
-        reactionManager.removeReaction(userMessageId, reactionId);
-      }
-
-      // 2. 更新卡片为最终状态
+      // 更新卡片为最终状态
       if (cardMessageId != null) {
         String finalCard;
         if (error != null) {

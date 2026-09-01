@@ -154,11 +154,18 @@ public class FeishuMessageSender {
   public String sendCard(String chatId, String cardJson, String replyToMessageId) {
     guard.check(apiBaseUrl);
     try {
+      String messageId;
       if (replyToMessageId == null) {
-        return sendCreateCard(chatId, cardJson);
+        messageId = sendCreateCard(chatId, cardJson);
       } else {
-        return sendReplyCard(replyToMessageId, cardJson);
+        messageId = sendReplyCard(replyToMessageId, cardJson);
       }
+      LOG.info(
+          "飞书卡片发送成功 chatId={} messageId={} replyTo={}",
+          sanitize(chatId),
+          sanitize(messageId),
+          sanitize(replyToMessageId));
+      return messageId;
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -194,6 +201,7 @@ public class FeishuMessageSender {
             resp == null ? null : sanitize(resp.getMsg()));
         return false;
       }
+      LOG.info("飞书卡片更新成功 messageId={}", sanitize(messageId));
       return true;
     } catch (RuntimeException e) {
       throw e;

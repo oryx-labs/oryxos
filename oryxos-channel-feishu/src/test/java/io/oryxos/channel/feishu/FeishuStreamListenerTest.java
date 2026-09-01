@@ -14,22 +14,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class FeishuStreamListenerTest {
 
   @Mock private FeishuMessageSender sender;
-  @Mock private FeishuReactionManager reactionManager;
   @Mock private FeishuCardBuilder cardBuilder;
 
   private FeishuStreamListener listener;
 
   @BeforeEach
   void setUp() {
-    listener =
-        new FeishuStreamListener(
-            sender, reactionManager, cardBuilder, "test_chat_id", "test_reply_to", "test_msg_id");
+    listener = new FeishuStreamListener(sender, cardBuilder, "test_chat_id", "test_reply_to");
   }
 
   @Test
   void testStart() {
     // Given
-    when(reactionManager.addKeyboardReaction("test_msg_id")).thenReturn("reaction_123");
     when(cardBuilder.buildInitialCard()).thenReturn("{\"card\":\"initial\"}");
     when(sender.sendCard("test_chat_id", "{\"card\":\"initial\"}", "test_reply_to"))
         .thenReturn("card_msg_id");
@@ -38,7 +34,6 @@ class FeishuStreamListenerTest {
     listener.start();
 
     // Then
-    verify(reactionManager).addKeyboardReaction("test_msg_id");
     verify(cardBuilder).buildInitialCard();
     verify(sender).sendCard("test_chat_id", "{\"card\":\"initial\"}", "test_reply_to");
   }
@@ -59,7 +54,6 @@ class FeishuStreamListenerTest {
   @Test
   void testOnToolStart() {
     // Given - 必须先 start() 才能有 cardMessageId
-    when(reactionManager.addKeyboardReaction(anyString())).thenReturn("reaction_123");
     when(cardBuilder.buildInitialCard()).thenReturn("{\"initial\"}");
     when(sender.sendCard(anyString(), anyString(), anyString())).thenReturn("card_msg_id");
     when(cardBuilder.buildProcessingCard(anyList(), anyList(), anyList()))
@@ -78,7 +72,6 @@ class FeishuStreamListenerTest {
   @Test
   void testFinishSuccess() {
     // Given
-    when(reactionManager.addKeyboardReaction(anyString())).thenReturn("reaction_123");
     when(cardBuilder.buildInitialCard()).thenReturn("{\"initial\"}");
     when(sender.sendCard(anyString(), anyString(), anyString())).thenReturn("card_msg_id");
     when(cardBuilder.buildCompletedCard("Final answer")).thenReturn("{\"completed\"}");
@@ -89,7 +82,6 @@ class FeishuStreamListenerTest {
     listener.finish("Final answer", null);
 
     // Then
-    verify(reactionManager).removeReaction("test_msg_id", "reaction_123");
     verify(cardBuilder).buildCompletedCard("Final answer");
     verify(sender).updateCard("card_msg_id", "{\"completed\"}");
   }
@@ -97,7 +89,6 @@ class FeishuStreamListenerTest {
   @Test
   void testFinishError() {
     // Given
-    when(reactionManager.addKeyboardReaction(anyString())).thenReturn("reaction_123");
     when(cardBuilder.buildInitialCard()).thenReturn("{\"initial\"}");
     when(sender.sendCard(anyString(), anyString(), anyString())).thenReturn("card_msg_id");
     when(cardBuilder.buildErrorCard("Something went wrong")).thenReturn("{\"error\"}");
@@ -108,7 +99,6 @@ class FeishuStreamListenerTest {
     listener.finish(null, "Something went wrong");
 
     // Then
-    verify(reactionManager).removeReaction("test_msg_id", "reaction_123");
     verify(cardBuilder).buildErrorCard("Something went wrong");
     verify(sender).updateCard("card_msg_id", "{\"error\"}");
   }
