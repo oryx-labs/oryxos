@@ -8,6 +8,7 @@ import com.lark.oapi.core.token.AccessTokenType;
 import com.lark.oapi.event.EventDispatcher;
 import com.lark.oapi.service.im.ImService;
 import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1;
+import io.oryxos.core.agent.StreamListener;
 import io.oryxos.core.channel.ChannelConfig;
 import io.oryxos.core.channel.ChannelStatus;
 import io.oryxos.core.channel.InboundChannelAdapter;
@@ -53,6 +54,8 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
   private volatile com.lark.oapi.Client apiClient;
   private volatile com.lark.oapi.ws.Client wsClient;
   private volatile FeishuMessageSender sender;
+  private volatile FeishuReactionManager reactionManager;
+  private volatile FeishuCardBuilder cardBuilder;
   private volatile FeishuEventNormalizer normalizer;
   private volatile ChannelStatus.State state = ChannelStatus.State.DISCONNECTED;
   private volatile String lastError;
@@ -100,6 +103,8 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
       sender =
           new FeishuMessageSender(
               apiClient, guard, API_BASE_URL, FeishuMessageSender.DEFAULT_CHUNK_SIZE);
+      reactionManager = new FeishuReactionManager(apiClient);
+      cardBuilder = new FeishuCardBuilder();
       normalizer = new FeishuEventNormalizer(config.name(), fetchBotOpenId());
       EventDispatcher dispatcher =
           EventDispatcher.newBuilder("", "") // 长连接免验签：verificationToken/encryptKey 必须空串
@@ -176,6 +181,28 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
       throw new IllegalStateException("渠道 " + config.name() + " 未启动，无法发送回复");
     }
     active.send(chatId, text, replyToMessageId);
+  }
+
+  @Override
+  public StreamListener createStreamListener(InboundMessage msg) {
+    // 只有 sender/reactionManager/cardBuilder 都就绪才支持流式
+    FeishuMessageSender activeSender = sender;
+    FeishuReactionManager activeReaction = reactionManager;
+    FeishuCardBuilder activeBuilder = cardBuilder;
+
+    if (activeSender == null || activeReaction == null || activeBuilder == null) {
+      LOG.debug("渠道 {} 未就绪，不支持流式", sanitize(config.name()));
+      return null;
+    }
+
+    // 创建流式监听器
+    return new FeishuStreamListener(
+        activeSender,
+        activeReaction,
+        activeBuilder,
+        msg.chatId(),
+        msg.chatKind() == io.oryxos.core.channel.ChatKind.GROUP ? msg.messageId() : null,
+        msg.messageId());
   }
 
   /** 事件入口：归一化 → 编排；任何异常只留日志——抛出会触发平台重推循环（去重会拦但用户收不到回答）。 */

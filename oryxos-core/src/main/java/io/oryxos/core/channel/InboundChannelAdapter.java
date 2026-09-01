@@ -1,5 +1,7 @@
 package io.oryxos.core.channel;
 
+import io.oryxos.core.agent.StreamListener;
+
 /**
  * 入站 IM 渠道适配器契约：一实例 = 一个平台应用的一条接入（017 FR-010）。
  *
@@ -36,4 +38,16 @@ public interface InboundChannelAdapter {
    * @param replyToMessageId 非空时引用原消息（群聊必传，使回答与提问可对应）；私聊传 null 直发
    */
   void sendReply(String chatId, String text, String replyToMessageId);
+
+  /**
+   * 创建渠道专用的流式监听器（可选，支持流式卡片的渠道实现）。
+   *
+   * <p>返回 null 表示不支持流式，编排服务回退到非流式路径（一次性文本回复）。
+   *
+   * @param msg 归一化入站消息
+   * @return 流式监听器，或 null（不支持流式）
+   */
+  default StreamListener createStreamListener(InboundMessage msg) {
+    return null;
+  }
 }

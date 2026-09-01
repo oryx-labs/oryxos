@@ -3,6 +3,24 @@
 本文件记录 OryxOS 的版本变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+- 飞书渠道流式回复功能（019 集成到 017）：
+  - 立即反馈（< 500ms）：⌨️表情 + 初始卡片（蓝色"🤔 正在思考..."）
+  - 过程可见：工具调用实时展示（🔧 正在执行 / ✅ 完成）
+  - 打字机效果：累积式回复（每 200 字符或 1 秒更新一次）
+  - 优雅降级：API 不可用时自动回退到纯文本
+  - 错误友好：红色卡片显示可读错误信息（不含堆栈）
+
+### Changed
+- `InboundMessageService` 支持流式监听器，调用 `AgentService.process()` 时传入 `StreamListener`
+- `FeishuMessageSender` 新增 `sendCard()` / `updateCard()` 方法支持交互式卡片操作
+- `FeishuChannelAdapter` 实现 `createStreamListener()` 创建飞书专用流式监听器
+
+### Fixed
+- 修复 3 个 SpotBugs CRLF 日志注入风险（`FeishuStreamListener` / `FeishuChannelAdapter`）
+
 ## [0.1.4-RELEASE] - 2026-08-31
 
 ### Added

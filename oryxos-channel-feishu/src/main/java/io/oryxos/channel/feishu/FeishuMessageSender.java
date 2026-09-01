@@ -5,6 +5,9 @@ import com.lark.oapi.Client;
 import com.lark.oapi.service.im.v1.model.CreateMessageReq;
 import com.lark.oapi.service.im.v1.model.CreateMessageReqBody;
 import com.lark.oapi.service.im.v1.model.CreateMessageResp;
+import com.lark.oapi.service.im.v1.model.PatchMessageReq;
+import com.lark.oapi.service.im.v1.model.PatchMessageReqBody;
+import com.lark.oapi.service.im.v1.model.PatchMessageResp;
 import com.lark.oapi.service.im.v1.model.ReplyMessageReq;
 import com.lark.oapi.service.im.v1.model.ReplyMessageReqBody;
 import com.lark.oapi.service.im.v1.model.ReplyMessageResp;
@@ -28,6 +31,7 @@ public class FeishuMessageSender {
 
   static final int DEFAULT_CHUNK_SIZE = 4000;
   private static final String MSG_TYPE_TEXT = "text";
+  private static final String MSG_TYPE_INTERACTIVE = "interactive";
   private static final String RECEIVE_ID_TYPE_CHAT = "chat_id";
 
   private final Client client;
@@ -137,5 +141,103 @@ public class FeishuMessageSender {
 
   private static String sanitize(String value) {
     return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
+  }
+
+  /**
+   * 发送交互式卡片消息。
+   *
+   * @param chatId 目标会话
+   * @param cardJson 卡片 JSON 内容（由 FeishuCardBuilder 构建）
+   * @param replyToMessageId 非空则引用该消息回复
+   * @return 发送成功后的消息 ID，失败返回 null
+   */
+  public String sendCard(String chatId, String cardJson, String replyToMessageId) {
+    guard.check(apiBaseUrl);
+    try {
+      if (replyToMessageId == null) {
+        return sendCreateCard(chatId, cardJson);
+      } else {
+        return sendReplyCard(replyToMessageId, cardJson);
+      }
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new IllegalStateException("飞书卡片发送失败: " + sanitize(e.getMessage()), e);
+    }
+  }
+
+  /**
+   * 更新已发送的卡片消息内容。
+   *
+   * @param messageId 要更新的消息 ID
+   * @param cardJson 新的卡片 JSON 内容
+   * @return 是否更新成功
+   */
+  public boolean updateCard(String messageId, String cardJson) {
+    guard.check(apiBaseUrl);
+    try {
+      PatchMessageResp resp =
+          client
+              .im()
+              .message()
+              .patch(
+                  PatchMessageReq.newBuilder()
+                      .messageId(messageId)
+                      .patchMessageReqBody(
+                          PatchMessageReqBody.newBuilder().content(cardJson).build())
+                      .build());
+      if (resp == null || resp.getCode() != 0) {
+        LOG.warn(
+            "飞书卡片更新失败 messageId={} code={} msg={}",
+            sanitize(messageId),
+            resp == null ? null : resp.getCode(),
+            resp == null ? null : sanitize(resp.getMsg()));
+        return false;
+      }
+      return true;
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new IllegalStateException("飞书卡片更新失败: " + sanitize(e.getMessage()), e);
+    }
+  }
+
+  private String sendCreateCard(String chatId, String cardJson) throws Exception {
+    CreateMessageResp resp =
+        client
+            .im()
+            .message()
+            .create(
+                CreateMessageReq.newBuilder()
+                    .receiveIdType(RECEIVE_ID_TYPE_CHAT)
+                    .createMessageReqBody(
+                        CreateMessageReqBody.newBuilder()
+                            .receiveId(chatId)
+                            .msgType(MSG_TYPE_INTERACTIVE)
+                            .content(cardJson)
+                            .uuid(UUID.randomUUID().toString())
+                            .build())
+                    .build());
+    requireSuccess(resp == null ? null : resp.getCode(), resp == null ? null : resp.getMsg());
+    return resp != null && resp.getData() != null ? resp.getData().getMessageId() : null;
+  }
+
+  private String sendReplyCard(String replyToMessageId, String cardJson) throws Exception {
+    ReplyMessageResp resp =
+        client
+            .im()
+            .message()
+            .reply(
+                ReplyMessageReq.newBuilder()
+                    .messageId(replyToMessageId)
+                    .replyMessageReqBody(
+                        ReplyMessageReqBody.newBuilder()
+                            .msgType(MSG_TYPE_INTERACTIVE)
+                            .content(cardJson)
+                            .uuid(UUID.randomUUID().toString())
+                            .build())
+                    .build());
+    requireSuccess(resp == null ? null : resp.getCode(), resp == null ? null : resp.getMsg());
+    return resp != null && resp.getData() != null ? resp.getData().getMessageId() : null;
   }
 }
