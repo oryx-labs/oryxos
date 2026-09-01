@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
 import LoginView from './views/LoginView.vue'
 import { isNearBottom } from './chat-scroll.js'
+import { filterSkills, hiddenSelectedCount, selectAllVisible, clearVisible, renderSet } from './skill-filter.js'
 
 // —— 012-web-auth US3：登录守卫 —— 未登录先查 /api/v1/auth/me；登录页 LoginView 调 /auth/login
 const auth = reactive({ checking: true, enabled: true, username: null })
@@ -439,6 +440,17 @@ async function deleteKbDoc(relPath) {
 
 // —— Skill CRUD：.oryxos/skills/<name>/ 存在即已安装，Agent 通过本地相对软连接绑定。——
 const skills = ref({ loading: false, error: null, data: [] })
+// 028-agent-skill-filter：Skill 选择器共享筛选态（新建页与详情编辑页共用；视图互斥故单实例不互染）。
+// 选择集（agentCreate.skills / agentBinding.selected）与显示集（filterSkills 输出）解耦——筛选只影响显示。
+const skillFilter = reactive({ query: '', showHidden: false })
+// 新建页筛选视野与渲染集（computed：随 skills.data / skillFilter.query / agentCreate.skills 变化刷新）
+const createSkillVisible = computed(() => filterSkills(skills.value.data, skillFilter.query))
+const createSkillRender = computed(() => renderSet(createSkillVisible.value, skills.value.data, agentCreate.skills, skillFilter.showHidden))
+const createSkillHiddenCount = computed(() => hiddenSelectedCount(createSkillVisible.value, agentCreate.skills))
+// 详情编辑页筛选视野与渲染集（同型，绑 agentBinding.selected）
+const editSkillVisible = computed(() => filterSkills(skills.value.data, skillFilter.query))
+const editSkillRender = computed(() => renderSet(editSkillVisible.value, skills.value.data, agentBinding.selected, skillFilter.showHidden))
+const editSkillHiddenCount = computed(() => hiddenSelectedCount(editSkillVisible.value, agentBinding.selected))
 // 绑定一致性不在页面常驻展示：只在 Skill 变更（新建/编辑/归档/导入）后回检，
 // 发现残留或损坏绑定才展开告警面板，无问题保持静默；检查本身失败也会展开。
 const skillIssues = ref({ loading: false, error: null, data: [] })
@@ -702,6 +714,7 @@ function openCreate() {
   agentCreate.files = null
   agentCreate.busy = false
   agentCreate.error = ''
+  skillFilter.query = ''; skillFilter.showHidden = false // 进入新建页清空筛选态
   loadNotifyChannels()
   loadSkills() // Skill 选择器的数据源（可手动指定必启用的 Skill；不选则由作者模型自动选）
   loadKnowledge() // 知识库多选的数据源（FR-018 关联入口之一）
@@ -1513,6 +1526,7 @@ async function openAgent(agent) {
   agentBinding.error = null
   agentBinding.issues = []
   agentBinding.saved = false
+  skillFilter.query = ''; skillFilter.showHidden = false // 进入详情编辑页清空筛选态
   agentKb.selected = []
   agentKb.error = null
   agentKb.issues = []
@@ -2587,10 +2601,23 @@ const outputRows = computed(() =>
                 <label class="empty" style="display:block;margin:6px 0 2px">Skill 绑定（勾选=required；作者可从已安装 Skill 再建议）</label>
                 <div class="skill-picker">
                   <span v-if="!skills.data.length" class="empty">（暂无已安装 Skill，可先到 Skill 页新建或从 GitHub 拉取）</span>
-                  <label v-for="s in skills.data" :key="s.name" class="skill-opt" :title="s.description">
-                    <input type="checkbox" :value="s.name" v-model="agentCreate.skills" />
-                    <span class="mono">{{ s.name }}</span>
-                  </label>
+                  <template v-else>
+                    <input class="gen-input skill-search" v-model="skillFilter.query" placeholder="按名称或描述筛选已安装 Skill" />
+                    <div v-if="createSkillHiddenCount > 0" class="skill-hidden-hint">
+                      <span>当前筛选隐藏了 {{ createSkillHiddenCount }} 项已选</span>
+                      <button type="button" class="btn" @click="skillFilter.showHidden = true" v-if="!skillFilter.showHidden">纳入视野</button>
+                      <button type="button" class="btn" @click="skillFilter.showHidden = false" v-else>恢复筛选</button>
+                    </div>
+                    <div class="skill-batch">
+                      <button type="button" class="btn" @click="agentCreate.skills = selectAllVisible(createSkillVisible, agentCreate.skills)" :disabled="!createSkillVisible.length">全选当前</button>
+                      <button type="button" class="btn" @click="agentCreate.skills = clearVisible(createSkillVisible, agentCreate.skills)" :disabled="!createSkillVisible.length">清空当前</button>
+                    </div>
+                    <label v-for="s in createSkillRender" :key="s.name" class="skill-opt" :class="{ 'skill-hidden': s.hidden }" :title="s.description">
+                      <input type="checkbox" :value="s.name" v-model="agentCreate.skills" />
+                      <span class="mono">{{ s.name }}</span>
+                    </label>
+                    <span v-if="!createSkillRender.length" class="empty">（无匹配 Skill）</span>
+                  </template>
                 </div>
                 <p v-if="agentCreate.suggestedSkills.length" class="empty">作者建议：{{ agentCreate.suggestedSkills.join('、') }}；已合并到最终绑定，可在创建前取消。</p>
                 <p class="empty">绑定保存为 agents/&lt;name&gt;/skills/&lt;skill&gt; 固定相对软连接；AGENT.md 不保存 skills 字段，也不预载正文。</p>
@@ -2744,10 +2771,24 @@ const outputRows = computed(() =>
                   <div class="info-row"><span class="k">skills</span>
                     <div>
                       <div class="skill-picker">
-                        <label v-for="s in skills.data" :key="s.name" class="skill-opt" :title="s.description">
-                          <input type="checkbox" :value="s.name" v-model="agentBinding.selected" @change="agentBinding.saved = false" />
-                          <span class="mono">{{ s.name }}</span>
-                        </label>
+                        <span v-if="!skills.data.length" class="empty">（暂无已安装 Skill）</span>
+                        <template v-else>
+                          <input class="gen-input skill-search" v-model="skillFilter.query" placeholder="按名称或描述筛选已安装 Skill" />
+                          <div v-if="editSkillHiddenCount > 0" class="skill-hidden-hint">
+                            <span>当前筛选隐藏了 {{ editSkillHiddenCount }} 项已选</span>
+                            <button type="button" class="btn" @click="skillFilter.showHidden = true" v-if="!skillFilter.showHidden">纳入视野</button>
+                            <button type="button" class="btn" @click="skillFilter.showHidden = false" v-else>恢复筛选</button>
+                          </div>
+                          <div class="skill-batch">
+                            <button type="button" class="btn" @click="agentBinding.selected = selectAllVisible(editSkillVisible, agentBinding.selected); agentBinding.saved = false" :disabled="!editSkillVisible.length">全选当前</button>
+                            <button type="button" class="btn" @click="agentBinding.selected = clearVisible(editSkillVisible, agentBinding.selected); agentBinding.saved = false" :disabled="!editSkillVisible.length">清空当前</button>
+                          </div>
+                          <label v-for="s in editSkillRender" :key="s.name" class="skill-opt" :class="{ 'skill-hidden': s.hidden }" :title="s.description">
+                            <input type="checkbox" :value="s.name" v-model="agentBinding.selected" @change="agentBinding.saved = false" />
+                            <span class="mono">{{ s.name }}</span>
+                          </label>
+                          <span v-if="!editSkillRender.length" class="empty">（无匹配 Skill）</span>
+                        </template>
                       </div>
                       <div class="ops">
                         <button class="btn" :disabled="agentBinding.saving" @click="saveAgentBindings">{{ agentBinding.saving ? '保存中…' : '保存绑定' }}</button>
@@ -3623,6 +3664,13 @@ th { color: var(--text-2); font-weight: 500; }
 .skill-picker { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
 .skill-opt { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; cursor: pointer; }
 .skill-opt:hover { border-color: var(--brand); }
+/* 028-agent-skill-filter：搜索框横铺、批量与隐藏提示整行 */
+.skill-search { flex: 1 1 100%; margin-bottom: 2px; }
+.skill-batch { flex: 1 1 100%; display: flex; gap: 8px; }
+.skill-batch .btn { padding: 2px 8px; font-size: 12px; }
+.skill-hidden-hint { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim, #888); }
+.skill-hidden-hint .btn { padding: 1px 8px; font-size: 12px; }
+.skill-opt.skill-hidden { opacity: 0.65; border-style: dashed; } /* 被筛选隐藏、临时纳入视野的已选项 */
 /* 新增/创建/启用类主操作：橙色高亮，跟其余次要操作（编辑/删除/取消）区分开 */
 .btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 500; }
 .btn-primary:hover:not(:disabled) { background: var(--brand-2); border-color: var(--brand-2); color: #fff; }
