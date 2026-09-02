@@ -192,4 +192,14 @@ class DingTalkInboundImageResolverTest {
     assertEquals(input, out);
     assertEquals(0, tokenCalls.get());
   }
+
+  @Test
+  @DisplayName("钉钉 OSS 临时域名（含 http）在 allowlist 内")
+  void allowsDingTalkOssHosts() {
+    assertTrue(
+        DingTalkInboundImageResolver.isAllowedMediaHost(
+            "wukong-file-im-zjk.oss-cn-zhangjiakou.aliyuncs.com"));
+    assertTrue(DingTalkInboundImageResolver.isAllowedMediaHost("cdn.dingtalk.com"));
+    assertTrue(DingTalkInboundImageResolver.isAllowedMediaHost("img.alicdn.com"));
+  }
 }

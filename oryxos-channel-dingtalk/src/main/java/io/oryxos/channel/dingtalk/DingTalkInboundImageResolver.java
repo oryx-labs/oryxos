@@ -298,7 +298,12 @@ final class DingTalkInboundImageResolver {
     if (apiHost != null && asciiLower(apiHost).equals(mediaHost)) {
       return true;
     }
-    if (!SCHEME_HTTPS.equals(scheme)) {
+    // 钉钉 messageFiles 临时链常落在 OSS（*.aliyuncs.com），可能是 http 或 https
+    return isAllowedMediaHost(mediaHost);
+  }
+
+  static boolean isAllowedMediaHost(String mediaHost) {
+    if (mediaHost == null || mediaHost.isBlank()) {
       return false;
     }
     return mediaHost.equals(HOST_DINGTALK)
