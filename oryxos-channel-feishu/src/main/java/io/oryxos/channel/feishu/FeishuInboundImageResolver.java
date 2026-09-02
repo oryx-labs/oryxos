@@ -32,6 +32,7 @@ final class FeishuInboundImageResolver {
   private static final String SAFE_EXTENSION_PATTERN = "\\.[a-z0-9]{1,8}";
   private static final char PATH_SAFE_REPLACEMENT = '_';
   private static final int MAX_SEGMENT_LEN = 96;
+  private static final int DOWNLOAD_ATTEMPTS = 2;
 
   private final Client client;
   private final Path mediaRoot;
@@ -83,39 +84,72 @@ final class FeishuInboundImageResolver {
 
   private InboundAttachment downloadOrKeep(String messageId, InboundAttachment attachment) {
     String imageKey = attachment.reference();
-    try {
-      GetMessageResourceResp resp =
-          client
-              .im()
-              .messageResource()
-              .get(
-                  GetMessageResourceReq.newBuilder()
-                      .messageId(messageId)
-                      .fileKey(imageKey)
-                      .type(RESOURCE_TYPE_IMAGE)
-                      .build());
-      if (resp == null || !resp.success() || resp.getData() == null) {
-        LOG.warn(
-            "飞书渠道 {} 下载图片失败（messageId={}, imageKey={}, code={}, msg={}），保留 image_key",
-            sanitize(channelName),
-            sanitize(messageId),
-            sanitize(imageKey),
-            resp == null ? -1 : resp.getCode(),
-            sanitize(resp == null ? null : resp.getMsg()));
-        return attachment;
+    Exception last = null;
+    for (int attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+      try {
+        GetMessageResourceResp resp =
+            client
+                .im()
+                .messageResource()
+                .get(
+                    GetMessageResourceReq.newBuilder()
+                        .messageId(messageId)
+                        .fileKey(imageKey)
+                        .type(RESOURCE_TYPE_IMAGE)
+                        .build());
+        if (resp == null || !resp.success() || resp.getData() == null) {
+          LOG.warn(
+              "飞书渠道 {} 下载图片失败（messageId={}, imageKey={}, code={}, msg={}），保留 image_key",
+              sanitize(channelName),
+              sanitize(messageId),
+              sanitize(imageKey),
+              resp == null ? -1 : resp.getCode(),
+              sanitize(resp == null ? null : resp.getMsg()));
+          return attachment;
+        }
+        Path file = writeToMediaRoot(messageId, imageKey, resp);
+        return new InboundAttachment(
+            InboundAttachment.TYPE_IMAGE, file.toAbsolutePath().toString(), imageKey);
+      } catch (Exception e) {
+        last = e;
+        if (attempt < DOWNLOAD_ATTEMPTS && isTransientTimeout(e)) {
+          LOG.warn(
+              "飞书渠道 {} 下载图片超时重试 {}/{}（messageId={}, imageKey={}）：{}",
+              sanitize(channelName),
+              attempt,
+              DOWNLOAD_ATTEMPTS,
+              sanitize(messageId),
+              sanitize(imageKey),
+              sanitize(e.getMessage()));
+          continue;
+        }
+        break;
       }
-      Path file = writeToMediaRoot(messageId, imageKey, resp);
-      return new InboundAttachment(
-          InboundAttachment.TYPE_IMAGE, file.toAbsolutePath().toString(), imageKey);
-    } catch (Exception e) {
-      LOG.warn(
-          "飞书渠道 {} 下载图片异常（messageId={}, imageKey={}）：{}，保留 image_key",
-          sanitize(channelName),
-          sanitize(messageId),
-          sanitize(imageKey),
-          sanitize(e.getMessage()));
-      return attachment;
     }
+    LOG.warn(
+        "飞书渠道 {} 下载图片异常（messageId={}, imageKey={}）：{}，保留 image_key",
+        sanitize(channelName),
+        sanitize(messageId),
+        sanitize(imageKey),
+        sanitize(last == null ? null : last.getMessage()));
+    return attachment;
+  }
+
+  private static boolean isTransientTimeout(Throwable error) {
+    for (Throwable t = error; t != null; t = t.getCause()) {
+      String name = t.getClass().getName();
+      if (name.contains("Timeout") || name.contains("InterruptedIO")) {
+        return true;
+      }
+      String msg = t.getMessage();
+      if (msg != null) {
+        String lower = msg.toLowerCase(Locale.ROOT);
+        if (lower.contains("timeout") || lower.contains("timed out")) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   private Path writeToMediaRoot(String messageId, String imageKey, GetMessageResourceResp resp)

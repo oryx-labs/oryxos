@@ -3,9 +3,11 @@ package io.oryxos.channel.feishu;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.lark.oapi.core.httpclient.OkHttpTransport;
 import com.lark.oapi.core.response.RawResponse;
 import com.lark.oapi.core.token.AccessTokenType;
 import com.lark.oapi.event.EventDispatcher;
+import com.lark.oapi.okhttp.OkHttpClient;
 import com.lark.oapi.service.im.ImService;
 import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1;
 import io.oryxos.core.channel.ChannelConfig;
@@ -50,8 +52,14 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
   private static final long READY_TIMEOUT_MS = 15_000;
   private static final long READY_PROBE_TIMEOUT_MS = 50;
 
-  /** 入站图片下载可能较大；SDK 默认超时偏紧，真机易 SocketTimeout。 */
-  private static final long API_REQUEST_TIMEOUT_SEC = 60;
+  /**
+   * 入站图片下载超时。SDK {@code requestTimeout} 只设置 OkHttp {@code callTimeout}，仍保留默认 {@code
+   * readTimeout=10s}，慢网/大图会在读 body 时 {@code client time out}。须自定义 transport 同时拉长 read/call。
+   */
+  private static final long API_CONNECT_TIMEOUT_SEC = 30;
+
+  private static final long API_READ_TIMEOUT_SEC = 180;
+  private static final long API_CALL_TIMEOUT_SEC = 180;
 
   private final ChannelConfig config; // resolved 口径（凭证为真实值，仅存活内存）
   private final ProfileRegistry profileRegistry;
@@ -107,7 +115,14 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
     try {
       apiClient =
           com.lark.oapi.Client.newBuilder(config.appId(), config.appSecret())
-              .requestTimeout(API_REQUEST_TIMEOUT_SEC, TimeUnit.SECONDS)
+              .httpTransport(
+                  new OkHttpTransport(
+                      new OkHttpClient.Builder()
+                          .connectTimeout(API_CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
+                          .readTimeout(API_READ_TIMEOUT_SEC, TimeUnit.SECONDS)
+                          .writeTimeout(API_CONNECT_TIMEOUT_SEC, TimeUnit.SECONDS)
+                          .callTimeout(API_CALL_TIMEOUT_SEC, TimeUnit.SECONDS)
+                          .build()))
               .build();
       sender =
           new FeishuMessageSender(
