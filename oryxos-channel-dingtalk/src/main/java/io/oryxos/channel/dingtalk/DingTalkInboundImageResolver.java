@@ -160,7 +160,10 @@ final class DingTalkInboundImageResolver {
         Path file = writeToMediaRoot(messageId, downloadCode, downloadUrl);
         return new InboundAttachment(
             InboundAttachment.TYPE_IMAGE, file.toAbsolutePath().toString(), downloadCode);
-      } catch (Exception e) {
+      } catch (IOException | InterruptedException | RuntimeException e) {
+        if (e instanceof InterruptedException) {
+          Thread.currentThread().interrupt();
+        }
         last = e;
         if (attempt < DOWNLOAD_ATTEMPTS && isTransientTimeout(e)) {
           LOG.warn(
@@ -291,17 +294,18 @@ final class DingTalkInboundImageResolver {
     }
     // 单测：apiBase 指向本地 HttpServer 时允许同主机
     URI api = URI.create(apiBaseUrl);
-    if (api.getHost() != null && api.getHost().equalsIgnoreCase(uri.getHost())) {
+    String apiHost = api.getHost();
+    String mediaHost = uri.getHost().toLowerCase(Locale.ROOT);
+    if (apiHost != null && apiHost.toLowerCase(Locale.ROOT).equals(mediaHost)) {
       return true;
     }
     if (!SCHEME_HTTPS.equals(scheme)) {
       return false;
     }
-    String host = uri.getHost().toLowerCase(Locale.ROOT);
-    return host.equals(HOST_DINGTALK)
-        || host.endsWith(HOST_SUFFIX_DINGTALK)
-        || host.endsWith(HOST_SUFFIX_ALICDN)
-        || host.endsWith(HOST_SUFFIX_ALIYUNCS);
+    return mediaHost.equals(HOST_DINGTALK)
+        || mediaHost.endsWith(HOST_SUFFIX_DINGTALK)
+        || mediaHost.endsWith(HOST_SUFFIX_ALICDN)
+        || mediaHost.endsWith(HOST_SUFFIX_ALIYUNCS);
   }
 
   private static boolean isTransientTimeout(Throwable error) {
