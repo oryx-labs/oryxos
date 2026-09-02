@@ -42,6 +42,9 @@ public class InboundMessageService {
   /** 飞书等可能对同一意图连推多条不同 message_id；短窗内只确认一次。 */
   private static final long NEW_SESSION_ACK_COALESCE_MS = 5_000;
 
+  /** 「处理中」提示合并窗：下载+推理链路很长时避免重推/重复调度刷屏。 */
+  private static final long PROCESSING_NOTICE_COALESCE_MS = 30_000;
+
   private final AgentService agentService;
   private final SessionManager sessionManager;
   private final ProfileRegistry profileRegistry;
@@ -50,6 +53,7 @@ public class InboundMessageService {
   private final InboundMediaEnricher mediaEnricher;
   private final Duration processingNoticeDelay;
   private final Map<String, Long> recentNewSessionAckMs = new ConcurrentHashMap<>();
+  private final Map<String, Long> recentProcessingNoticeMs = new ConcurrentHashMap<>();
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
@@ -77,22 +81,45 @@ public class InboundMessageService {
   }
 
   /**
+   * 昂贵预处理（如下载图片）开始前启动 B8「处理中」计时。返回的 latch 必须在整条入站链路结束时 {@code countDown}，并交给 {@link
+   * #onClaimedMessage(InboundMessage, InboundChannelAdapter, CountDownLatch)}，避免下载后再开一个提示。
+   */
+  public CountDownLatch beginSlowWork(
+      InboundChannelAdapter replyVia, String chatId, String replyToMessageId) {
+    CountDownLatch done = new CountDownLatch(1);
+    scheduleProcessingNotice(done, replyVia, chatId, replyToMessageId);
+    return done;
+  }
+
+  /**
    * 归一化消息唯一入口：确认线程内快速返回（去重 + 提交），推理与回发在虚拟线程（B5）。
    *
    * @param msg 归一化入站消息（群聊必须已在适配器层过滤为 @ 机器人的消息）
    * @param replyVia 回复通道（即产生本消息的适配器）
    */
   public void onMessage(InboundMessage msg, InboundChannelAdapter replyVia) {
-    onMessage(msg, replyVia, true);
+    onMessage(msg, replyVia, true, null);
   }
 
   /** 调用方已通过 {@link #tryClaim} 占用 message_id 时使用（避免下载完成后二次去重把合法首条丢掉）。 */
   public void onClaimedMessage(InboundMessage msg, InboundChannelAdapter replyVia) {
-    onMessage(msg, replyVia, false);
+    onMessage(msg, replyVia, false, null);
+  }
+
+  /**
+   * 同 {@link #onClaimedMessage(InboundMessage, InboundChannelAdapter)}，复用预处理阶段已启动的
+   * latch（不再二次调度「处理中」）。
+   */
+  public void onClaimedMessage(
+      InboundMessage msg, InboundChannelAdapter replyVia, CountDownLatch preprocessingDone) {
+    onMessage(msg, replyVia, false, preprocessingDone);
   }
 
   private void onMessage(
-      InboundMessage msg, InboundChannelAdapter replyVia, boolean claimMessageId) {
+      InboundMessage msg,
+      InboundChannelAdapter replyVia,
+      boolean claimMessageId,
+      CountDownLatch preprocessingDone) {
     // B1：同一渠道同一 message_id 只处理一次（平台超时重推场景用户只收到一条回答）
     if (claimMessageId
         && !deduplicator.markIfFirst(msg.channelName() + DEDUP_KEY_SEPARATOR + msg.messageId())) {
@@ -104,12 +131,18 @@ public class InboundMessageService {
     // B7：不可处理的消息（非文本且无附件）回能力说明，不进推理、不落执行记录
     String agentInput = mediaEnricher.toAgentInput(msg);
     if (!msg.processable() || agentInput.isBlank()) {
+      if (preprocessingDone != null) {
+        preprocessingDone.countDown();
+      }
       safeReply(replyVia, msg.chatId(), UNSUPPORTED_TYPE_REPLY, replyTo);
       return;
     }
     String agent = replyVia.boundAgent();
     // B9：绑定 Agent 不存在（底座无停用态，不存在即不可用）——可读回复 + 失败执行留痕
     if (profileRegistry.get(agent).isEmpty()) {
+      if (preprocessingDone != null) {
+        preprocessingDone.countDown();
+      }
       safeReply(replyVia, msg.chatId(), AGENT_UNAVAILABLE_REPLY, replyTo);
       executionService.triggerAsync(
           agent,
@@ -123,6 +156,9 @@ public class InboundMessageService {
     }
     // 私聊 /new：清空固定三元组会话历史（飞书等 IM 无独立「新会话」键）
     if (msg.chatKind() == ChatKind.P2P && msg.textual() && isNewSessionCommand(agentInput)) {
+      if (preprocessingDone != null) {
+        preprocessingDone.countDown();
+      }
       Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
       sessionManager.clearHistory(session.sessionId());
       if (shouldAckNewSession(session.sessionId())) {
@@ -152,7 +188,7 @@ public class InboundMessageService {
                   agentService.processStateless(agent, agentInput, media, groupSessionId),
                   replyTo);
     }
-    CountDownLatch done = new CountDownLatch(1);
+    CountDownLatch done = preprocessingDone != null ? preprocessingDone : new CountDownLatch(1);
     // B5/B10：推理在虚拟线程后台跑并落 agent_executions（source = 渠道类型）
     executionService.triggerAsync(
         agent,
@@ -169,7 +205,9 @@ public class InboundMessageService {
             done.countDown();
           }
         });
-    scheduleProcessingNotice(done, replyVia, msg.chatId(), replyTo);
+    if (preprocessingDone == null) {
+      scheduleProcessingNotice(done, replyVia, msg.chatId(), replyTo);
+    }
   }
 
   static boolean isNewSessionCommand(String agentInput) {
@@ -192,12 +230,20 @@ public class InboundMessageService {
             () -> {
               try {
                 if (!done.await(processingNoticeDelay.toMillis(), TimeUnit.MILLISECONDS)) {
-                  safeReply(replyVia, chatId, PROCESSING_REPLY, replyTo);
+                  if (shouldSendProcessingNotice(chatId)) {
+                    safeReply(replyVia, chatId, PROCESSING_REPLY, replyTo);
+                  }
                 }
               } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
               }
             });
+  }
+
+  private boolean shouldSendProcessingNotice(String chatId) {
+    long now = System.currentTimeMillis();
+    Long prev = recentProcessingNoticeMs.put(chatId, now);
+    return prev == null || now - prev >= PROCESSING_NOTICE_COALESCE_MS;
   }
 
   /** 回复失败不影响主流程（发送异常只留日志——用户侧丢一条提示优于整条链路炸掉）。 */

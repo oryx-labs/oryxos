@@ -12,6 +12,8 @@ import com.lark.oapi.service.im.ImService;
 import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1;
 import io.oryxos.core.channel.ChannelConfig;
 import io.oryxos.core.channel.ChannelStatus;
+import io.oryxos.core.channel.ChatKind;
+import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundChannelAdapter;
 import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
@@ -219,8 +221,8 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
   }
 
   /**
-   * 事件入口：归一化 → 去重占用 → 图片资源落地 → 编排。去重必须在下载前：飞书平台重推同一 message_id 时，若先下载再去重会白耗
-   * 带宽并拉长「处理中」窗口。任何异常只留日志——抛出会触发平台重推循环。
+   * 事件入口：归一化 → 去重占用 →（需下载时先开「处理中」）→ 图片资源落地 → 编排。去重必须在下载前：飞书平台重推同一 message_id
+   * 时，若先下载再去重会白耗带宽。任何异常只留日志——抛出会触发平台重推循环。
    */
   private void handleEvent(P2MessageReceiveV1 event) {
     try {
@@ -231,13 +233,42 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
               LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(m.channelName()), sanitize(m.messageId()));
               return;
             }
-            FeishuInboundImageResolver resolver = imageResolver;
-            InboundMessage enriched = resolver == null ? m : resolver.resolve(m);
-            inboundMessageService.onClaimedMessage(enriched, this);
+            String replyTo = m.chatKind() == ChatKind.GROUP ? m.messageId() : null;
+            java.util.concurrent.CountDownLatch slowWork = null;
+            if (needsImageDownload(m)) {
+              // 下载常超过默认「处理中」阈值；计时从下载前开始，避免用户长时间无反馈
+              slowWork = inboundMessageService.beginSlowWork(this, m.chatId(), replyTo);
+            }
+            try {
+              FeishuInboundImageResolver resolver = imageResolver;
+              InboundMessage enriched = resolver == null ? m : resolver.resolve(m);
+              if (slowWork != null) {
+                inboundMessageService.onClaimedMessage(enriched, this, slowWork);
+              } else {
+                inboundMessageService.onClaimedMessage(enriched, this);
+              }
+            } catch (RuntimeException e) {
+              if (slowWork != null) {
+                slowWork.countDown();
+              }
+              throw e;
+            }
           });
     } catch (RuntimeException e) {
       LOG.error("飞书渠道 {} 事件处理异常: {}", sanitize(config.name()), sanitize(e.getMessage()));
     }
+  }
+
+  private static boolean needsImageDownload(InboundMessage message) {
+    for (InboundAttachment attachment : message.attachments()) {
+      if (InboundAttachment.TYPE_IMAGE.equals(attachment.type())
+          && (attachment.url() == null || attachment.url().isBlank())
+          && attachment.reference() != null
+          && !attachment.reference().isBlank()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /** 入站图片落盘目录：进程临时目录下按渠道隔离；失败不阻断 start（解析器会降级保留 image_key）。 */

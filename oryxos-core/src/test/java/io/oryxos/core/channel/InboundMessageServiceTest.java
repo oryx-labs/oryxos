@@ -331,4 +331,43 @@ class InboundMessageServiceTest {
     verify(agentService, times(1)).process(eq(session), eq("hi"), anyList());
     assertEquals(1, adapter.sent().size());
   }
+
+  @Test
+  @DisplayName("beginSlowWork + onClaimedMessage 共享 latch：只提示一次处理中")
+  void slowWorkSharesProcessingNoticeLatch() throws Exception {
+    Session session = new Session("stub:user-1:" + AGENT, AGENT);
+    when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
+    when(agentService.process(eq(session), eq("hi"), anyList()))
+        .thenAnswer(
+            inv -> {
+              Thread.sleep(400);
+              return "慢回答";
+            });
+    CountDownLatch workDone = new CountDownLatch(1);
+    doAnswer(
+            inv -> {
+              Thread.ofVirtual()
+                  .start(
+                      () -> {
+                        try {
+                          ((Runnable) inv.getArgument(3)).run();
+                        } finally {
+                          workDone.countDown();
+                        }
+                      });
+              return 1L;
+            })
+        .when(executionService)
+        .triggerAsync(anyString(), anyString(), any(), any());
+
+    CountDownLatch slow = service.beginSlowWork(adapter, "chat-p2p", null);
+    assertTrue(service.tryClaim("stub-chan", "m-slow"));
+    service.onClaimedMessage(p2p("m-slow", "hi"), adapter, slow);
+
+    assertTrue(workDone.await(3, TimeUnit.SECONDS));
+    Thread.sleep(100);
+    assertEquals(2, adapter.sent().size());
+    assertEquals(InboundMessageService.PROCESSING_REPLY, adapter.sent().get(0).text());
+    assertEquals("慢回答", adapter.sent().get(1).text());
+  }
 }
