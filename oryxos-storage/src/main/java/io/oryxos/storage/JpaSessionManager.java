@@ -67,14 +67,32 @@ public class JpaSessionManager implements SessionManager {
   @Override
   public void saveIfUnchanged(
       io.oryxos.core.session.Session session, List<Message> expectedMessages) {
-    String expectedJson = writeMessages(expectedMessages == null ? List.of() : expectedMessages);
+    Session entity =
+        repository
+            .findById(session.sessionId())
+            .orElseThrow(
+                () -> new IllegalStateException("会话不存在，save 前必须先 getOrCreate: " + safeId(session)));
+    // WHERE 必须用库里的原始 JSON：Message 增字段后「读→再序列化」可能与旧行字面量不一致，
+    // 若用再序列化结果当 expected 会误报冲突（#385 media 字段真机踩中）。
+    String dbRaw = normalizeStoredJson(entity.getMessagesJson());
+    List<Message> expected = expectedMessages == null ? List.of() : expectedMessages;
+    if (!writeMessages(readMessages(dbRaw)).equals(writeMessages(expected))) {
+      throw new SessionUpdateConflictException(safeId(session));
+    }
     String messagesJson = writeMessages(session.messages());
     int updated =
         repository.updateMessagesIfUnchanged(
-            session.sessionId(), expectedJson, messagesJson, Instant.now());
+            session.sessionId(), dbRaw, messagesJson, Instant.now());
     if (updated != 1) {
       throw new SessionUpdateConflictException(safeId(session));
     }
+  }
+
+  private static String normalizeStoredJson(String messagesJson) {
+    if (messagesJson == null || messagesJson.isBlank()) {
+      return "[]";
+    }
+    return messagesJson;
   }
 
   @Override

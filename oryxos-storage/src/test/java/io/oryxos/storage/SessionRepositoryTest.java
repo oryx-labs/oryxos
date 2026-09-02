@@ -140,4 +140,23 @@ class SessionRepositoryTest {
     assertTrue(persisted.stream().anyMatch(m -> "先到的消息".equals(m.content())));
     assertFalse(persisted.stream().anyMatch(m -> "后到但基于旧快照的消息".equals(m.content())));
   }
+
+  @Test
+  @DisplayName("旧 messages_json 缺新字段时 saveIfUnchanged 不误报冲突")
+  void saveIfUnchangedToleratesLegacyJsonWithoutNewFields() {
+    JpaSessionManager manager = new JpaSessionManager(repository);
+    var session = manager.getOrCreate("web", "legacy", "ops");
+    // 模拟 #385 之前写入的历史：无 media 字段
+    Session entity = repository.findById(session.sessionId()).orElseThrow();
+    entity.setMessagesJson(
+        "[{\"role\":\"user\",\"content\":\"旧消息\",\"toolName\":null,\"toolCallId\":null,\"toolCalls\":[]}]");
+    repository.save(entity);
+
+    var loaded = manager.get(session.sessionId()).orElseThrow();
+    List<Message> baseline = loaded.messages();
+    loaded.appendUser("新消息");
+    manager.saveIfUnchanged(loaded, baseline);
+
+    assertEquals(2, manager.get(session.sessionId()).orElseThrow().messages().size());
+  }
 }

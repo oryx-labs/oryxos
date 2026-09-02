@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,6 +49,8 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
   private static final int HTTP_OK = 200;
   private static final long READY_TIMEOUT_MS = 15_000;
   private static final long READY_PROBE_TIMEOUT_MS = 50;
+  /** 入站图片下载可能较大；SDK 默认超时偏紧，真机易 SocketTimeout。 */
+  private static final long API_REQUEST_TIMEOUT_SEC = 60;
 
   private final ChannelConfig config; // resolved 口径（凭证为真实值，仅存活内存）
   private final ProfileRegistry profileRegistry;
@@ -101,7 +104,10 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
     }
     guard.check(API_BASE_URL); // 出站白名单在建连前即校验，缺域名尽早点名
     try {
-      apiClient = com.lark.oapi.Client.newBuilder(config.appId(), config.appSecret()).build();
+      apiClient =
+          com.lark.oapi.Client.newBuilder(config.appId(), config.appSecret())
+              .requestTimeout(API_REQUEST_TIMEOUT_SEC, TimeUnit.SECONDS)
+              .build();
       sender =
           new FeishuMessageSender(
               apiClient, guard, API_BASE_URL, FeishuMessageSender.DEFAULT_CHUNK_SIZE);
