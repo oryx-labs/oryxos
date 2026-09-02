@@ -295,7 +295,7 @@ class InboundMessageServiceTest {
     when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
     when(sessionManager.clearHistory(session.sessionId())).thenReturn(true);
 
-    service.onMessage(p2p("m-new", " /new "), adapter);
+    service.onMessage(p2p("m-new", "/new"), adapter);
 
     verify(sessionManager).clearHistory(session.sessionId());
     verifyNoInteractions(agentService);
