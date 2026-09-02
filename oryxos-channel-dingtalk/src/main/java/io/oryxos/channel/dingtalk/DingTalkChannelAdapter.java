@@ -3,13 +3,17 @@ package io.oryxos.channel.dingtalk;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.oryxos.core.channel.ChannelConfig;
 import io.oryxos.core.channel.ChannelStatus;
+import io.oryxos.core.channel.ChatKind;
 import io.oryxos.core.channel.InboundChannelAdapter;
 import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
 import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.profile.ProfileRegistry;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -36,6 +40,8 @@ public class DingTalkChannelAdapter implements InboundChannelAdapter {
   private static final long RECONNECT_BASE_MS = 2_000L;
   private static final long RECONNECT_MAX_MS = 60_000L;
   private static final int RECONNECT_MAX_SHIFT = 5;
+  private static final String MEDIA_DIR_PREFIX = "oryxos-dingtalk-media-";
+  private static final String MEDIA_FALLBACK_DIR = "oryxos-dingtalk-media";
 
   private final ChannelConfig config;
   private final ProfileRegistry profileRegistry;
@@ -45,6 +51,7 @@ public class DingTalkChannelAdapter implements InboundChannelAdapter {
   private final AtomicReference<DingTalkStreamClient> streamRef = new AtomicReference<>();
   private volatile DingTalkMessageSender sender;
   private volatile DingTalkEventNormalizer normalizer;
+  private volatile DingTalkInboundImageResolver imageResolver;
   private volatile DingTalkDisconnectKind lastDisconnectKind = DingTalkDisconnectKind.ABRUPT;
   private volatile ChannelStatus.State state = ChannelStatus.State.DISCONNECTED;
   private volatile String lastError;
@@ -119,6 +126,7 @@ public class DingTalkChannelAdapter implements InboundChannelAdapter {
     }
     sender = null;
     normalizer = null;
+    imageResolver = null;
     state = ChannelStatus.State.DISCONNECTED;
   }
 
@@ -163,13 +171,24 @@ public class DingTalkChannelAdapter implements InboundChannelAdapter {
     streamRef.set(client);
   }
 
-  /** 懒初始化出站组件；重连复用同一 {@link DingTalkMessageSender} 以保留 sessionWebhook 映射（#338 后续）。 */
+  /** 懒初始化出站/入站组件；重连复用同一 {@link DingTalkMessageSender} 以保留 sessionWebhook 映射。 */
   private void ensureOutboundStack() {
     if (normalizer == null) {
       normalizer = new DingTalkEventNormalizer(config.name());
     }
     if (sender == null) {
       sender = new DingTalkMessageSender(guard, DingTalkMessageSender.DEFAULT_CHUNK_SIZE);
+    }
+    if (imageResolver == null) {
+      // robotCode：企业内部应用机器人通常等于 ClientId（app_id）
+      imageResolver =
+          new DingTalkInboundImageResolver(
+              guard,
+              config.appId(),
+              config.appSecret(),
+              config.appId(),
+              createMediaRoot(),
+              config.name());
     }
   }
 
@@ -271,6 +290,7 @@ public class DingTalkChannelAdapter implements InboundChannelAdapter {
     }
   }
 
+  /** 归一化 → 去重占用 →（有图时即时「处理中」）→ downloadCode 落盘 → 编排。去重在下载前，避免平台重推白下图。 */
   private void handleBotMessage(JsonNode body) {
     try {
       String conversationId = body.path("conversationId").asText(null);
@@ -281,9 +301,51 @@ public class DingTalkChannelAdapter implements InboundChannelAdapter {
       }
       sender.rememberSession(conversationId, sessionWebhook, atUserId);
       Optional<InboundMessage> msg = normalizer.normalize(body);
-      msg.ifPresent(m -> inboundMessageService.onMessage(m, this));
+      msg.ifPresent(this::dispatchClaimed);
     } catch (RuntimeException e) {
       LOG.error("钉钉渠道 {} 事件处理异常: {}", sanitize(config.name()), sanitize(e.getMessage()));
+    }
+  }
+
+  private void dispatchClaimed(InboundMessage m) {
+    if (!inboundMessageService.tryClaim(m.channelName(), m.messageId())) {
+      LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(m.channelName()), sanitize(m.messageId()));
+      return;
+    }
+    String replyTo = m.chatKind() == ChatKind.GROUP ? m.messageId() : null;
+    CountDownLatch slowWork = null;
+    if (DingTalkInboundImageResolver.hasImage(m)) {
+      slowWork = inboundMessageService.beginSlowWork(this, m.chatId(), replyTo);
+    }
+    try {
+      DingTalkInboundImageResolver resolver = imageResolver;
+      InboundMessage enriched = resolver == null ? m : resolver.resolve(m);
+      if (slowWork != null) {
+        inboundMessageService.onClaimedMessage(enriched, this, slowWork);
+      } else {
+        inboundMessageService.onClaimedMessage(enriched, this);
+      }
+    } catch (RuntimeException e) {
+      if (slowWork != null) {
+        slowWork.countDown();
+      }
+      throw e;
+    }
+  }
+
+  private Path createMediaRoot() {
+    String channelSeg = DingTalkInboundImageResolver.safeSegment(config.name());
+    try {
+      Path root = Files.createTempDirectory(MEDIA_DIR_PREFIX);
+      Path channelDir = root.resolve(channelSeg);
+      Files.createDirectories(channelDir);
+      return channelDir;
+    } catch (Exception e) {
+      LOG.warn(
+          "钉钉渠道 {} 创建图片缓存目录失败（{}），入站图片将保留 downloadCode",
+          sanitize(config.name()),
+          sanitize(e.getMessage()));
+      return Path.of(System.getProperty("java.io.tmpdir"), MEDIA_FALLBACK_DIR, channelSeg);
     }
   }
 

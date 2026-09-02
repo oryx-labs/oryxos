@@ -96,7 +96,7 @@
 | status 为 ERROR：`app_secret 未配置或环境变量未解析` | 启动 shell 里没有 `FEISHU_APP_SECRET`；`source` env 文件后重启或经 REST 重建渠道 |
 | status 为 ERROR：`绑定的 Agent xxx 不存在` | `channels.yaml` 的 `agent` 必须是 `.oryxos/agents/` 下的目录名 |
 | 长连接建立失败 | 确认出方向可达 `open.feishu.cn:443`（HTTPS + WebSocket）；无需任何入方向端口 |
-| 收到「当前仅支持文本提问」 | 设计如此：图片 / 语音 / 文件入站不在当前范围 |
+| 收到「当前仅支持文本提问」 | 语音 / 文件等非图类型仍不在范围；**图片已支持**（入站下载后走 Vision）。若仍出现：确认事件含 image，且渠道进程可出站访问 `open.feishu.cn` |
 | 多个 Agent 接入 | 一应用一 Agent；再建一个飞书应用 + `channels.yaml` 加一个条目 |
 
 ## 九、审计口径

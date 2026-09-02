@@ -45,8 +45,9 @@
 
 ## 三、使用方式
 
-- **单聊**：在钉钉中打开该机器人会话，直接发文本。
-- **群聊**：将机器人拉入群后 `@机器人 + 问题`；平台只推送 `isInAtList=true` 的群消息。
+- **单聊**：在钉钉中打开该机器人会话，直接发文本或图片。
+- **群聊**：将机器人拉入群后 `@机器人 + 问题`（或图片）；平台只推送 `isInAtList=true` 的群消息。
+- **图片**：Stream 回调常见 `downloadCode`（无直链）。渠道会调用开放平台「下载机器人接收消息的文件内容」换临时 URL 并落盘，再交给 Vision；`robotCode` 默认等于 ClientId（`app_id`）。
 
 ## 四、与飞书/企微的差异（运维须知）
 
@@ -55,6 +56,7 @@
 | 凭证 | App ID / App Secret | BotID / 长连接 Secret | ClientId / ClientSecret |
 | 连接 | SDK 长连接 | `openws.work.weixin.qq.com` WS | `api.dingtalk.com` Stream WS |
 | 回复 | im API | 长连接 `aibot_send_msg` | `sessionWebhook` POST |
+| 入站图 | message_id + image_key 下载 | payload 直链 URL | `downloadCode` → 临时 URL 落盘 |
 | 群 @ 关联 | open_id / mentioned | `quote.msgid` | `at.atUserIds`（B4） |
 
 ## 五、非目标（本期不做）
@@ -62,3 +64,4 @@
 - HTTP 回调 + 加解密旧模式
 - 流式逐 token 刷屏（Agent 仍整段推理后再回发）
 - 模板卡片 / 富媒体 / HITL
+- 语音 / 视频 / 文件入站（仅图片 + 文本）

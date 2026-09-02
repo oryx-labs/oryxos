@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.oryxos.core.channel.ChannelConfig;
 import io.oryxos.core.channel.ChannelStatus;
+import io.oryxos.core.channel.ChatKind;
+import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundChannelAdapter;
 import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
@@ -11,6 +13,7 @@ import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.profile.ProfileRegistry;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -290,11 +293,40 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
       msg.ifPresent(
           m -> {
             sender.rememberChatType(m.chatId(), WeComEventNormalizer.chatTypeCode(body));
-            inboundMessageService.onMessage(m, this);
+            dispatchClaimed(m);
           });
     } catch (RuntimeException e) {
       LOG.error("企微渠道 {} 事件处理异常: {}", sanitize(config.name()), sanitize(e.getMessage()));
     }
+  }
+
+  /** 有图时即时「处理中」（识图常低于默认 15s 阈值）；文本仍走 onMessage 内延迟提示。 */
+  private void dispatchClaimed(InboundMessage m) {
+    if (!inboundMessageService.tryClaim(m.channelName(), m.messageId())) {
+      LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(m.channelName()), sanitize(m.messageId()));
+      return;
+    }
+    if (!hasImage(m)) {
+      inboundMessageService.onClaimedMessage(m, this);
+      return;
+    }
+    String replyTo = m.chatKind() == ChatKind.GROUP ? m.messageId() : null;
+    CountDownLatch slowWork = inboundMessageService.beginSlowWork(this, m.chatId(), replyTo);
+    try {
+      inboundMessageService.onClaimedMessage(m, this, slowWork);
+    } catch (RuntimeException e) {
+      slowWork.countDown();
+      throw e;
+    }
+  }
+
+  private static boolean hasImage(InboundMessage message) {
+    for (InboundAttachment attachment : message.attachments()) {
+      if (InboundAttachment.TYPE_IMAGE.equals(attachment.type())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static String sanitize(String value) {
