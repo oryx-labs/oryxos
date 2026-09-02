@@ -17,7 +17,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -288,15 +287,15 @@ final class DingTalkInboundImageResolver {
     if (uri == null || uri.getHost() == null || uri.getScheme() == null) {
       return false;
     }
-    String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
+    String scheme = asciiLower(uri.getScheme());
     if (!SCHEME_HTTPS.equals(scheme) && !SCHEME_HTTP.equals(scheme)) {
       return false;
     }
     // 单测：apiBase 指向本地 HttpServer 时允许同主机
     URI api = URI.create(apiBaseUrl);
     String apiHost = api.getHost();
-    String mediaHost = uri.getHost().toLowerCase(Locale.ROOT);
-    if (apiHost != null && apiHost.toLowerCase(Locale.ROOT).equals(mediaHost)) {
+    String mediaHost = asciiLower(uri.getHost());
+    if (apiHost != null && asciiLower(apiHost).equals(mediaHost)) {
       return true;
     }
     if (!SCHEME_HTTPS.equals(scheme)) {
@@ -308,6 +307,18 @@ final class DingTalkInboundImageResolver {
         || mediaHost.endsWith(HOST_SUFFIX_ALIYUNCS);
   }
 
+  /** ASCII-only 小写，避免 SpotBugs IMPROPER_UNICODE（scheme/host 均为 ASCII）。 */
+  private static String asciiLower(String value) {
+    char[] chars = value.toCharArray();
+    for (int i = 0; i < chars.length; i++) {
+      char c = chars[i];
+      if (c >= 'A' && c <= 'Z') {
+        chars[i] = (char) (c + ('a' - 'A'));
+      }
+    }
+    return new String(chars);
+  }
+
   private static boolean isTransientTimeout(Throwable error) {
     for (Throwable t = error; t != null; t = t.getCause()) {
       String name = t.getClass().getName();
@@ -316,7 +327,7 @@ final class DingTalkInboundImageResolver {
       }
       String msg = t.getMessage();
       if (msg != null) {
-        String lower = msg.toLowerCase(Locale.ROOT);
+        String lower = asciiLower(msg);
         if (lower.contains("timeout") || lower.contains("timed out")) {
           return true;
         }
@@ -335,7 +346,7 @@ final class DingTalkInboundImageResolver {
     if (dot < 0 || dot == fileName.length() - 1) {
       return DEFAULT_EXTENSION;
     }
-    String ext = fileName.substring(dot).toLowerCase(Locale.ROOT);
+    String ext = asciiLower(fileName.substring(dot));
     if (!ext.matches(SAFE_EXTENSION_PATTERN)) {
       return DEFAULT_EXTENSION;
     }
