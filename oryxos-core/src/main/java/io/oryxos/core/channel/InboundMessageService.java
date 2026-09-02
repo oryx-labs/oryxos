@@ -8,6 +8,7 @@ import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -165,7 +166,8 @@ public class InboundMessageService {
   }
 
   static boolean isNewSessionCommand(String agentInput) {
-    return agentInput != null && NEW_SESSION_COMMAND.equalsIgnoreCase(agentInput.strip());
+    return agentInput != null
+        && NEW_SESSION_COMMAND.equals(agentInput.strip().toLowerCase(Locale.ROOT));
   }
 
   /** B8：超过阈值仍未完成时先行告知「处理中」；纯虚拟线程 + CountDownLatch，同步阻塞语义。 */
