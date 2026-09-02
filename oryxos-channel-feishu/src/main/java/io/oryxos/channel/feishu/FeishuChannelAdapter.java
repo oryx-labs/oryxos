@@ -49,6 +49,7 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
   private static final int HTTP_OK = 200;
   private static final long READY_TIMEOUT_MS = 15_000;
   private static final long READY_PROBE_TIMEOUT_MS = 50;
+
   /** 入站图片下载可能较大；SDK 默认超时偏紧，真机易 SocketTimeout。 */
   private static final long API_REQUEST_TIMEOUT_SEC = 60;
 

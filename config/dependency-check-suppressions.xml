@@ -26,4 +26,24 @@
         <cve>CVE-2026-59283</cve>
         <cve>CVE-2026-59314</cve>
     </suppress>
+    <suppress>
+        <notes><![CDATA[
+        CVE-2026-47892: WebFlux functional RouterFunction header-predicate bypass on CORS
+        preflight when deployed via DispatcherServlet. OryxOS uses Spring MVC @RestController
+        only (no WebFlux RouterFunction security predicates). Spring Framework 6.2.20 is the
+        OSS fix line but not published to Maven Central for this Boot pin (enterprise-only
+        for related 6.2.x advisories). Remove when Boot pins a fixed Framework.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework/.*@6\.2\.19$</packageUrl>
+        <cve>CVE-2026-47892</cve>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
+        CVE-2026-59270: Spring Security embedded UnboundID LDAP (UnboundIdContainer) binds
+        admin DN on all interfaces. OryxOS does not use spring-ldap embedded / UnboundIdContainer
+        (no matches in codebase). Dependency-Check flags spring-security-crypto via CPE.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework\.security/.*@6\.5\..*$</packageUrl>
+        <cve>CVE-2026-59270</cve>
+    </suppress>
 </suppressions>
