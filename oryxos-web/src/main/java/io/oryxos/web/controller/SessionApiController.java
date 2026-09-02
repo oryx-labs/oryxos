@@ -32,9 +32,9 @@ import org.springframework.web.bind.annotation.RestController;
  * channel 固定 "web"（人推的另一入口，与 CLI 共享同一份会话存储）。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-    value = "SPRING_ENDPOINT",
+    value = {"SPRING_ENDPOINT", "EI_EXPOSE_REP2"},
     justification =
-        "core-stage web API is unauthenticated by design (internal network + gateway); auth is extension-phase")
+        "core-stage web API is unauthenticated by design (internal network + gateway); auth is extension-phase; AgentService/SessionManager 为 Runtime 单例共享引用")
 @RestController
 @RequestMapping("/api/v1/sessions")
 public class SessionApiController {
