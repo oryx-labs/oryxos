@@ -261,14 +261,21 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
 
   private static boolean needsImageDownload(InboundMessage message) {
     for (InboundAttachment attachment : message.attachments()) {
-      if (InboundAttachment.TYPE_IMAGE.equals(attachment.type())
-          && (attachment.url() == null || attachment.url().isBlank())
-          && attachment.reference() != null
-          && !attachment.reference().isBlank()) {
+      if (isUnresolvedImageAttachment(attachment)) {
         return true;
       }
     }
     return false;
+  }
+
+  private static boolean isUnresolvedImageAttachment(InboundAttachment attachment) {
+    if (!InboundAttachment.TYPE_IMAGE.equals(attachment.type())) {
+      return false;
+    }
+    if (attachment.url() != null && !attachment.url().isBlank()) {
+      return false;
+    }
+    return attachment.reference() != null && !attachment.reference().isBlank();
   }
 
   /** 入站图片落盘目录：进程临时目录下按渠道隔离；失败不阻断 start（解析器会降级保留 image_key）。 */
