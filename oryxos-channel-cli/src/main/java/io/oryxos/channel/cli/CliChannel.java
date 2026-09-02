@@ -13,7 +13,7 @@ import java.io.UncheckedIOException;
 import java.nio.charset.Charset;
 
 /**
- * chat 命令的交互通道：读 stdin、写 stdout，维护当前 Session，每行交给引擎，{@code /quit} 退出。
+ * chat 命令的交互通道：读 stdin、写 stdout，维护当前 Session，每行交给引擎，{@code /quit} 退出、{@code /new} 清空历史。
  *
  * <p>CLI 是消息进出的门，不是干活的人——本类没有任何 Agent 智能，就是读—转交—打印的壳（课件骨架）。 channel 字面量 "cli" 只作为三元组参数提供，session_id
  * 拼接在 SessionManager 内部（H4④）。
@@ -21,9 +21,13 @@ import java.nio.charset.Charset;
  * <p>stdin 编码：有 {@link System#console()} 用 console reader；否则 {@link Charset#defaultCharset()}。不硬编码
  * UTF-8。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "EI_EXPOSE_REP2",
+    justification = "AgentService/SessionManager 均为 Runtime 装配单例，共享引用正是意图")
 public class CliChannel {
 
   private static final String QUIT = "/quit";
+  private static final String NEW = "/new";
 
   private final AgentService agentService;
   private final SessionManager sessionManager;
@@ -36,7 +40,7 @@ public class CliChannel {
   public void run(String profileName, String userId) {
     Session session = sessionManager.getOrCreate("cli", userId, profileName);
     PrintStream out = System.out;
-    out.printf("已连接 Agent [%s]，输入 %s 退出。%n", profileName, QUIT);
+    out.printf("已连接 Agent [%s]，输入 %s 退出，%s 开新会话。%n", profileName, QUIT, NEW);
     BufferedReader in = stdinReader();
     while (true) {
       out.print("> ");
@@ -47,6 +51,12 @@ public class CliChannel {
         return;
       }
       if (line.isBlank()) {
+        continue;
+      }
+      if (NEW.equals(line.trim())) {
+        sessionManager.clearHistory(session.sessionId());
+        session = sessionManager.getOrCreate("cli", userId, profileName);
+        out.println("已开启新会话，之前的对话上下文已清空。");
         continue;
       }
       TypewriterListener listener = new TypewriterListener(out);
