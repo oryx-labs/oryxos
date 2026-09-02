@@ -128,75 +128,22 @@ public class InboundMessageService {
     }
     // B4：群聊回复引用原消息使问答可对应；私聊直发
     String replyTo = msg.chatKind() == ChatKind.GROUP ? msg.messageId() : null;
-    // B7：不可处理的消息（非文本且无附件）回能力说明，不进推理、不落执行记录
     String agentInput = mediaEnricher.toAgentInput(msg);
-    if (!msg.processable() || agentInput.isBlank()) {
-      if (preprocessingDone != null) {
-        preprocessingDone.countDown();
-      }
-      safeReply(replyVia, msg.chatId(), UNSUPPORTED_TYPE_REPLY, replyTo);
+    if (finishWithoutInference(msg, replyVia, preprocessingDone, replyTo, agentInput)) {
       return;
     }
     String agent = replyVia.boundAgent();
-    // B9：绑定 Agent 不存在（底座无停用态，不存在即不可用）——可读回复 + 失败执行留痕
-    if (profileRegistry.get(agent).isEmpty()) {
-      if (preprocessingDone != null) {
-        preprocessingDone.countDown();
-      }
-      safeReply(replyVia, msg.chatId(), AGENT_UNAVAILABLE_REPLY, replyTo);
-      executionService.triggerAsync(
-          agent,
-          msg.channelType(),
-          null,
-          () -> {
-            throw new IllegalStateException(
-                "渠道 " + msg.channelName() + " 绑定的 Agent " + agent + " 不存在");
-          });
-      return;
-    }
-    // 私聊 /new：清空固定三元组会话历史（飞书等 IM 无独立「新会话」键）
-    if (msg.chatKind() == ChatKind.P2P && msg.textual() && isNewSessionCommand(agentInput)) {
-      if (preprocessingDone != null) {
-        preprocessingDone.countDown();
-      }
-      Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
-      sessionManager.clearHistory(session.sessionId());
-      if (shouldAckNewSession(session.sessionId())) {
-        safeReply(replyVia, msg.chatId(), NEW_SESSION_REPLY, null);
-      }
-      return;
-    }
     List<Message.MediaPart> media = InboundMediaParts.from(msg);
-    String sessionId;
-    Runnable inference;
-    if (msg.chatKind() == ChatKind.P2P) {
-      // B2：私聊按「渠道 + 用户 + Agent」维持连续会话——隔离/历史窗口/并发锁全部由既有会话底座承担
-      Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
-      sessionId = session.sessionId();
-      inference =
-          () ->
-              replyVia.sendReply(
-                  msg.chatId(), agentService.process(session, agentInput, media), null);
-    } else {
-      // B3：群聊每次 @ 为独立无状态问答，不落 sessions 表；渠道前缀让审计可辨（B10）
-      sessionId = msg.channelType() + "-group:" + UUID.randomUUID();
-      String groupSessionId = sessionId;
-      inference =
-          () ->
-              replyVia.sendReply(
-                  msg.chatId(),
-                  agentService.processStateless(agent, agentInput, media, groupSessionId),
-                  replyTo);
-    }
+    InferenceJob job = buildInference(msg, replyVia, agent, agentInput, media, replyTo);
     CountDownLatch done = preprocessingDone != null ? preprocessingDone : new CountDownLatch(1);
     // B5/B10：推理在虚拟线程后台跑并落 agent_executions（source = 渠道类型）
     executionService.triggerAsync(
         agent,
         msg.channelType(),
-        sessionId,
+        job.sessionId(),
         () -> {
           try {
-            inference.run();
+            job.inference().run();
           } catch (RuntimeException e) {
             // B6：失败以可读消息告知用户（不含堆栈），异常继续上抛让执行记录记为失败
             safeReply(replyVia, msg.chatId(), FAILURE_REPLY, replyTo);
@@ -209,6 +156,82 @@ public class InboundMessageService {
       scheduleProcessingNotice(done, replyVia, msg.chatId(), replyTo);
     }
   }
+
+  /** B7/B9/私聊 /new：不进推理时释放预处理 latch 并回即时答复。 */
+  private boolean finishWithoutInference(
+      InboundMessage msg,
+      InboundChannelAdapter replyVia,
+      CountDownLatch preprocessingDone,
+      String replyTo,
+      String agentInput) {
+    // B7：不可处理的消息（非文本且无附件）回能力说明，不进推理、不落执行记录
+    if (!msg.processable() || agentInput.isBlank()) {
+      release(preprocessingDone);
+      safeReply(replyVia, msg.chatId(), UNSUPPORTED_TYPE_REPLY, replyTo);
+      return true;
+    }
+    String agent = replyVia.boundAgent();
+    // B9：绑定 Agent 不存在（底座无停用态，不存在即不可用）——可读回复 + 失败执行留痕
+    if (profileRegistry.get(agent).isEmpty()) {
+      release(preprocessingDone);
+      safeReply(replyVia, msg.chatId(), AGENT_UNAVAILABLE_REPLY, replyTo);
+      executionService.triggerAsync(
+          agent,
+          msg.channelType(),
+          null,
+          () -> {
+            throw new IllegalStateException(
+                "渠道 " + msg.channelName() + " 绑定的 Agent " + agent + " 不存在");
+          });
+      return true;
+    }
+    // 私聊 /new：清空固定三元组会话历史（飞书等 IM 无独立「新会话」键）
+    if (msg.chatKind() == ChatKind.P2P && msg.textual() && isNewSessionCommand(agentInput)) {
+      release(preprocessingDone);
+      Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
+      sessionManager.clearHistory(session.sessionId());
+      if (shouldAckNewSession(session.sessionId())) {
+        safeReply(replyVia, msg.chatId(), NEW_SESSION_REPLY, null);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  private InferenceJob buildInference(
+      InboundMessage msg,
+      InboundChannelAdapter replyVia,
+      String agent,
+      String agentInput,
+      List<Message.MediaPart> media,
+      String replyTo) {
+    if (msg.chatKind() == ChatKind.P2P) {
+      // B2：私聊按「渠道 + 用户 + Agent」维持连续会话——隔离/历史窗口/并发锁全部由既有会话底座承担
+      Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
+      return new InferenceJob(
+          session.sessionId(),
+          () ->
+              replyVia.sendReply(
+                  msg.chatId(), agentService.process(session, agentInput, media), null));
+    }
+    // B3：群聊每次 @ 为独立无状态问答，不落 sessions 表；渠道前缀让审计可辨（B10）
+    String groupSessionId = msg.channelType() + "-group:" + UUID.randomUUID();
+    return new InferenceJob(
+        groupSessionId,
+        () ->
+            replyVia.sendReply(
+                msg.chatId(),
+                agentService.processStateless(agent, agentInput, media, groupSessionId),
+                replyTo));
+  }
+
+  private static void release(CountDownLatch latch) {
+    if (latch != null) {
+      latch.countDown();
+    }
+  }
+
+  private record InferenceJob(String sessionId, Runnable inference) {}
 
   static boolean isNewSessionCommand(String agentInput) {
     return agentInput != null && NEW_SESSION_COMMAND.equals(agentInput.strip());
