@@ -304,6 +304,21 @@ class InboundMessageServiceTest {
   }
 
   @Test
+  @DisplayName("短窗内重复 /new（不同 message_id）只确认一次")
+  void p2pNewAcksOnceWithinCoalesceWindow() {
+    Session session = new Session("stub:user-1:" + AGENT, AGENT);
+    when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
+    when(sessionManager.clearHistory(session.sessionId())).thenReturn(true);
+
+    service.onMessage(p2p("m-new-1", "/new"), adapter);
+    service.onMessage(p2p("m-new-2", "/new"), adapter);
+
+    verify(sessionManager, times(2)).clearHistory(session.sessionId());
+    assertEquals(1, adapter.sent().size());
+    assertEquals(InboundMessageService.NEW_SESSION_REPLY, adapter.sent().get(0).text());
+  }
+
+  @Test
   @DisplayName("tryClaim 后 onClaimedMessage 不再二次去重")
   void claimedMessageSkipsSecondDedup() {
     Session session = new Session("stub:user-1:" + AGENT, AGENT);

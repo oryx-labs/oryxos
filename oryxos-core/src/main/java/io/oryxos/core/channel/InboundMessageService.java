@@ -8,7 +8,9 @@ import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -37,6 +39,9 @@ public class InboundMessageService {
   static final String NEW_SESSION_REPLY = "已开启新会话，之前的对话上下文已清空。";
   private static final String NEW_SESSION_COMMAND = "/new";
 
+  /** 飞书等可能对同一意图连推多条不同 message_id；短窗内只确认一次。 */
+  private static final long NEW_SESSION_ACK_COALESCE_MS = 5_000;
+
   private final AgentService agentService;
   private final SessionManager sessionManager;
   private final ProfileRegistry profileRegistry;
@@ -44,6 +49,7 @@ public class InboundMessageService {
   private final MessageDeduplicator deduplicator;
   private final InboundMediaEnricher mediaEnricher;
   private final Duration processingNoticeDelay;
+  private final Map<String, Long> recentNewSessionAckMs = new ConcurrentHashMap<>();
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
@@ -119,7 +125,9 @@ public class InboundMessageService {
     if (msg.chatKind() == ChatKind.P2P && msg.textual() && isNewSessionCommand(agentInput)) {
       Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
       sessionManager.clearHistory(session.sessionId());
-      safeReply(replyVia, msg.chatId(), NEW_SESSION_REPLY, null);
+      if (shouldAckNewSession(session.sessionId())) {
+        safeReply(replyVia, msg.chatId(), NEW_SESSION_REPLY, null);
+      }
       return;
     }
     List<Message.MediaPart> media = InboundMediaParts.from(msg);
@@ -166,6 +174,13 @@ public class InboundMessageService {
 
   static boolean isNewSessionCommand(String agentInput) {
     return agentInput != null && NEW_SESSION_COMMAND.equals(agentInput.strip());
+  }
+
+  /** 首次或超过合并窗则确认；窗内重复 {@code /new}（不同 message_id）仍清历史，但不再回第二条确认。 */
+  private boolean shouldAckNewSession(String sessionId) {
+    long now = System.currentTimeMillis();
+    Long prev = recentNewSessionAckMs.put(sessionId, now);
+    return prev == null || now - prev >= NEW_SESSION_ACK_COALESCE_MS;
   }
 
   /** B8：超过阈值仍未完成时先行告知「处理中」；纯虚拟线程 + CountDownLatch，同步阻塞语义。 */
