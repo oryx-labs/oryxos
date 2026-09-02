@@ -218,15 +218,22 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
     active.send(chatId, text, replyToMessageId);
   }
 
-  /** 事件入口：归一化 → 图片资源落地 → 编排；任何异常只留日志——抛出会触发平台重推循环（去重会拦但用户收不到回答）。 */
+  /**
+   * 事件入口：归一化 → 去重占用 → 图片资源落地 → 编排。去重必须在下载前：飞书平台重推同一 message_id 时，若先下载再去重会白耗
+   * 带宽并拉长「处理中」窗口。任何异常只留日志——抛出会触发平台重推循环。
+   */
   private void handleEvent(P2MessageReceiveV1 event) {
     try {
       Optional<InboundMessage> msg = normalizer.normalize(event);
       msg.ifPresent(
           m -> {
+            if (!inboundMessageService.tryClaim(m.channelName(), m.messageId())) {
+              LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(m.channelName()), sanitize(m.messageId()));
+              return;
+            }
             FeishuInboundImageResolver resolver = imageResolver;
             InboundMessage enriched = resolver == null ? m : resolver.resolve(m);
-            inboundMessageService.onMessage(enriched, this);
+            inboundMessageService.onClaimedMessage(enriched, this);
           });
     } catch (RuntimeException e) {
       LOG.error("飞书渠道 {} 事件处理异常: {}", sanitize(config.name()), sanitize(e.getMessage()));

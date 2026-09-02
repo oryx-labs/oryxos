@@ -34,6 +34,8 @@ public class InboundMessageService {
   static final String AGENT_UNAVAILABLE_REPLY = "Agent 暂不可用（未找到绑定的 Agent），请联系管理员。";
   static final String FAILURE_REPLY = "抱歉，这次处理失败了，请稍后重试或联系管理员。";
   static final String PROCESSING_REPLY = "已收到，正在处理中，请稍候…";
+  static final String NEW_SESSION_REPLY = "已开启新会话，之前的对话上下文已清空。";
+  private static final String NEW_SESSION_COMMAND = "/new";
 
   private final AgentService agentService;
   private final SessionManager sessionManager;
@@ -63,6 +65,11 @@ public class InboundMessageService {
     this.processingNoticeDelay = processingNoticeDelay;
   }
 
+  /** 在昂贵预处理（飞书入站图下载等）前占用 message_id。返回 false 表示重复事件，调用方应直接丢弃且勿再下载。 */
+  public boolean tryClaim(String channelName, String messageId) {
+    return deduplicator.markIfFirst(channelName + DEDUP_KEY_SEPARATOR + messageId);
+  }
+
   /**
    * 归一化消息唯一入口：确认线程内快速返回（去重 + 提交），推理与回发在虚拟线程（B5）。
    *
@@ -70,8 +77,19 @@ public class InboundMessageService {
    * @param replyVia 回复通道（即产生本消息的适配器）
    */
   public void onMessage(InboundMessage msg, InboundChannelAdapter replyVia) {
+    onMessage(msg, replyVia, true);
+  }
+
+  /** 调用方已通过 {@link #tryClaim} 占用 message_id 时使用（避免下载完成后二次去重把合法首条丢掉）。 */
+  public void onClaimedMessage(InboundMessage msg, InboundChannelAdapter replyVia) {
+    onMessage(msg, replyVia, false);
+  }
+
+  private void onMessage(
+      InboundMessage msg, InboundChannelAdapter replyVia, boolean claimMessageId) {
     // B1：同一渠道同一 message_id 只处理一次（平台超时重推场景用户只收到一条回答）
-    if (!deduplicator.markIfFirst(msg.channelName() + DEDUP_KEY_SEPARATOR + msg.messageId())) {
+    if (claimMessageId
+        && !deduplicator.markIfFirst(msg.channelName() + DEDUP_KEY_SEPARATOR + msg.messageId())) {
       LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(msg.channelName()), sanitize(msg.messageId()));
       return;
     }
@@ -95,6 +113,13 @@ public class InboundMessageService {
             throw new IllegalStateException(
                 "渠道 " + msg.channelName() + " 绑定的 Agent " + agent + " 不存在");
           });
+      return;
+    }
+    // 私聊 /new：清空固定三元组会话历史（飞书等 IM 无独立「新会话」键）
+    if (msg.chatKind() == ChatKind.P2P && msg.textual() && isNewSessionCommand(agentInput)) {
+      Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
+      sessionManager.clearHistory(session.sessionId());
+      safeReply(replyVia, msg.chatId(), NEW_SESSION_REPLY, null);
       return;
     }
     List<Message.MediaPart> media = InboundMediaParts.from(msg);
@@ -137,6 +162,10 @@ public class InboundMessageService {
           }
         });
     scheduleProcessingNotice(done, replyVia, msg.chatId(), replyTo);
+  }
+
+  static boolean isNewSessionCommand(String agentInput) {
+    return agentInput != null && NEW_SESSION_COMMAND.equalsIgnoreCase(agentInput.strip());
   }
 
   /** B8：超过阈值仍未完成时先行告知「处理中」；纯虚拟线程 + CountDownLatch，同步阻塞语义。 */

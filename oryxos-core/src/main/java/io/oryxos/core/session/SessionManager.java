@@ -34,6 +34,14 @@ public interface SessionManager {
   boolean archive(String sessionId);
 
   /**
+   * 清空对话历史并保持（或恢复为）active——IM 私聊 {@code /new} 用。同一 session_id 保留，避免与 channel:user:profile
+   * 固定键冲突；不等同于 {@link #archive}（归档仍保留正文，下次 getOrCreate 会读回）。
+   *
+   * @return {@code true} 已清空，{@code false} 会话不存在
+   */
+  boolean clearHistory(String sessionId);
+
+  /**
    * 列出最近会话的摘要（按 last_active_at 倒序取前 {@code limit} 条），不含对话正文——供 27 节 GET /api/v1/sessions
    * 与管理台"会话"列表。返回摘要投影而非领域 {@link Session}：领域对象不带 channel/status/时间戳等展示字段。
    */

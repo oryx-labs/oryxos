@@ -105,4 +105,22 @@ class SessionManagerTest {
   void archiveMissingReturnsFalse() {
     assertFalse(manager().archive("web:nobody:default"));
   }
+
+  @Test
+  @DisplayName("clearHistory 清空正文并恢复 active（IM /new）")
+  void clearHistoryEmptiesMessagesAndReactivates() {
+    JpaSessionManager manager = manager();
+    var session = manager.getOrCreate("feishu", "ou_user", "demo-agent");
+    session.appendUser("旧消息", java.util.List.of());
+    manager.save(session);
+    manager.archive(session.sessionId());
+
+    assertTrue(manager.clearHistory(session.sessionId()));
+
+    Session entity = repository.findById(session.sessionId()).orElseThrow();
+    assertEquals("active", entity.getStatus());
+    assertTrue(entity.getArchivedAt() == null);
+    assertEquals("[]", entity.getMessagesJson());
+    assertTrue(manager.get(session.sessionId()).orElseThrow().messages().isEmpty());
+  }
 }

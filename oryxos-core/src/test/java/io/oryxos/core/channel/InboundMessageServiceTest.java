@@ -287,4 +287,33 @@ class InboundMessageServiceTest {
 
     service.onMessage(p2p("m-9", "hi"), adapter); // 不抛出即通过
   }
+
+  @Test
+  @DisplayName("私聊 /new 清空会话历史，不进 Agent")
+  void p2pNewClearsHistoryWithoutAgent() {
+    Session session = new Session("stub:user-1:" + AGENT, AGENT);
+    when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
+    when(sessionManager.clearHistory(session.sessionId())).thenReturn(true);
+
+    service.onMessage(p2p("m-new", " /new "), adapter);
+
+    verify(sessionManager).clearHistory(session.sessionId());
+    verifyNoInteractions(agentService);
+    assertEquals(1, adapter.sent().size());
+    assertEquals(InboundMessageService.NEW_SESSION_REPLY, adapter.sent().get(0).text());
+  }
+
+  @Test
+  @DisplayName("tryClaim 后 onClaimedMessage 不再二次去重")
+  void claimedMessageSkipsSecondDedup() {
+    Session session = new Session("stub:user-1:" + AGENT, AGENT);
+    when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
+    when(agentService.process(eq(session), eq("hi"), anyList())).thenReturn("回答");
+
+    assertTrue(service.tryClaim("stub-chan", "m-claimed"));
+    service.onClaimedMessage(p2p("m-claimed", "hi"), adapter);
+
+    verify(agentService, times(1)).process(eq(session), eq("hi"), anyList());
+    assertEquals(1, adapter.sent().size());
+  }
 }

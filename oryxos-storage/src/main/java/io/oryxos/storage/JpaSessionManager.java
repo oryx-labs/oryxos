@@ -109,6 +109,21 @@ public class JpaSessionManager implements SessionManager {
   }
 
   @Override
+  public boolean clearHistory(String sessionId) {
+    Optional<Session> found = repository.findById(sessionId);
+    if (found.isEmpty()) {
+      return false;
+    }
+    Session entity = found.get();
+    entity.setMessagesJson("[]");
+    entity.setStatus("active");
+    entity.setArchivedAt(null);
+    entity.setLastActiveAt(Instant.now());
+    repository.save(entity);
+    return true;
+  }
+
+  @Override
   public SessionStats stats() {
     int active = (int) repository.countByStatus("active");
     int archived = (int) repository.countByStatus("archived");
