@@ -236,7 +236,7 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
             String replyTo = m.chatKind() == ChatKind.GROUP ? m.messageId() : null;
             java.util.concurrent.CountDownLatch slowWork = null;
             if (needsImageDownload(m)) {
-              // 下载常超过默认「处理中」阈值；计时从下载前开始，避免用户长时间无反馈
+              // 下载前立刻「处理中」：默认 15s 阈值对识图偏长，延迟计时会导致「识别完才提示」
               slowWork = inboundMessageService.beginSlowWork(this, m.chatId(), replyTo);
             }
             try {

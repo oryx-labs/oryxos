@@ -81,13 +81,16 @@ public class InboundMessageService {
   }
 
   /**
-   * 昂贵预处理（如下载图片）开始前启动 B8「处理中」计时。返回的 latch 必须在整条入站链路结束时 {@code countDown}，并交给 {@link
-   * #onClaimedMessage(InboundMessage, InboundChannelAdapter, CountDownLatch)}，避免下载后再开一个提示。
+   * 昂贵预处理（如下载图片）开始前立刻发 B8「处理中」（仍受合并窗约束）。下载+识图常在默认阈值（15s）内结束，若仍走延迟计时，用户会感到「识别完 才提示」。返回的 latch
+   * 必须在整条入站链路结束时 {@code countDown}，并交给 {@link #onClaimedMessage(InboundMessage,
+   * InboundChannelAdapter, CountDownLatch)}，避免推理阶段再开一个提示。
    */
   public CountDownLatch beginSlowWork(
       InboundChannelAdapter replyVia, String chatId, String replyToMessageId) {
     CountDownLatch done = new CountDownLatch(1);
-    scheduleProcessingNotice(done, replyVia, chatId, replyToMessageId);
+    if (shouldSendProcessingNotice(chatId)) {
+      safeReply(replyVia, chatId, PROCESSING_REPLY, replyToMessageId);
+    }
     return done;
   }
 

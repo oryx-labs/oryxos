@@ -333,7 +333,7 @@ class InboundMessageServiceTest {
   }
 
   @Test
-  @DisplayName("beginSlowWork + onClaimedMessage 共享 latch：只提示一次处理中")
+  @DisplayName("beginSlowWork 立即提示处理中，与 onClaimedMessage 共享 latch 不二次提示")
   void slowWorkSharesProcessingNoticeLatch() throws Exception {
     Session session = new Session("stub:user-1:" + AGENT, AGENT);
     when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
@@ -361,13 +361,26 @@ class InboundMessageServiceTest {
         .triggerAsync(anyString(), anyString(), any(), any());
 
     CountDownLatch slow = service.beginSlowWork(adapter, "chat-p2p", null);
+    assertEquals(1, adapter.sent().size());
+    assertEquals(InboundMessageService.PROCESSING_REPLY, adapter.sent().get(0).text());
+
     assertTrue(service.tryClaim("stub-chan", "m-slow"));
     service.onClaimedMessage(p2p("m-slow", "hi"), adapter, slow);
 
     assertTrue(workDone.await(3, TimeUnit.SECONDS));
-    Thread.sleep(100);
+    Thread.sleep(150);
     assertEquals(2, adapter.sent().size());
-    assertEquals(InboundMessageService.PROCESSING_REPLY, adapter.sent().get(0).text());
     assertEquals("慢回答", adapter.sent().get(1).text());
+  }
+
+  @Test
+  @DisplayName("beginSlowWork 合并窗内同 chat 不重复发处理中")
+  void slowWorkCoalescesProcessingNotice() {
+    CountDownLatch first = service.beginSlowWork(adapter, "chat-p2p", null);
+    CountDownLatch second = service.beginSlowWork(adapter, "chat-p2p", null);
+    first.countDown();
+    second.countDown();
+    assertEquals(1, adapter.sent().size());
+    assertEquals(InboundMessageService.PROCESSING_REPLY, adapter.sent().get(0).text());
   }
 }
