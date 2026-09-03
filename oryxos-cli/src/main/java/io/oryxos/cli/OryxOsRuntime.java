@@ -9,6 +9,7 @@ import io.oryxos.core.agent.AgentLoader;
 import io.oryxos.core.agent.AgentScheduler;
 import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.agent.AgentStore;
+import io.oryxos.core.agent.InterruptManager;
 import io.oryxos.core.agent.PromptBuilder;
 import io.oryxos.core.agent.ReActLoop;
 import io.oryxos.core.agent.ScheduledTaskStore;
@@ -81,6 +82,7 @@ import io.oryxos.storage.WebUserRepository;
 import io.oryxos.storage.WebUserService;
 import io.oryxos.tool.ToolRegistry;
 import io.oryxos.tool.builtin.FileTools;
+import io.oryxos.tool.builtin.FormatTools;
 import io.oryxos.tool.builtin.HttpTools;
 import io.oryxos.tool.builtin.InteractionTools;
 import io.oryxos.tool.builtin.NotifyTools;
@@ -790,6 +792,7 @@ public class OryxOsRuntime {
     registry.registerAnnotated(new UtilTools()); // current_time / json_extract（纯计算，无沙箱）
     registry.registerAnnotated(
         new WebSearchTools(sandbox, new DuckDuckGoSearchProvider(restClient, sandbox)));
+    registry.registerAnnotated(new FormatTools()); // format_sql / export_excel（数据格式化）
     // chat → ConsoleUserInteraction；serve/gateway → UnsupportedUserInteraction（见 userInteraction
     // bean）
     registry.registerAnnotated(new InteractionTools(userInteraction));
@@ -887,9 +890,19 @@ public class OryxOsRuntime {
   }
 
   @Bean
+  InterruptManager interruptManager() {
+    return new InterruptManager();
+  }
+
+  @Bean
   ReActLoop reActLoop(
-      PromptBuilder promptBuilder, ProviderService providerService, ToolExecutor toolExecutor) {
-    return new ReActLoop(promptBuilder, providerService, toolExecutor);
+      PromptBuilder promptBuilder,
+      ProviderService providerService,
+      ToolExecutor toolExecutor,
+      InterruptManager interruptManager) {
+    ReActLoop loop = new ReActLoop(promptBuilder, providerService, toolExecutor);
+    loop.setInterruptManager(interruptManager);
+    return loop;
   }
 
   @Bean
@@ -964,15 +977,19 @@ public class OryxOsRuntime {
       SessionManager sessionManager,
       ProfileRegistry profileRegistry,
       AgentExecutionService agentExecutionService,
-      io.oryxos.core.channel.MessageDeduplicator messageDeduplicator) {
-    return new io.oryxos.core.channel.InboundMessageService(
-        agentService,
-        sessionManager,
-        profileRegistry,
-        agentExecutionService,
-        messageDeduplicator,
-        new io.oryxos.core.channel.DefaultInboundMediaEnricher(),
-        java.time.Duration.ofSeconds(15)); // 「处理中」提示阈值（Edge Case：先行告知）
+      io.oryxos.core.channel.MessageDeduplicator messageDeduplicator,
+      InterruptManager interruptManager) {
+    io.oryxos.core.channel.InboundMessageService service =
+        new io.oryxos.core.channel.InboundMessageService(
+            agentService,
+            sessionManager,
+            profileRegistry,
+            agentExecutionService,
+            messageDeduplicator,
+            new io.oryxos.core.channel.DefaultInboundMediaEnricher(),
+            java.time.Duration.ofSeconds(15)); // 「处理中」提示阈值（Edge Case：先行告知）
+    service.setInterruptManager(interruptManager);
+    return service;
   }
 
   /** 渠道出站守卫：渠道自建 HTTP 不被沙箱自动拦截，经此显式复用 http 域名白名单（宪法 VI / 017 R7）。 */

@@ -2,6 +2,7 @@ package io.oryxos.core.channel;
 
 import io.oryxos.core.agent.AgentExecutionService;
 import io.oryxos.core.agent.AgentService;
+import io.oryxos.core.agent.InterruptManager;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.session.Message;
 import io.oryxos.core.session.Session;
@@ -31,12 +32,15 @@ public class InboundMessageService {
   private static final Logger LOG = LoggerFactory.getLogger(InboundMessageService.class);
 
   private static final String DEDUP_KEY_SEPARATOR = ":";
+  private static final String STOP_COMMAND = "/stop";
 
   static final String UNSUPPORTED_TYPE_REPLY = "当前仅支持文本提问，请用文字描述你的问题。";
   static final String AGENT_UNAVAILABLE_REPLY = "Agent 暂不可用（未找到绑定的 Agent），请联系管理员。";
   static final String FAILURE_REPLY = "抱歉，这次处理失败了，请稍后重试或联系管理员。";
   static final String PROCESSING_REPLY = "已收到，正在处理中，请稍候…";
   static final String NEW_SESSION_REPLY = "已开启新会话，之前的对话上下文已清空。";
+  static final String STOP_REPLY = "已发送停止信号，正在执行的任务将在下一轮停止。";
+  static final String STOP_NO_SESSION_REPLY = "当前没有正在执行的任务。";
   private static final String NEW_SESSION_COMMAND = "/new";
 
   /** 飞书等可能对同一意图连推多条不同 message_id；短窗内只确认一次。 */
@@ -54,6 +58,7 @@ public class InboundMessageService {
   private final Duration processingNoticeDelay;
   private final Map<String, Long> recentNewSessionAckMs = new ConcurrentHashMap<>();
   private final Map<String, Long> recentProcessingNoticeMs = new ConcurrentHashMap<>();
+  private InterruptManager interruptManager;
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
@@ -73,6 +78,15 @@ public class InboundMessageService {
     this.deduplicator = deduplicator;
     this.mediaEnricher = mediaEnricher == null ? new DefaultInboundMediaEnricher() : mediaEnricher;
     this.processingNoticeDelay = processingNoticeDelay;
+  }
+
+  /**
+   * 设置中断管理器（可选）。
+   *
+   * @param interruptManager 中断管理器
+   */
+  public void setInterruptManager(InterruptManager interruptManager) {
+    this.interruptManager = interruptManager;
   }
 
   /** 在昂贵预处理（飞书入站图下载等）前占用 message_id。返回 false 表示重复事件，调用方应直接丢弃且勿再下载。 */
@@ -170,6 +184,12 @@ public class InboundMessageService {
       CountDownLatch preprocessingDone,
       String replyTo,
       String agentInput) {
+    // 处理 /stop 命令
+    if (msg.textual() && isStopCommand(agentInput)) {
+      release(preprocessingDone);
+      handleStopCommand(msg, replyVia, replyTo);
+      return true;
+    }
     // B7：不可处理的消息（非文本且无附件）回能力说明，不进推理、不落执行记录
     if (!msg.processable() || agentInput.isBlank()) {
       release(preprocessingDone);
@@ -202,6 +222,27 @@ public class InboundMessageService {
       return true;
     }
     return false;
+  }
+
+  private void handleStopCommand(
+      InboundMessage msg, InboundChannelAdapter replyVia, String replyTo) {
+    if (interruptManager == null) {
+      safeReply(replyVia, msg.chatId(), STOP_NO_SESSION_REPLY, replyTo);
+      return;
+    }
+    String agent = replyVia.boundAgent();
+    if (msg.chatKind() == ChatKind.P2P) {
+      Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
+      interruptManager.interrupt(session.sessionId());
+      safeReply(replyVia, msg.chatId(), STOP_REPLY, replyTo);
+    } else {
+      // 群聊无状态，无法中断
+      safeReply(replyVia, msg.chatId(), STOP_NO_SESSION_REPLY, replyTo);
+    }
+  }
+
+  private boolean isStopCommand(String text) {
+    return STOP_COMMAND.equalsIgnoreCase(text.trim());
   }
 
   private InferenceJob buildInference(
