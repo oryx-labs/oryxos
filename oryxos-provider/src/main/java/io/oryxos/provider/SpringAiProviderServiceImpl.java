@@ -149,7 +149,7 @@ public class SpringAiProviderServiceImpl implements ProviderService {
           try {
             return invokeChat(sessionId, profile, withoutRemote, attempt, def);
           } catch (RuntimeException e2) {
-            if (!(hasUserMedia(withoutRemote) && isClientError(e2))) {
+            if (!canRetryWithoutAllMedia(withoutRemote, e2)) {
               throw e2;
             }
             e = e2;
@@ -288,7 +288,8 @@ public class SpringAiProviderServiceImpl implements ProviderService {
             return invokeChatStream(
                 sessionId, profile, withoutRemote, onToken, attempt, def, contentStarted);
           } catch (RuntimeException e2) {
-            if (contentStarted[0] || !(hasUserMedia(withoutRemote) && isClientError(e2))) {
+            boolean alreadyStreaming = contentStarted[0];
+            if (alreadyStreaming || !canRetryWithoutAllMedia(withoutRemote, e2)) {
               throw e2;
             }
             e = e2;
@@ -666,6 +667,11 @@ public class SpringAiProviderServiceImpl implements ProviderService {
 
   private static boolean hasUserMedia(ProviderRequest request) {
     return countUserMedia(request) > 0;
+  }
+
+  /** multimodal 二次降级（剥全部 media）前：请求仍有 user media 且错误为可剥的客户端 4xx。 */
+  private static boolean canRetryWithoutAllMedia(ProviderRequest request, RuntimeException error) {
+    return hasUserMedia(request) && isClientError(error);
   }
 
   private static int countUserMedia(ProviderRequest request) {
