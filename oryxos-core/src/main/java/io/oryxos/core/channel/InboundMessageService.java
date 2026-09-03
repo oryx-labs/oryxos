@@ -149,13 +149,16 @@ public class InboundMessageService {
             job.inference().run();
           } catch (RuntimeException e) {
             // B6：失败以可读消息告知用户（不含堆栈），异常继续上抛让执行记录记为失败
-            safeReply(replyVia, msg.chatId(), FAILURE_REPLY, replyTo);
+            if (!job.streamed()) {
+              safeReply(replyVia, msg.chatId(), FAILURE_REPLY, replyTo);
+            }
             throw e;
           } finally {
             done.countDown();
           }
         });
-    if (preprocessingDone == null) {
+    // 进度流已发「思考中」卡片时不再发延迟「处理中」文本，避免双提示
+    if (preprocessingDone == null && !job.streamed()) {
       scheduleProcessingNotice(done, replyVia, msg.chatId(), replyTo);
     }
   }
@@ -211,21 +214,66 @@ public class InboundMessageService {
     if (msg.chatKind() == ChatKind.P2P) {
       // B2：私聊按「渠道 + 用户 + Agent」维持连续会话——隔离/历史窗口/并发锁全部由既有会话底座承担
       Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
-      return new InferenceJob(
+      return progressOrPlain(
+          replyVia,
+          msg.chatId(),
+          replyTo,
           session.sessionId(),
-          () ->
-              replyVia.sendReply(
-                  msg.chatId(), agentService.process(session, agentInput, media), null));
+          () -> agentService.process(session, agentInput, media),
+          (stream) -> agentService.process(session, agentInput, media, stream));
     }
     // B3：群聊每次 @ 为独立无状态问答，不落 sessions 表；渠道前缀让审计可辨（B10）
     String groupSessionId = msg.channelType() + "-group:" + UUID.randomUUID();
-    return new InferenceJob(
+    return progressOrPlain(
+        replyVia,
+        msg.chatId(),
+        replyTo,
         groupSessionId,
-        () ->
-            replyVia.sendReply(
-                msg.chatId(),
-                agentService.processStateless(agent, agentInput, media, groupSessionId),
-                replyTo));
+        () -> agentService.processStateless(agent, agentInput, media, groupSessionId),
+        (stream) ->
+            agentService.processStateless(agent, agentInput, media, groupSessionId, stream));
+  }
+
+  private InferenceJob progressOrPlain(
+      InboundChannelAdapter replyVia,
+      String chatId,
+      String replyTo,
+      String sessionId,
+      java.util.function.Supplier<String> plainInference,
+      java.util.function.Function<io.oryxos.core.agent.StreamListener, String> streamedInference) {
+    var streamOpt = replyVia.openProgressStream(chatId, replyTo);
+    if (streamOpt.isEmpty()) {
+      return new InferenceJob(
+          sessionId, () -> replyVia.sendReply(chatId, plainInference.get(), replyTo), false);
+    }
+    InboundProgressStream stream = streamOpt.get();
+    try {
+      stream.start();
+    } catch (RuntimeException e) {
+      LOG.warn("渠道 {} 进度流启动失败，降级整段回复: {}", sanitize(replyVia.name()), sanitize(e.getMessage()));
+      return new InferenceJob(
+          sessionId, () -> replyVia.sendReply(chatId, plainInference.get(), replyTo), false);
+    }
+    return new InferenceJob(
+        sessionId,
+        () -> {
+          try {
+            String reply = streamedInference.apply(stream);
+            stream.finish(reply);
+          } catch (RuntimeException e) {
+            try {
+              stream.fail(FAILURE_REPLY);
+            } catch (RuntimeException failSend) {
+              LOG.warn(
+                  "渠道 {} 进度流失败态更新失败: {}",
+                  sanitize(replyVia.name()),
+                  sanitize(failSend.getMessage()));
+              safeReply(replyVia, chatId, FAILURE_REPLY, replyTo);
+            }
+            throw e;
+          }
+        },
+        true);
   }
 
   private static void release(CountDownLatch latch) {
@@ -234,7 +282,7 @@ public class InboundMessageService {
     }
   }
 
-  private record InferenceJob(String sessionId, Runnable inference) {}
+  private record InferenceJob(String sessionId, Runnable inference, boolean streamed) {}
 
   static boolean isNewSessionCommand(String agentInput) {
     return agentInput != null && NEW_SESSION_COMMAND.equals(agentInput.strip());

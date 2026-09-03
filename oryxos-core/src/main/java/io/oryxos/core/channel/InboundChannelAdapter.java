@@ -1,5 +1,7 @@
 package io.oryxos.core.channel;
 
+import java.util.Optional;
+
 /**
  * 入站 IM 渠道适配器契约：一实例 = 一个平台应用的一条接入（017 FR-010）。
  *
@@ -31,9 +33,20 @@ public interface InboundChannelAdapter {
   /**
    * 发送回复到来源处（FR-007）。实现负责平台上限分段（FR-009）与出站沙箱校验（宪法 VI）。
    *
-   * @param chatId 回复目标（私聊会话或群）
+   * @param chatId 回复目标（私聊/群）
    * @param text 回复正文
    * @param replyToMessageId 非空时引用原消息（群聊必传，使回答与提问可对应）；私聊传 null 直发
    */
   void sendReply(String chatId, String text, String replyToMessageId);
+
+  /**
+   * 可选：打开进度流（如飞书交互卡片实时更新）。默认 empty，编排走整段 {@link #sendReply}。
+   *
+   * @param chatId 回复目标会话
+   * @param replyToMessageId 群聊引用原消息 id；私聊 null
+   */
+  default Optional<InboundProgressStream> openProgressStream(
+      String chatId, String replyToMessageId) {
+    return Optional.empty();
+  }
 }

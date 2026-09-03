@@ -22,7 +22,8 @@
 
 | 权限 | 用途 |
 |------|------|
-| `im:message:send_as_bot`（以应用的身份发消息） | 发送回答 |
+| `im:message:send_as_bot`（以应用的身份发消息） | 发送回答 / 进度卡片 |
+| `im:message`（获取与发送单聊、群组消息）或文档所列「更新消息」类权限 | 流式进度卡片 PATCH 更新（#347） |
 | `im:message.p2p_msg:readonly`（读取用户发给机器人的单聊消息） | 私聊问答 |
 | `im:message.group_at_msg:readonly`（接收群聊中 @ 机器人消息事件） | 群聊 @ 问答 |
 

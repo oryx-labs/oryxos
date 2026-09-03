@@ -220,6 +220,16 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
     active.send(chatId, text, replyToMessageId);
   }
 
+  @Override
+  public java.util.Optional<io.oryxos.core.channel.InboundProgressStream> openProgressStream(
+      String chatId, String replyToMessageId) {
+    FeishuMessageSender active = sender;
+    if (active == null) {
+      return java.util.Optional.empty();
+    }
+    return java.util.Optional.of(new FeishuStreamListener(active, chatId, replyToMessageId));
+  }
+
   /**
    * 事件入口：归一化 → 去重占用 →（需下载时先开「处理中」）→ 图片资源落地 → 编排。去重必须在下载前：飞书平台重推同一 message_id
    * 时，若先下载再去重会白耗带宽。任何异常只留日志——抛出会触发平台重推循环。

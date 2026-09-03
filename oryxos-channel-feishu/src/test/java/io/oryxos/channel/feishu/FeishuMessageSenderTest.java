@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import com.lark.oapi.Client;
 import com.lark.oapi.service.im.v1.model.CreateMessageReq;
 import com.lark.oapi.service.im.v1.model.CreateMessageResp;
+import com.lark.oapi.service.im.v1.model.CreateMessageRespBody;
 import com.lark.oapi.service.im.v1.model.ReplyMessageReq;
 import com.lark.oapi.service.im.v1.model.ReplyMessageResp;
 import io.oryxos.core.channel.OutboundGuard;
@@ -121,5 +122,31 @@ class FeishuMessageSenderTest {
   @DisplayName("textContent JSON 编码正确转义（对照）")
   void textContentEscapes() {
     assertEquals("{\"text\":\"a\\\"b\"}", FeishuMessageSender.textContent("a\"b"));
+  }
+
+  @Test
+  @DisplayName("interactive create 返回 message_id；patch 走 PATCH API")
+  void interactiveCreateAndPatch() throws Exception {
+    CreateMessageRespBody body = new CreateMessageRespBody();
+    body.setMessageId("om_card");
+    CreateMessageResp ok = new CreateMessageResp();
+    ok.setCode(0);
+    ok.setData(body);
+    when(client.im().message().create(any(CreateMessageReq.class))).thenReturn(ok);
+    com.lark.oapi.service.im.v1.model.PatchMessageResp patchOk =
+        new com.lark.oapi.service.im.v1.model.PatchMessageResp();
+    patchOk.setCode(0);
+    when(client.im().message().patch(any(com.lark.oapi.service.im.v1.model.PatchMessageReq.class)))
+        .thenReturn(patchOk);
+
+    String id = sender.sendInteractive("oc_1", "{\"header\":{}}", null);
+    assertEquals("om_card", id);
+    ArgumentCaptor<CreateMessageReq> create = ArgumentCaptor.forClass(CreateMessageReq.class);
+    verify(client.im().message()).create(create.capture());
+    assertEquals("interactive", create.getValue().getCreateMessageReqBody().getMsgType());
+
+    sender.patchInteractive("om_card", "{\"header\":{\"template\":\"green\"}}");
+    verify(client.im().message())
+        .patch(any(com.lark.oapi.service.im.v1.model.PatchMessageReq.class));
   }
 }
