@@ -48,6 +48,16 @@ public final class ImageMime {
     return fromPath(file.toString());
   }
 
+  /** 本地文件是否具备可识别的图片魔数（jpeg/png/gif/webp）；密文或损坏文件为 false。 */
+  public static boolean hasRecognizedMagic(Path file) {
+    return sniffMagic(file) != null;
+  }
+
+  /** 字节头是否为可识别图片魔数。 */
+  public static boolean hasRecognizedMagic(byte[] header) {
+    return sniffMagicBytes(header) != null;
+  }
+
   /** 由路径或 URL 字符串的后缀推断；无后缀则默认 JPEG。 */
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "IMPROPER_UNICODE",
@@ -95,41 +105,47 @@ public final class ImageMime {
       return null;
     }
     try (InputStream in = Files.newInputStream(file)) {
-      byte[] header = in.readNBytes(MAGIC_HEADER_BYTES);
-      if (header.length >= JPEG_MAGIC_MIN
-          && (header[0] & 0xFF) == 0xFF
-          && (header[1] & 0xFF) == 0xD8
-          && (header[2] & 0xFF) == 0xFF) {
-        return IMAGE_JPEG;
-      }
-      if (header.length >= PNG_MAGIC_MIN
-          && header[0] == (byte) 0x89
-          && header[1] == 0x50
-          && header[2] == 0x4E
-          && header[3] == 0x47) {
-        return IMAGE_PNG;
-      }
-      if (header.length >= GIF_MAGIC_MIN
-          && header[0] == 'G'
-          && header[1] == 'I'
-          && header[2] == 'F'
-          && header[3] == '8') {
-        return IMAGE_GIF;
-      }
-      if (header.length >= WEBP_MAGIC_MIN
-          && header[0] == 'R'
-          && header[1] == 'I'
-          && header[2] == 'F'
-          && header[3] == 'F'
-          && header[8] == 'W'
-          && header[9] == 'E'
-          && header[10] == 'B'
-          && header[11] == 'P') {
-        return IMAGE_WEBP;
-      }
-      return null;
+      return sniffMagicBytes(in.readNBytes(MAGIC_HEADER_BYTES));
     } catch (IOException e) {
       return null;
     }
+  }
+
+  private static String sniffMagicBytes(byte[] header) {
+    if (header == null) {
+      return null;
+    }
+    if (header.length >= JPEG_MAGIC_MIN
+        && (header[0] & 0xFF) == 0xFF
+        && (header[1] & 0xFF) == 0xD8
+        && (header[2] & 0xFF) == 0xFF) {
+      return IMAGE_JPEG;
+    }
+    if (header.length >= PNG_MAGIC_MIN
+        && header[0] == (byte) 0x89
+        && header[1] == 0x50
+        && header[2] == 0x4E
+        && header[3] == 0x47) {
+      return IMAGE_PNG;
+    }
+    if (header.length >= GIF_MAGIC_MIN
+        && header[0] == 'G'
+        && header[1] == 'I'
+        && header[2] == 'F'
+        && header[3] == '8') {
+      return IMAGE_GIF;
+    }
+    if (header.length >= WEBP_MAGIC_MIN
+        && header[0] == 'R'
+        && header[1] == 'I'
+        && header[2] == 'F'
+        && header[3] == 'F'
+        && header[8] == 'W'
+        && header[9] == 'E'
+        && header[10] == 'B'
+        && header[11] == 'P') {
+      return IMAGE_WEBP;
+    }
+    return null;
   }
 }

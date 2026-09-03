@@ -62,13 +62,14 @@ class WeComEventNormalizerTest {
     body.put("chattype", "single");
     body.put("msgtype", "image");
     body.putObject("from").put("userid", "u1");
-    body.putObject("image").put("url", "https://x");
+    body.putObject("image").put("url", "https://x").put("aeskey", "AESKEY123");
 
     InboundMessage msg = normalizer.normalize(body).orElseThrow();
     assertFalse(msg.textual());
     assertEquals("", msg.content());
     assertEquals(1, msg.attachments().size());
     assertEquals("https://x", msg.attachments().get(0).url());
+    assertEquals("AESKEY123", msg.attachments().get(0).reference());
   }
 
   @Test

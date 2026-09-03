@@ -116,10 +116,11 @@ final class WeComInboundImageResolver {
 
   private InboundAttachment downloadOrKeep(String messageId, InboundAttachment attachment) {
     String remoteUrl = attachment.url().strip();
+    String aesKey = mediaAesKey(attachment);
     Exception last = null;
     for (int attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
       try {
-        Path file = writeToMediaRoot(messageId, remoteUrl);
+        Path file = writeToMediaRoot(messageId, remoteUrl, aesKey);
         return new InboundAttachment(
             InboundAttachment.TYPE_IMAGE, file.toAbsolutePath().toString(), remoteUrl);
       } catch (IOException | InterruptedException | RuntimeException e) {
@@ -148,7 +149,16 @@ final class WeComInboundImageResolver {
     return attachment;
   }
 
-  private Path writeToMediaRoot(String messageId, String remoteUrl)
+  /** normalizer 把 aeskey 放在 reference；已是 http(s) 的 reference 视为旧远程 URL，不是密钥。 */
+  private static String mediaAesKey(InboundAttachment attachment) {
+    String ref = attachment.reference();
+    if (ref == null || ref.isBlank() || ImageMime.isHttpUrl(ref.strip())) {
+      return null;
+    }
+    return ref.strip();
+  }
+
+  private Path writeToMediaRoot(String messageId, String remoteUrl, String aesKey)
       throws IOException, InterruptedException {
     URI uri = URI.create(remoteUrl);
     if (!isAllowedMediaUri(uri)) {
@@ -165,26 +175,49 @@ final class WeComInboundImageResolver {
     if (bytes == null || bytes.length == 0) {
       throw new IllegalStateException("下载临时文件为空");
     }
+    if (aesKey != null) {
+      bytes = WeComMediaAesDecrypt.decrypt(bytes, aesKey);
+    } else if (!ImageMime.hasRecognizedMagic(bytes)) {
+      throw new IllegalStateException("下载内容非明文图片且消息缺 aeskey，无法解密");
+    }
+    String sniffedMime = mimeFromBytes(bytes);
     String ext = extensionOf(uri.getPath());
+    if (DEFAULT_EXTENSION.equals(ext) && sniffedMime != null) {
+      ext = ImageMime.extensionFor(sniffedMime);
+    }
     Path dir = mediaRoot.resolve(safeSegment(messageId));
     Files.createDirectories(dir);
     String stem = safeSegment(Integer.toHexString(remoteUrl.hashCode()));
     Path target = dir.resolve(stem + ext);
     Files.write(target, bytes);
-    if (DEFAULT_EXTENSION.equals(ext)) {
-      String sniffed = ImageMime.probeFile(target);
-      String betterExt = ImageMime.extensionFor(sniffed);
-      if (!DEFAULT_EXTENSION.equals(betterExt) && !betterExt.equals(ext)) {
-        Path renamed = dir.resolve(stem + betterExt);
-        try {
-          Files.move(target, renamed);
-          return renamed;
-        } catch (IOException moveFailed) {
-          LOG.debug("企微图片重命名扩展名失败，保留原文件: {}", sanitize(moveFailed.getMessage()));
-        }
+    if (!ImageMime.hasRecognizedMagic(target)) {
+      try {
+        Files.deleteIfExists(target);
+      } catch (IOException ignored) {
+        // 尽力删除坏文件
       }
+      throw new IllegalStateException("解密/下载后仍非可识别图片格式");
     }
     return target;
+  }
+
+  private static String mimeFromBytes(byte[] bytes) {
+    if (!ImageMime.hasRecognizedMagic(bytes)) {
+      return null;
+    }
+    if ((bytes[0] & 0xFF) == 0xFF) {
+      return ImageMime.IMAGE_JPEG;
+    }
+    if (bytes[0] == (byte) 0x89) {
+      return ImageMime.IMAGE_PNG;
+    }
+    if (bytes[0] == 'G') {
+      return ImageMime.IMAGE_GIF;
+    }
+    if (bytes[0] == 'R') {
+      return ImageMime.IMAGE_WEBP;
+    }
+    return null;
   }
 
   private static final String HOST_LOOPBACK_IP = "127.0.0.1";

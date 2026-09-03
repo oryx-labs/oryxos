@@ -70,7 +70,13 @@ public class WeComEventNormalizer {
     } else if (MSG_IMAGE.equals(msgtype)) {
       String imageUrl = body.path("image").path("url").asText(null);
       if (imageUrl != null && !imageUrl.isBlank()) {
-        attachments.add(InboundAttachment.imageUrl(imageUrl));
+        String aesKey = body.path("image").path("aeskey").asText(null);
+        if (aesKey != null && !aesKey.isBlank()) {
+          // reference 暂存 aeskey，下载解密后由 resolver 改回远程 URL
+          attachments.add(new InboundAttachment(InboundAttachment.TYPE_IMAGE, imageUrl, aesKey));
+        } else {
+          attachments.add(InboundAttachment.imageUrl(imageUrl));
+        }
       }
     }
     return Optional.of(

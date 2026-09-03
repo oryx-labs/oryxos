@@ -136,8 +136,25 @@ public class SpringAiProviderServiceImpl implements ProviderService {
     try {
       return invokeChat(sessionId, profile, request, attempt, def);
     } catch (RuntimeException e) {
-      // 非 vision 模型拒收图片（常见 400）：剥掉 media 后用 enricher 文本再试一次，避免入站图硬失败
+      // 非 vision / 远程图链失效（常见 400）：先剔 http(s) media 保留本地图；仍失败再剥全部 media
       if (hasUserMedia(request) && isClientError(e)) {
+        ProviderRequest withoutRemote = stripRemoteHttpMedia(request);
+        if (hasUserMedia(withoutRemote)
+            && countUserMedia(withoutRemote) < countUserMedia(request)) {
+          LOG.warn(
+              "multimodal 被拒，去掉远程 URL 图片后重试（provider={} model={}）：{}",
+              sanitize(attempt.provider()),
+              sanitize(attempt.model()),
+              sanitize(e.getMessage()));
+          try {
+            return invokeChat(sessionId, profile, withoutRemote, attempt, def);
+          } catch (RuntimeException e2) {
+            if (!(hasUserMedia(withoutRemote) && isClientError(e2))) {
+              throw e2;
+            }
+            e = e2;
+          }
+        }
         LOG.warn(
             "multimodal 被拒，降级纯文本重试（provider={} model={}）：{}",
             sanitize(attempt.provider()),
@@ -259,6 +276,24 @@ public class SpringAiProviderServiceImpl implements ProviderService {
       return invokeChatStream(sessionId, profile, request, onToken, attempt, def, contentStarted);
     } catch (RuntimeException e) {
       if (!contentStarted[0] && hasUserMedia(request) && isClientError(e)) {
+        ProviderRequest withoutRemote = stripRemoteHttpMedia(request);
+        if (hasUserMedia(withoutRemote)
+            && countUserMedia(withoutRemote) < countUserMedia(request)) {
+          LOG.warn(
+              "multimodal 流式被拒，去掉远程 URL 图片后重试（provider={} model={}）：{}",
+              sanitize(attempt.provider()),
+              sanitize(attempt.model()),
+              sanitize(e.getMessage()));
+          try {
+            return invokeChatStream(
+                sessionId, profile, withoutRemote, onToken, attempt, def, contentStarted);
+          } catch (RuntimeException e2) {
+            if (contentStarted[0] || !(hasUserMedia(withoutRemote) && isClientError(e2))) {
+              throw e2;
+            }
+            e = e2;
+          }
+        }
         LOG.warn(
             "multimodal 流式被拒，降级纯文本重试（provider={} model={}）：{}",
             sanitize(attempt.provider()),
@@ -602,6 +637,10 @@ public class SpringAiProviderServiceImpl implements ProviderService {
         LOG.warn("跳过不可读的本地图片: {}", sanitize(uri));
         return null;
       }
+      if (!ImageMime.hasRecognizedMagic(path)) {
+        LOG.warn("跳过无有效图片魔数的本地文件: {}", sanitize(uri));
+        return null;
+      }
       return new Media(mime, new FileSystemResource(path));
     } catch (RuntimeException e) {
       LOG.warn("构造 Media 失败（uri={}）：{}", sanitize(uri), sanitize(e.getMessage()));
@@ -626,15 +665,48 @@ public class SpringAiProviderServiceImpl implements ProviderService {
   }
 
   private static boolean hasUserMedia(ProviderRequest request) {
+    return countUserMedia(request) > 0;
+  }
+
+  private static int countUserMedia(ProviderRequest request) {
     if (request == null || request.messages() == null) {
-      return false;
+      return 0;
     }
+    int n = 0;
     for (Message message : request.messages()) {
-      if (Message.ROLE_USER.equals(message.role()) && !message.media().isEmpty()) {
-        return true;
+      if (Message.ROLE_USER.equals(message.role())) {
+        n += message.media().size();
       }
     }
-    return false;
+    return n;
+  }
+
+  /** 去掉 http(s) 远程 media，保留本地路径。会话历史里过期 COS/OSS 签名链常导致整包 multimodal 400； 入站通道已落盘的新图应仍可送 Vision。 */
+  private static ProviderRequest stripRemoteHttpMedia(ProviderRequest request) {
+    List<Message> stripped = new ArrayList<>(request.messages().size());
+    for (Message message : request.messages()) {
+      if (message.media().isEmpty()) {
+        stripped.add(message);
+        continue;
+      }
+      List<Message.MediaPart> localOnly =
+          message.media().stream()
+              .filter(p -> p != null && p.uri() != null && !ImageMime.isHttpUrl(p.uri().strip()))
+              .toList();
+      if (localOnly.size() == message.media().size()) {
+        stripped.add(message);
+      } else {
+        stripped.add(
+            new Message(
+                message.role(),
+                message.content(),
+                message.toolName(),
+                message.toolCallId(),
+                message.toolCalls(),
+                localOnly));
+      }
+    }
+    return new ProviderRequest(request.systemPrompt(), stripped, request.availableTools());
   }
 
   private static ProviderRequest stripMedia(ProviderRequest request) {
