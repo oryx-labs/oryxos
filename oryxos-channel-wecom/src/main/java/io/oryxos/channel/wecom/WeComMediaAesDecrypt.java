@@ -11,6 +11,11 @@ import javax.crypto.spec.SecretKeySpec;
  *
  * <p>对齐官方 aibot SDK（{@code decrypt_file}）与文档「多媒体资源解密」。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = "CIPHER_INTEGRITY",
+    justification =
+        "企微长连接多媒体协议固定为 AES-256-CBC（官方文档/SDK），无法改用带完整性的 AEAD；"
+            + "密钥为每条消息独立 aeskey，仅用于解密平台侧已加密的临时资源。")
 final class WeComMediaAesDecrypt {
 
   private static final int AES_BLOCK = 16;
