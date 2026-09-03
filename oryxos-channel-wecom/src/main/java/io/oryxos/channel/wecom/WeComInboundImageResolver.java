@@ -180,11 +180,7 @@ final class WeComInboundImageResolver {
     } else if (!ImageMime.hasRecognizedMagic(bytes)) {
       throw new IllegalStateException("下载内容非明文图片且消息缺 aeskey，无法解密");
     }
-    String sniffedMime = mimeFromBytes(bytes);
     String ext = extensionOf(uri.getPath());
-    if (DEFAULT_EXTENSION.equals(ext) && sniffedMime != null) {
-      ext = ImageMime.extensionFor(sniffedMime);
-    }
     Path dir = mediaRoot.resolve(safeSegment(messageId));
     Files.createDirectories(dir);
     String stem = safeSegment(Integer.toHexString(remoteUrl.hashCode()));
@@ -198,26 +194,19 @@ final class WeComInboundImageResolver {
       }
       throw new IllegalStateException("解密/下载后仍非可识别图片格式");
     }
+    if (DEFAULT_EXTENSION.equals(ext)) {
+      String betterExt = ImageMime.extensionFor(ImageMime.probeFile(target));
+      if (!DEFAULT_EXTENSION.equals(betterExt) && !betterExt.equals(ext)) {
+        Path renamed = dir.resolve(stem + betterExt);
+        try {
+          Files.move(target, renamed);
+          return renamed;
+        } catch (IOException moveFailed) {
+          LOG.debug("企微图片重命名扩展名失败，保留原文件: {}", sanitize(moveFailed.getMessage()));
+        }
+      }
+    }
     return target;
-  }
-
-  private static String mimeFromBytes(byte[] bytes) {
-    if (!ImageMime.hasRecognizedMagic(bytes)) {
-      return null;
-    }
-    if ((bytes[0] & 0xFF) == 0xFF) {
-      return ImageMime.IMAGE_JPEG;
-    }
-    if (bytes[0] == (byte) 0x89) {
-      return ImageMime.IMAGE_PNG;
-    }
-    if (bytes[0] == 'G') {
-      return ImageMime.IMAGE_GIF;
-    }
-    if (bytes[0] == 'R') {
-      return ImageMime.IMAGE_WEBP;
-    }
-    return null;
   }
 
   private static final String HOST_LOOPBACK_IP = "127.0.0.1";
