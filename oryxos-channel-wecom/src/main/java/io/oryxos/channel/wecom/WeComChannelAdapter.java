@@ -5,12 +5,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.oryxos.core.channel.ChannelConfig;
 import io.oryxos.core.channel.ChannelStatus;
 import io.oryxos.core.channel.ChatKind;
-import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundChannelAdapter;
 import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
 import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.profile.ProfileRegistry;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -46,6 +47,8 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
   private static final long RECONNECT_BASE_MS = 2_000L;
   private static final long RECONNECT_MAX_MS = 60_000L;
   private static final int RECONNECT_MAX_SHIFT = 5;
+  private static final String MEDIA_DIR_PREFIX = "oryxos-wecom-media-";
+  private static final String MEDIA_FALLBACK_DIR = "oryxos-wecom-media";
 
   private final ChannelConfig config;
   private final ProfileRegistry profileRegistry;
@@ -56,6 +59,7 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
   private final AtomicReference<Consumer<ObjectNode>> transportRef = new AtomicReference<>();
   private volatile WeComMessageSender sender;
   private volatile WeComEventNormalizer normalizer;
+  private volatile WeComInboundImageResolver imageResolver;
   private volatile ChannelStatus.State state = ChannelStatus.State.DISCONNECTED;
   private volatile String lastError;
   private volatile boolean running;
@@ -129,6 +133,7 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
     transportRef.set(null);
     sender = null;
     normalizer = null;
+    imageResolver = null;
     state = ChannelStatus.State.DISCONNECTED;
   }
 
@@ -174,7 +179,7 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
     wsRef.set(client);
   }
 
-  /** 懒初始化出站组件；重连复用同一 {@link WeComMessageSender} 以保留 chatTypes 映射。 */
+  /** 懒初始化出站/入站组件；重连复用同一 {@link WeComMessageSender} 以保留 chatTypes 映射。 */
   private void ensureOutboundStack() {
     if (normalizer == null) {
       normalizer = new WeComEventNormalizer(config.name());
@@ -192,6 +197,9 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
               guard,
               OUTBOUND_URL,
               WeComMessageSender.DEFAULT_CHUNK_SIZE);
+    }
+    if (imageResolver == null) {
+      imageResolver = new WeComInboundImageResolver(createMediaRoot(), config.name());
     }
   }
 
@@ -300,33 +308,42 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
     }
   }
 
-  /** 有图时即时「处理中」（识图常低于默认 15s 阈值）；文本仍走 onMessage 内延迟提示。 */
+  /** 有图：即时「处理中」→ COS URL 落盘 → 编排（Vision 吃本地文件，避免 provider 直拉临时链失败）。 */
   private void dispatchClaimed(InboundMessage m) {
     if (!inboundMessageService.tryClaim(m.channelName(), m.messageId())) {
       LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(m.channelName()), sanitize(m.messageId()));
       return;
     }
-    if (!hasImage(m)) {
+    if (!WeComInboundImageResolver.hasImage(m)) {
       inboundMessageService.onClaimedMessage(m, this);
       return;
     }
     String replyTo = m.chatKind() == ChatKind.GROUP ? m.messageId() : null;
     CountDownLatch slowWork = inboundMessageService.beginSlowWork(this, m.chatId(), replyTo);
     try {
-      inboundMessageService.onClaimedMessage(m, this, slowWork);
+      WeComInboundImageResolver resolver = imageResolver;
+      InboundMessage enriched = resolver == null ? m : resolver.resolve(m);
+      inboundMessageService.onClaimedMessage(enriched, this, slowWork);
     } catch (RuntimeException e) {
       slowWork.countDown();
       throw e;
     }
   }
 
-  private static boolean hasImage(InboundMessage message) {
-    for (InboundAttachment attachment : message.attachments()) {
-      if (InboundAttachment.TYPE_IMAGE.equals(attachment.type())) {
-        return true;
-      }
+  private Path createMediaRoot() {
+    String channelSeg = WeComInboundImageResolver.safeSegment(config.name());
+    try {
+      Path root = Files.createTempDirectory(MEDIA_DIR_PREFIX);
+      Path channelDir = root.resolve(channelSeg);
+      Files.createDirectories(channelDir);
+      return channelDir;
+    } catch (Exception e) {
+      LOG.warn(
+          "企微渠道 {} 创建图片缓存目录失败（{}），入站图片将保留远程 URL",
+          sanitize(config.name()),
+          sanitize(e.getMessage()));
+      return Path.of(System.getProperty("java.io.tmpdir"), MEDIA_FALLBACK_DIR, channelSeg);
     }
-    return false;
   }
 
   private static String sanitize(String value) {
