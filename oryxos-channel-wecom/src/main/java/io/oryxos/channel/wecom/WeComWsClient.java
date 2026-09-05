@@ -52,6 +52,10 @@ final class WeComWsClient implements WebSocket.Listener {
   private final StringBuilder textBuf = new StringBuilder();
   private final CountDownLatch subscribeLatch = new CountDownLatch(1);
   private volatile String subscribeError;
+
+  /** 承载 WebSocket 的 HttpClient：持有 selector 线程，连接生命周期内必须存活、关闭时必须释放。 */
+  private volatile HttpClient httpClient;
+
   private ScheduledExecutorService heartbeat;
   private ScheduledFuture<?> heartbeatTask;
 
@@ -71,12 +75,26 @@ final class WeComWsClient implements WebSocket.Listener {
   void connectAndSubscribe(Duration timeout) throws Exception {
     closed.set(false);
     HttpClient client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
+    httpClient = client;
     CompletableFuture<WebSocket> future =
         client
             .newWebSocketBuilder()
             .connectTimeout(CONNECT_TIMEOUT)
             .buildAsync(URI.create(wsUrl), this);
-    WebSocket ws = future.get(timeout.toSeconds(), TimeUnit.SECONDS);
+    WebSocket ws;
+    try {
+      ws = future.get(timeout.toSeconds(), TimeUnit.SECONDS);
+    } catch (java.util.concurrent.TimeoutException e) {
+      // 不取消的话迟到连接会变幽灵：onOpen 照发订阅且可能成功，但无人持有引用
+      future.cancel(true);
+      closeQuietly();
+      throw e;
+    } catch (InterruptedException e) {
+      future.cancel(true);
+      closeQuietly();
+      Thread.currentThread().interrupt();
+      throw e;
+    }
     socket.set(ws);
     if (!subscribeLatch.await(timeout.toMillis(), TimeUnit.MILLISECONDS)) {
       closeQuietly();
@@ -120,6 +138,11 @@ final class WeComWsClient implements WebSocket.Listener {
       } catch (RuntimeException ignored) {
         // ignore
       }
+    }
+    HttpClient client = httpClient;
+    httpClient = null;
+    if (client != null) {
+      client.shutdownNow(); // 释放 selector 线程；不关会泄漏至 GC（重连风暴下累积）
     }
   }
 
@@ -226,7 +249,17 @@ final class WeComWsClient implements WebSocket.Listener {
     if (CMD_PONG.equals(cmd)) {
       return true;
     }
-    return cmd.isBlank() && root.has(FIELD_ERRCODE);
+    if (cmd.isBlank() && root.has(FIELD_ERRCODE)) {
+      int code = root.path(FIELD_ERRCODE).asInt(ERRCODE_OK);
+      if (code != ERRCODE_OK) {
+        // 无 cmd + errcode 的帧是平台对 fire-and-forget 发送（aibot_send_msg）的失败回执——
+        // 静默吞掉会让「回复没发出去」零痕迹（对齐 dingtalk #342 的 fail-loud 口径）
+        LOG.warn(
+            "企微平台回执错误 errcode={} errmsg={}", code, sanitize(root.path(FIELD_ERRMSG).asText("")));
+      }
+      return true;
+    }
+    return false;
   }
 
   private void startHeartbeat() {

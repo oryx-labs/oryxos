@@ -20,7 +20,6 @@ import io.oryxos.core.channel.InboundMessageService;
 import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.profile.ProfileRegistry;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -49,7 +48,6 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
   private static final String BOT_INFO_PATH = "/open-apis/bot/v3/info";
   private static final String BOT_OPEN_ID_FIELD = "open_id";
   private static final String MEDIA_DIR_PREFIX = "oryxos-feishu-media-";
-  private static final String MEDIA_FALLBACK_DIR = "oryxos-feishu-media";
   private static final int HTTP_OK = 200;
   private static final long READY_TIMEOUT_MS = 15_000;
   private static final long READY_PROBE_TIMEOUT_MS = 50;
@@ -245,8 +243,8 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
             }
             String replyTo = m.chatKind() == ChatKind.GROUP ? m.messageId() : null;
             java.util.concurrent.CountDownLatch slowWork = null;
-            if (needsImageDownload(m)) {
-              // 下载前立刻「处理中」：默认 15s 阈值对识图偏长，延迟计时会导致「识别完才提示」
+            if (needsMediaDownload(m)) {
+              // 下载前立刻「处理中」：默认 15s 阈值对识图/落盘偏长，延迟计时会导致「识别完才提示」
               slowWork = inboundMessageService.beginSlowWork(this, m.chatId(), replyTo);
             }
             try {
@@ -269,17 +267,18 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
     }
   }
 
-  private static boolean needsImageDownload(InboundMessage message) {
+  private static boolean needsMediaDownload(InboundMessage message) {
     for (InboundAttachment attachment : message.attachments()) {
-      if (isUnresolvedImageAttachment(attachment)) {
+      if (isUnresolvedMediaAttachment(attachment)) {
         return true;
       }
     }
     return false;
   }
 
-  private static boolean isUnresolvedImageAttachment(InboundAttachment attachment) {
-    if (!InboundAttachment.TYPE_IMAGE.equals(attachment.type())) {
+  private static boolean isUnresolvedMediaAttachment(InboundAttachment attachment) {
+    String type = attachment.type();
+    if (!InboundAttachment.TYPE_IMAGE.equals(type) && !InboundAttachment.TYPE_FILE.equals(type)) {
       return false;
     }
     if (attachment.url() != null && !attachment.url().isBlank()) {
@@ -288,22 +287,9 @@ public class FeishuChannelAdapter implements InboundChannelAdapter {
     return attachment.reference() != null && !attachment.reference().isBlank();
   }
 
-  /** 入站图片落盘目录：进程临时目录下按渠道隔离；失败不阻断 start（解析器会降级保留 image_key）。 */
+  /** 入站媒体落盘：优先 {@code .oryxos/inbound-media}，失败回退临时目录。 */
   private Path createMediaRoot() {
-    String channelSeg = FeishuInboundImageResolver.safeSegment(config.name());
-    try {
-      // 前缀必须是常量字面量：SpotBugs 视 createTempDirectory(userInput+…) 为 PATH_TRAVERSAL_IN
-      Path root = Files.createTempDirectory(MEDIA_DIR_PREFIX);
-      Path channelDir = root.resolve(channelSeg);
-      Files.createDirectories(channelDir);
-      return channelDir;
-    } catch (Exception e) {
-      LOG.warn(
-          "飞书渠道 {} 创建图片缓存目录失败（{}），入站图片将保留 image_key",
-          sanitize(config.name()),
-          sanitize(e.getMessage()));
-      return Path.of(System.getProperty("java.io.tmpdir"), MEDIA_FALLBACK_DIR, channelSeg);
-    }
+    return io.oryxos.core.channel.InboundMediaRoots.forChannel(config.name(), MEDIA_DIR_PREFIX);
   }
 
   /**

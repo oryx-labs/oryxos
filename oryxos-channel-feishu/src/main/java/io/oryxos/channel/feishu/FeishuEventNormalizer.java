@@ -31,6 +31,9 @@ public class FeishuEventNormalizer {
   private static final String CHAT_TYPE_P2P = "p2p";
   private static final String MSG_TYPE_TEXT = "text";
   private static final String MSG_TYPE_IMAGE = "image";
+  private static final String MSG_TYPE_FILE = "file";
+  private static final String MSG_TYPE_AUDIO = "audio";
+  private static final String MSG_TYPE_MEDIA = "media";
   private static final String MENTIONED_TYPE_BOT = "bot";
 
   private final String channelName;
@@ -65,6 +68,20 @@ public class FeishuEventNormalizer {
     String content =
         textual ? stripMentions(extractText(message.getContent()), message.getMentions()) : "";
     List<InboundAttachment> attachments = extractAttachments(message);
+    if (!textual
+        && attachments.isEmpty()
+        && message.getMessageType() != null
+        && !message.getMessageType().isBlank()
+        && !MSG_TYPE_TEXT.equals(message.getMessageType())
+        && !MSG_TYPE_IMAGE.equals(message.getMessageType())
+        && !MSG_TYPE_FILE.equals(message.getMessageType())
+        && !MSG_TYPE_AUDIO.equals(message.getMessageType())
+        && !MSG_TYPE_MEDIA.equals(message.getMessageType())) {
+      LOG.info(
+          "飞书收到暂不支持的消息类型 message_type={} message_id={}",
+          sanitize(message.getMessageType()),
+          sanitize(message.getMessageId()));
+    }
     return Optional.of(
         new InboundMessage(
             CHANNEL_TYPE,
@@ -80,18 +97,45 @@ public class FeishuEventNormalizer {
   }
 
   private List<InboundAttachment> extractAttachments(EventMessage message) {
-    if (!MSG_TYPE_IMAGE.equals(message.getMessageType())) {
-      return List.of();
+    String msgType = message.getMessageType();
+    if (MSG_TYPE_IMAGE.equals(msgType)) {
+      String imageKey = extractImageKey(message.getContent());
+      if (imageKey == null || imageKey.isBlank()) {
+        return List.of();
+      }
+      return List.of(InboundAttachment.imageReference(imageKey));
     }
-    String imageKey = extractImageKey(message.getContent());
-    if (imageKey == null || imageKey.isBlank()) {
-      return List.of();
+    if (MSG_TYPE_FILE.equals(msgType)
+        || MSG_TYPE_AUDIO.equals(msgType)
+        || MSG_TYPE_MEDIA.equals(msgType)) {
+      String fileKey = extractFileKey(message.getContent());
+      if (fileKey == null || fileKey.isBlank()) {
+        return List.of();
+      }
+      if (MSG_TYPE_AUDIO.equals(msgType)) {
+        return List.of(InboundAttachment.audioReference(fileKey));
+      }
+      if (MSG_TYPE_MEDIA.equals(msgType)) {
+        String fileName = extractJsonStringField(message.getContent(), "file_name");
+        return List.of(InboundAttachment.videoReference(fileKey, fileName));
+      }
+      String fileName = extractJsonStringField(message.getContent(), "file_name");
+      return List.of(InboundAttachment.fileReference(fileKey, fileName));
     }
-    return List.of(InboundAttachment.imageReference(imageKey));
+    return List.of();
   }
 
   /** 图片消息 content 是 JSON：{"image_key":"img_xxx"}。 */
   static String extractImageKey(String contentJson) {
+    return extractJsonStringField(contentJson, "image_key");
+  }
+
+  /** 文件/语音消息 content 是 JSON：{"file_key":"file_xxx",...}。 */
+  static String extractFileKey(String contentJson) {
+    return extractJsonStringField(contentJson, "file_key");
+  }
+
+  private static String extractJsonStringField(String contentJson, String field) {
     if (contentJson == null || contentJson.isBlank()) {
       return null;
     }
@@ -100,10 +144,10 @@ public class FeishuEventNormalizer {
       if (!root.isJsonObject()) {
         return null;
       }
-      JsonElement key = root.getAsJsonObject().get("image_key");
+      JsonElement key = root.getAsJsonObject().get(field);
       return key == null || key.isJsonNull() ? null : key.getAsString();
     } catch (RuntimeException e) {
-      LOG.warn("飞书图片消息 content 解析失败，按无附件处理");
+      LOG.warn("飞书消息 content JSON 解析失败，按无附件字段处理");
       return null;
     }
   }
@@ -167,5 +211,9 @@ public class FeishuEventNormalizer {
     }
     // 剥离后可能留下多余空白，压缩为单空格
     return result.replaceAll("\\s+", " ").strip();
+  }
+
+  private static String sanitize(String value) {
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 }

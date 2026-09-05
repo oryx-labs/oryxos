@@ -4,10 +4,17 @@ import com.lark.oapi.Client;
 import com.lark.oapi.service.im.v1.model.GetMessageResourceReq;
 import com.lark.oapi.service.im.v1.model.GetMessageResourceResp;
 import io.oryxos.core.channel.InboundAttachment;
+import io.oryxos.core.channel.InboundMediaJanitor;
+import io.oryxos.core.channel.InboundMediaLimits;
+import io.oryxos.core.channel.InboundMediaPaths;
 import io.oryxos.core.channel.InboundMessage;
+import io.oryxos.core.channel.LimitedMediaWriter;
 import io.oryxos.core.session.ImageMime;
+import io.oryxos.core.session.InboundMediaExt;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,24 +34,31 @@ final class FeishuInboundImageResolver {
   private static final Logger LOG = LoggerFactory.getLogger(FeishuInboundImageResolver.class);
 
   private static final String RESOURCE_TYPE_IMAGE = "image";
+  private static final String RESOURCE_TYPE_FILE = "file";
   private static final String DEFAULT_EXTENSION = ".bin";
-  private static final String FALLBACK_SEGMENT = "x";
   private static final String SAFE_EXTENSION_PATTERN = "\\.[a-z0-9]{1,8}";
-  private static final char PATH_SAFE_REPLACEMENT = '_';
-  private static final int MAX_SEGMENT_LEN = 96;
   private static final int DOWNLOAD_ATTEMPTS = 2;
 
   private final Client client;
   private final Path mediaRoot;
   private final String channelName;
+  private final InboundMediaJanitor janitor;
 
   FeishuInboundImageResolver(Client client, Path mediaRoot, String channelName) {
+    this(client, mediaRoot, channelName, InboundMediaJanitor.fromEnv());
+  }
+
+  /** 单测可注入 janitor。 */
+  FeishuInboundImageResolver(
+      Client client, Path mediaRoot, String channelName, InboundMediaJanitor janitor) {
     this.client = client;
     this.mediaRoot = mediaRoot;
     this.channelName = channelName;
+    this.janitor = janitor == null ? InboundMediaJanitor.fromEnv() : janitor;
   }
 
   InboundMessage resolve(InboundMessage message) {
+    janitor.sweepIfDue(mediaRoot);
     if (message.attachments().isEmpty()) {
       return message;
     }
@@ -76,14 +90,32 @@ final class FeishuInboundImageResolver {
   }
 
   private static boolean needsDownload(InboundAttachment attachment) {
-    return InboundAttachment.TYPE_IMAGE.equals(attachment.type())
-        && (attachment.url() == null || attachment.url().isBlank())
-        && attachment.reference() != null
-        && !attachment.reference().isBlank();
+    if (attachment.reference() == null || attachment.reference().isBlank()) {
+      return false;
+    }
+    if (attachment.url() != null && !attachment.url().isBlank()) {
+      return false;
+    }
+    String type = attachment.type();
+    return InboundAttachment.TYPE_IMAGE.equals(type)
+        || InboundAttachment.TYPE_FILE.equals(type)
+        || InboundAttachment.TYPE_AUDIO.equals(type)
+        || InboundAttachment.TYPE_VIDEO.equals(type);
   }
 
   private InboundAttachment downloadOrKeep(String messageId, InboundAttachment attachment) {
-    String imageKey = attachment.reference();
+    String fileKey = attachment.reference();
+    boolean fileLike =
+        InboundAttachment.TYPE_FILE.equals(attachment.type())
+            || InboundAttachment.TYPE_AUDIO.equals(attachment.type())
+            || InboundAttachment.TYPE_VIDEO.equals(attachment.type());
+    String resourceType = fileLike ? RESOURCE_TYPE_FILE : RESOURCE_TYPE_IMAGE;
+    String kind =
+        InboundAttachment.TYPE_AUDIO.equals(attachment.type())
+            ? "语音"
+            : (InboundAttachment.TYPE_VIDEO.equals(attachment.type())
+                ? "视频"
+                : (fileLike ? "文件" : "图片"));
     Exception last = null;
     for (int attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
       try {
@@ -94,32 +126,34 @@ final class FeishuInboundImageResolver {
                 .get(
                     GetMessageResourceReq.newBuilder()
                         .messageId(messageId)
-                        .fileKey(imageKey)
-                        .type(RESOURCE_TYPE_IMAGE)
+                        .fileKey(fileKey)
+                        .type(resourceType)
                         .build());
         if (resp == null || !resp.success() || resp.getData() == null) {
           LOG.warn(
-              "飞书渠道 {} 下载图片失败（messageId={}, imageKey={}, code={}, msg={}），保留 image_key",
+              "飞书渠道 {} 下载{}失败（messageId={}, key={}, code={}, msg={}），保留原引用",
               sanitize(channelName),
+              sanitize(kind),
               sanitize(messageId),
-              sanitize(imageKey),
+              sanitize(fileKey),
               resp == null ? -1 : resp.getCode(),
               sanitize(resp == null ? null : resp.getMsg()));
           return attachment;
         }
-        Path file = writeToMediaRoot(messageId, imageKey, resp);
+        Path path = writeToMediaRoot(messageId, fileKey, resp, fileLike);
         return new InboundAttachment(
-            InboundAttachment.TYPE_IMAGE, file.toAbsolutePath().toString(), imageKey);
+            attachment.type(), path.toAbsolutePath().toString(), fileKey, attachment.fileName());
       } catch (Exception e) {
         last = e;
         if (attempt < DOWNLOAD_ATTEMPTS && isTransientTimeout(e)) {
           LOG.warn(
-              "飞书渠道 {} 下载图片超时重试 {}/{}（messageId={}, imageKey={}）：{}",
+              "飞书渠道 {} 下载{}超时重试 {}/{}（messageId={}, key={}）：{}",
               sanitize(channelName),
+              sanitize(kind),
               attempt,
               DOWNLOAD_ATTEMPTS,
               sanitize(messageId),
-              sanitize(imageKey),
+              sanitize(fileKey),
               sanitize(e.getMessage()));
           continue;
         }
@@ -127,10 +161,11 @@ final class FeishuInboundImageResolver {
       }
     }
     LOG.warn(
-        "飞书渠道 {} 下载图片异常（messageId={}, imageKey={}）：{}，保留 image_key",
+        "飞书渠道 {} 下载{}异常（messageId={}, key={}）：{}，保留原引用",
         sanitize(channelName),
+        sanitize(kind),
         sanitize(messageId),
-        sanitize(imageKey),
+        sanitize(fileKey),
         sanitize(last == null ? null : last.getMessage()));
     return attachment;
   }
@@ -152,22 +187,22 @@ final class FeishuInboundImageResolver {
     return false;
   }
 
-  private Path writeToMediaRoot(String messageId, String imageKey, GetMessageResourceResp resp)
+  private Path writeToMediaRoot(
+      String messageId, String fileKey, GetMessageResourceResp resp, boolean fileAttachment)
       throws IOException {
     String fileName = resp.getFileName();
     String ext = extensionOf(fileName);
     Path dir = mediaRoot.resolve(safeSegment(messageId));
     Files.createDirectories(dir);
-    Path target = dir.resolve(safeSegment(imageKey) + ext);
-    try (OutputStream out = Files.newOutputStream(target)) {
-      resp.getData().writeTo(out);
-    }
-    // 飞书常不给后缀（落成 .bin）：用魔数改成正确扩展名，便于 MIME / vision
-    if (DEFAULT_EXTENSION.equals(ext)) {
+    Path target = dir.resolve(safeSegment(fileKey) + ext);
+    janitor.ensureQuotaOrThrow(mediaRoot);
+    writeLimitedResource(resp.getData(), target);
+    // 图片常无后缀：用魔数改扩展名；文件无后缀时嗅探 PDF
+    if (!fileAttachment && DEFAULT_EXTENSION.equals(ext)) {
       String sniffed = ImageMime.probeFile(target);
       String betterExt = ImageMime.extensionFor(sniffed);
       if (!DEFAULT_EXTENSION.equals(betterExt) && !betterExt.equals(ext)) {
-        Path renamed = dir.resolve(safeSegment(imageKey) + betterExt);
+        Path renamed = dir.resolve(safeSegment(fileKey) + betterExt);
         try {
           Files.move(target, renamed);
           return renamed;
@@ -175,8 +210,36 @@ final class FeishuInboundImageResolver {
           LOG.debug("飞书图片重命名扩展名失败，保留原文件: {}", sanitize(moveFailed.getMessage()));
         }
       }
+    } else if (fileAttachment) {
+      String better = InboundMediaExt.betterFileExtension(target, ext);
+      if (better != null) {
+        Path renamed = dir.resolve(safeSegment(fileKey) + better);
+        try {
+          Files.move(target, renamed);
+          return renamed;
+        } catch (IOException moveFailed) {
+          LOG.debug("飞书文件 PDF 扩展名重命名失败，保留原文件: {}", sanitize(moveFailed.getMessage()));
+        }
+      }
     }
     return target;
+  }
+
+  /**
+   * SDK {@code getData()} 为 {@link ByteArrayOutputStream}；经 {@link LimitedMediaWriter#copyLimited}
+   * 限长落盘。
+   */
+  private static void writeLimitedResource(ByteArrayOutputStream data, Path target)
+      throws IOException {
+    if (data == null) {
+      throw new IOException("下载临时文件为空");
+    }
+    if (data.size() > InboundMediaLimits.MAX_FILE_BYTES) {
+      throw new IOException("入站文件超过上限 " + InboundMediaLimits.MAX_FILE_BYTES + " 字节");
+    }
+    try (InputStream in = new ByteArrayInputStream(data.toByteArray())) {
+      LimitedMediaWriter.copyLimited(in, target, InboundMediaLimits.MAX_FILE_BYTES);
+    }
   }
 
   private static String extensionOf(String fileName) {
@@ -195,22 +258,11 @@ final class FeishuInboundImageResolver {
   }
 
   static String safeSegment(String raw) {
-    if (raw == null || raw.isBlank()) {
-      return FALLBACK_SEGMENT;
-    }
-    String cleaned = raw.replaceAll("[^a-zA-Z0-9._-]", String.valueOf(PATH_SAFE_REPLACEMENT));
-    if (cleaned.length() > MAX_SEGMENT_LEN) {
-      cleaned = cleaned.substring(0, MAX_SEGMENT_LEN);
-    }
-    if (cleaned.isBlank() || cleaned.chars().allMatch(ch -> ch == PATH_SAFE_REPLACEMENT)) {
-      return FALLBACK_SEGMENT;
-    }
-    return cleaned;
+    return InboundMediaPaths.safeSegment(raw);
   }
 
   private static String sanitize(String value) {
-    return value == null
-        ? ""
-        : value.replace('\r', PATH_SAFE_REPLACEMENT).replace('\n', PATH_SAFE_REPLACEMENT);
+    // 内联替换：SpotBugs CRLF_INJECTION_LOGS 需在本类内可见的 \r/\n 清洗
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 }

@@ -39,6 +39,24 @@
     </suppress>
     <suppress>
         <notes><![CDATA[
+        Spring Boot 3.5.x pins Spring Framework 6.2.19. OSS fix requires Framework 7.0.9
+        (Boot 4); 6.2.20+ is enterprise-only for this advisory line.
+
+        CVE-2026-47890: SSE stream corruption when rendering view fragments. OryxOS SSE
+        (SseWriter / TEXT_EVENT_STREAM) emits structured JSON/text payloads only; no
+        view-fragment rendering over SSE.
+
+        CVE-2026-47891: WebFlux Jaxb2XmlDecoder / Aalto maxInMemorySize. OryxOS does not
+        use Spring WebFlux XML decoding (MVC @RestController only).
+
+        Remove when upgrading to Spring Boot 4 / Spring Framework 7.0.9+.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework/.*@6\.2\.19$</packageUrl>
+        <cve>CVE-2026-47890</cve>
+        <cve>CVE-2026-47891</cve>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
         CVE-2026-59270: Spring Security embedded UnboundID LDAP (UnboundIdContainer) binds
         admin DN on all interfaces. OryxOS does not use spring-ldap embedded / UnboundIdContainer
         (no matches in codebase). Dependency-Check flags spring-security-crypto via CPE.

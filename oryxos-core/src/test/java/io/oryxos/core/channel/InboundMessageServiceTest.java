@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentMatchers.startsWith;
@@ -18,6 +19,7 @@ import static org.mockito.Mockito.when;
 
 import io.oryxos.core.agent.AgentExecutionService;
 import io.oryxos.core.agent.AgentService;
+import io.oryxos.core.agent.InterruptManager;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.session.Session;
@@ -26,6 +28,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,6 +42,7 @@ class InboundMessageServiceTest {
   private SessionManager sessionManager;
   private ProfileRegistry profileRegistry;
   private AgentExecutionService executionService;
+  private InterruptManager interruptManager;
   private StubChannelAdapter adapter;
   private InboundMessageService service;
 
@@ -48,6 +52,7 @@ class InboundMessageServiceTest {
     sessionManager = mock(SessionManager.class);
     profileRegistry = mock(ProfileRegistry.class);
     executionService = mock(AgentExecutionService.class);
+    interruptManager = mock(InterruptManager.class);
     adapter = new StubChannelAdapter("stub-chan", AGENT);
     service =
         new InboundMessageService(
@@ -57,7 +62,8 @@ class InboundMessageServiceTest {
             executionService,
             new MessageDeduplicator(),
             null,
-            Duration.ofMillis(120));
+            Duration.ofMillis(120),
+            interruptManager);
     when(profileRegistry.get(AGENT)).thenReturn(Optional.of(mock(Profile.class)));
     // 默认：triggerAsync 同步执行 work（吞掉 work 异常，模拟真实实现里的记录失败不上抛）
     doAnswer(
@@ -210,6 +216,31 @@ class InboundMessageServiceTest {
 
     verify(agentService).process(eq(session), anyString(), anyList());
     assertEquals("图片已收到", adapter.sent().get(0).text());
+  }
+
+  @Test
+  @DisplayName("B7c: 文件附件消息进入 Agent 编排")
+  void fileAttachmentProcessed() {
+    InboundMessage file =
+        new InboundMessage(
+            "stub",
+            "stub-chan",
+            "m-5c",
+            ChatKind.P2P,
+            "user-1",
+            "chat-p2p",
+            "",
+            false,
+            false,
+            java.util.List.of(InboundAttachment.fileUrl("C:/tmp/report.pdf")));
+    Session session = new Session("stub:user-1:" + AGENT, AGENT);
+    when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
+    when(agentService.process(eq(session), anyString(), anyList())).thenReturn("文件已收到");
+
+    service.onMessage(file, adapter);
+
+    verify(agentService).process(eq(session), contains("report.pdf"), anyList());
+    assertEquals("文件已收到", adapter.sent().get(0).text());
   }
 
   @Test
@@ -382,5 +413,98 @@ class InboundMessageServiceTest {
     second.countDown();
     assertEquals(1, adapter.sent().size());
     assertEquals(InboundMessageService.PROCESSING_REPLY, adapter.sent().get(0).text());
+  }
+
+  @Test
+  @DisplayName("空闲 /stop 回复无进行中任务")
+  void stopWithNoActiveRun() {
+    service.onMessage(p2p("m-stop-idle", "/stop"), adapter);
+
+    assertEquals(1, adapter.sent().size());
+    assertEquals(InboundMessageService.STOP_NO_SESSION_REPLY, adapter.sent().get(0).text());
+    verify(interruptManager, never()).interrupt(any());
+    verifyNoInteractions(agentService);
+  }
+
+  @Test
+  @DisplayName("群聊进行中 /stop 中断临时 sessionId")
+  void groupStopInterruptsActiveRun() throws Exception {
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    AtomicReference<String> groupSessionId = new AtomicReference<>();
+    when(agentService.processStateless(eq(AGENT), eq("慢问题"), anyList(), startsWith("stub-group:")))
+        .thenAnswer(
+            inv -> {
+              groupSessionId.set(inv.getArgument(3));
+              started.countDown();
+              assertTrue(release.await(3, TimeUnit.SECONDS));
+              return "晚到的回答";
+            });
+    doAnswer(
+            inv -> {
+              Thread.ofVirtual()
+                  .start(
+                      () -> {
+                        try {
+                          ((Runnable) inv.getArgument(3)).run();
+                        } catch (RuntimeException ignored) {
+                          // ignore
+                        }
+                      });
+              return 1L;
+            })
+        .when(executionService)
+        .triggerAsync(anyString(), anyString(), any(), any());
+
+    service.onMessage(group("m-grp-slow", "慢问题"), adapter);
+    assertTrue(started.await(3, TimeUnit.SECONDS));
+
+    service.onMessage(group("m-grp-stop", "/stop"), adapter);
+
+    verify(interruptManager).interrupt(eq(groupSessionId.get()));
+    assertTrue(
+        adapter.sent().stream().anyMatch(s -> InboundMessageService.STOP_REPLY.equals(s.text())));
+    release.countDown();
+  }
+
+  @Test
+  @DisplayName("私聊进行中 /stop 中断持久 sessionId")
+  void p2pStopInterruptsActiveRun() throws Exception {
+    Session session = new Session("stub:user-1:" + AGENT, AGENT);
+    when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
+    CountDownLatch started = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    when(agentService.process(eq(session), eq("慢问题"), anyList()))
+        .thenAnswer(
+            inv -> {
+              started.countDown();
+              assertTrue(release.await(3, TimeUnit.SECONDS));
+              return "晚到的回答";
+            });
+    doAnswer(
+            inv -> {
+              Thread.ofVirtual()
+                  .start(
+                      () -> {
+                        try {
+                          ((Runnable) inv.getArgument(3)).run();
+                        } catch (RuntimeException ignored) {
+                          // ignore
+                        }
+                      });
+              return 1L;
+            })
+        .when(executionService)
+        .triggerAsync(anyString(), anyString(), any(), any());
+
+    service.onMessage(p2p("m-p2p-slow", "慢问题"), adapter);
+    assertTrue(started.await(3, TimeUnit.SECONDS));
+
+    service.onMessage(p2p("m-p2p-stop", "/stop"), adapter);
+
+    verify(interruptManager).interrupt(eq(session.sessionId()));
+    assertTrue(
+        adapter.sent().stream().anyMatch(s -> InboundMessageService.STOP_REPLY.equals(s.text())));
+    release.countDown();
   }
 }

@@ -21,16 +21,18 @@ class WeComProgressStreamTest {
   }
 
   @Test
-  @DisplayName("start 发思考占位；finish 再发终态；token 不刷屏")
+  @DisplayName("start 发思考占位；首个 tool 发一条进度；再 finish；token 不刷屏")
   void startFinishIgnoresTokens() {
     stream.start();
     stream.onToken("a");
     stream.onToolStart("http_get");
+    stream.onToolStart("read_file");
     stream.finish("最终答案");
 
     verify(sender).send(eq("chat-1"), eq(WeComProgressStream.THINKING_REPLY), eq("msg-1"));
+    verify(sender).send(eq("chat-1"), eq("🔧 正在执行 `http_get` …"), eq("msg-1"));
     verify(sender).send(eq("chat-1"), eq("最终答案"), eq("msg-1"));
-    verify(sender, times(2))
+    verify(sender, times(3))
         .send(eq("chat-1"), org.mockito.ArgumentMatchers.anyString(), eq("msg-1"));
   }
 

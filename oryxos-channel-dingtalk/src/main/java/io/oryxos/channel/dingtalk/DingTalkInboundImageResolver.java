@@ -4,9 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.oryxos.core.channel.InboundAttachment;
+import io.oryxos.core.channel.InboundMediaHttp;
+import io.oryxos.core.channel.InboundMediaJanitor;
+import io.oryxos.core.channel.InboundMediaLimits;
+import io.oryxos.core.channel.InboundMediaPaths;
 import io.oryxos.core.channel.InboundMessage;
+import io.oryxos.core.channel.LimitedMediaWriter;
 import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.session.ImageMime;
+import io.oryxos.core.session.InboundMediaExt;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -36,10 +42,7 @@ final class DingTalkInboundImageResolver {
   private static final String DOWNLOAD_META_PATH = "/v1.0/robot/messageFiles/download";
   private static final String HEADER_ACCESS_TOKEN = "x-acs-dingtalk-access-token";
   private static final String DEFAULT_EXTENSION = ".bin";
-  private static final String FALLBACK_SEGMENT = "x";
   private static final String SAFE_EXTENSION_PATTERN = "\\.[a-z0-9]{1,8}";
-  private static final char PATH_SAFE_REPLACEMENT = '_';
-  private static final int MAX_SEGMENT_LEN = 96;
   private static final int DOWNLOAD_ATTEMPTS = 2;
   private static final long TOKEN_SKEW_MS = 60_000L;
   private static final long DEFAULT_TOKEN_EXPIRE_SEC = 7200L;
@@ -62,6 +65,7 @@ final class DingTalkInboundImageResolver {
   private final String robotCode;
   private final Path mediaRoot;
   private final String channelName;
+  private final InboundMediaJanitor janitor;
   private final AtomicReference<CachedToken> tokenRef = new AtomicReference<>();
 
   DingTalkInboundImageResolver(
@@ -72,14 +76,15 @@ final class DingTalkInboundImageResolver {
       Path mediaRoot,
       String channelName) {
     this(
-        HttpClient.newBuilder().connectTimeout(HTTP_TIMEOUT).build(),
+        InboundMediaHttp.newNoRedirectClient(HTTP_TIMEOUT),
         guard,
         DingTalkStreamClient.API_BASE_URL,
         appKey,
         appSecret,
         robotCode,
         mediaRoot,
-        channelName);
+        channelName,
+        InboundMediaJanitor.fromEnv());
   }
 
   /** 单测注入：自定义 {@code apiBaseUrl}（本地 HttpServer）与 {@link HttpClient}。 */
@@ -92,6 +97,29 @@ final class DingTalkInboundImageResolver {
       String robotCode,
       Path mediaRoot,
       String channelName) {
+    this(
+        httpClient,
+        guard,
+        apiBaseUrl,
+        appKey,
+        appSecret,
+        robotCode,
+        mediaRoot,
+        channelName,
+        InboundMediaJanitor.fromEnv());
+  }
+
+  /** 单测可注入 janitor。 */
+  DingTalkInboundImageResolver(
+      HttpClient httpClient,
+      OutboundGuard guard,
+      String apiBaseUrl,
+      String appKey,
+      String appSecret,
+      String robotCode,
+      Path mediaRoot,
+      String channelName,
+      InboundMediaJanitor janitor) {
     this.httpClient = httpClient;
     this.guard = guard;
     this.apiBaseUrl = trimTrailingSlash(apiBaseUrl);
@@ -100,9 +128,11 @@ final class DingTalkInboundImageResolver {
     this.robotCode = robotCode;
     this.mediaRoot = mediaRoot;
     this.channelName = channelName;
+    this.janitor = janitor == null ? InboundMediaJanitor.fromEnv() : janitor;
   }
 
   InboundMessage resolve(InboundMessage message) {
+    janitor.sweepIfDue(mediaRoot);
     if (message.attachments().isEmpty()) {
       return message;
     }
@@ -134,15 +164,37 @@ final class DingTalkInboundImageResolver {
   }
 
   static boolean needsDownload(InboundAttachment attachment) {
-    return InboundAttachment.TYPE_IMAGE.equals(attachment.type())
-        && (attachment.url() == null || attachment.url().isBlank())
-        && attachment.reference() != null
-        && !attachment.reference().isBlank();
+    String type = attachment.type();
+    if (!InboundAttachment.TYPE_IMAGE.equals(type)
+        && !InboundAttachment.TYPE_FILE.equals(type)
+        && !InboundAttachment.TYPE_AUDIO.equals(type)
+        && !InboundAttachment.TYPE_VIDEO.equals(type)) {
+      return false;
+    }
+    boolean hasUrl = attachment.url() != null && !attachment.url().isBlank();
+    boolean hasRef = attachment.reference() != null && !attachment.reference().isBlank();
+    if (hasRef && !hasUrl) {
+      return true;
+    }
+    // 文件/语音/视频远程 URL 必须落盘，供 enricher 给出本地路径（语音/音轨再转写）
+    return (InboundAttachment.TYPE_FILE.equals(type)
+            || InboundAttachment.TYPE_AUDIO.equals(type)
+            || InboundAttachment.TYPE_VIDEO.equals(type))
+        && hasUrl
+        && ImageMime.isHttpUrl(attachment.url().strip());
   }
 
   static boolean hasImage(InboundMessage message) {
+    return hasDownloadableMedia(message);
+  }
+
+  static boolean hasDownloadableMedia(InboundMessage message) {
     for (InboundAttachment attachment : message.attachments()) {
-      if (InboundAttachment.TYPE_IMAGE.equals(attachment.type())) {
+      String type = attachment.type();
+      if (InboundAttachment.TYPE_IMAGE.equals(type)
+          || InboundAttachment.TYPE_FILE.equals(type)
+          || InboundAttachment.TYPE_AUDIO.equals(type)
+          || InboundAttachment.TYPE_VIDEO.equals(type)) {
         return true;
       }
     }
@@ -150,6 +202,11 @@ final class DingTalkInboundImageResolver {
   }
 
   private InboundAttachment downloadOrKeep(String messageId, InboundAttachment attachment) {
+    if (attachment.url() != null
+        && !attachment.url().isBlank()
+        && ImageMime.isHttpUrl(attachment.url().strip())) {
+      return downloadRemoteUrlOrKeep(messageId, attachment);
+    }
     String downloadCode = attachment.reference();
     Exception last = null;
     for (int attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
@@ -158,15 +215,18 @@ final class DingTalkInboundImageResolver {
         String downloadUrl = resolveDownloadUrl(token, downloadCode);
         Path file = writeToMediaRoot(messageId, downloadCode, downloadUrl);
         return new InboundAttachment(
-            InboundAttachment.TYPE_IMAGE, file.toAbsolutePath().toString(), downloadCode);
-      } catch (IOException | InterruptedException | RuntimeException e) {
+            attachment.type(),
+            file.toAbsolutePath().toString(),
+            downloadCode,
+            attachment.fileName());
+      } catch (Exception e) {
         if (e instanceof InterruptedException) {
           Thread.currentThread().interrupt();
         }
         last = e;
         if (attempt < DOWNLOAD_ATTEMPTS && isTransientTimeout(e)) {
           LOG.warn(
-              "钉钉渠道 {} 下载图片超时重试 {}/{}（messageId={}）：{}",
+              "钉钉渠道 {} 下载媒体超时重试 {}/{}（messageId={}）：{}",
               sanitize(channelName),
               attempt,
               DOWNLOAD_ATTEMPTS,
@@ -178,10 +238,49 @@ final class DingTalkInboundImageResolver {
       }
     }
     LOG.warn(
-        "钉钉渠道 {} 下载图片失败（messageId={}, downloadCode={}）：{}，保留 downloadCode",
+        "钉钉渠道 {} 下载媒体失败（messageId={}, downloadCode={}）：{}，保留 downloadCode",
         sanitize(channelName),
         sanitize(messageId),
         sanitize(downloadCode),
+        sanitize(last == null ? null : last.getMessage()));
+    return attachment;
+  }
+
+  private InboundAttachment downloadRemoteUrlOrKeep(
+      String messageId, InboundAttachment attachment) {
+    String remoteUrl = attachment.url().strip();
+    Exception last = null;
+    for (int attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+      try {
+        Path file = writeToMediaRoot(messageId, remoteUrl, remoteUrl);
+        String ref =
+            attachment.reference() == null || attachment.reference().isBlank()
+                ? remoteUrl
+                : attachment.reference();
+        return new InboundAttachment(
+            attachment.type(), file.toAbsolutePath().toString(), ref, attachment.fileName());
+      } catch (Exception e) {
+        if (e instanceof InterruptedException) {
+          Thread.currentThread().interrupt();
+        }
+        last = e;
+        if (attempt < DOWNLOAD_ATTEMPTS && isTransientTimeout(e)) {
+          LOG.warn(
+              "钉钉渠道 {} 下载远程文件超时重试 {}/{}（messageId={}）：{}",
+              sanitize(channelName),
+              attempt,
+              DOWNLOAD_ATTEMPTS,
+              sanitize(messageId),
+              sanitize(e.getMessage()));
+          continue;
+        }
+        break;
+      }
+    }
+    LOG.warn(
+        "钉钉渠道 {} 下载远程文件失败（messageId={}）：{}，保留远程 URL",
+        sanitize(channelName),
+        sanitize(messageId),
         sanitize(last == null ? null : last.getMessage()));
     return attachment;
   }
@@ -246,37 +345,50 @@ final class DingTalkInboundImageResolver {
   }
 
   private Path writeToMediaRoot(String messageId, String downloadCode, String downloadUrl)
-      throws IOException, InterruptedException {
+      throws Exception {
     URI uri = URI.create(downloadUrl);
     if (!isAllowedMediaUri(uri)) {
       throw new IllegalStateException("拒绝非钉钉域临时下载地址: " + sanitize(uri.getHost()));
     }
-    HttpRequest request = HttpRequest.newBuilder().uri(uri).timeout(HTTP_TIMEOUT).GET().build();
     HttpResponse<byte[]> response =
-        httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-    if (response.statusCode() < HTTP_STATUS_OK_MIN
-        || response.statusCode() >= HTTP_STATUS_OK_MAX_EXCLUSIVE) {
-      throw new IllegalStateException("下载临时文件 HTTP " + response.statusCode());
-    }
+        InboundMediaHttp.getFollowingAllowlist(
+            httpClient, uri, HTTP_TIMEOUT, this::isAllowedMediaUri);
     byte[] bytes = response.body();
     if (bytes == null || bytes.length == 0) {
       throw new IllegalStateException("下载临时文件为空");
+    }
+    if (bytes.length > InboundMediaLimits.MAX_FILE_BYTES) {
+      throw new IllegalStateException("入站文件超过上限 " + InboundMediaLimits.MAX_FILE_BYTES + " 字节");
     }
     String ext = extensionOf(uri.getPath());
     Path dir = mediaRoot.resolve(safeSegment(messageId));
     Files.createDirectories(dir);
     Path target = dir.resolve(safeSegment(downloadCode) + ext);
-    Files.write(target, bytes);
-    if (DEFAULT_EXTENSION.equals(ext)) {
+    janitor.ensureQuotaOrThrow(mediaRoot);
+    LimitedMediaWriter.writeLimited(bytes, target, InboundMediaLimits.MAX_FILE_BYTES);
+    // ext 经 asciiLower；用 equals 避免 equalsIgnoreCase 触发 SpotBugs IMPROPER_UNICODE
+    if (DEFAULT_EXTENSION.equals(ext) || InboundMediaExt.EXT_FILE.equals(ext)) {
       String sniffed = ImageMime.probeFile(target);
       String betterExt = ImageMime.extensionFor(sniffed);
-      if (!DEFAULT_EXTENSION.equals(betterExt) && !betterExt.equals(ext)) {
+      if (!DEFAULT_EXTENSION.equals(betterExt)
+          && !betterExt.equals(ext)
+          && ImageMime.hasRecognizedMagic(target)) {
         Path renamed = dir.resolve(safeSegment(downloadCode) + betterExt);
         try {
           Files.move(target, renamed);
           return renamed;
         } catch (IOException moveFailed) {
           LOG.debug("钉钉图片重命名扩展名失败，保留原文件: {}", sanitize(moveFailed.getMessage()));
+        }
+      }
+      String pdfExt = InboundMediaExt.betterFileExtension(target, ext);
+      if (pdfExt != null) {
+        Path renamed = dir.resolve(safeSegment(downloadCode) + pdfExt);
+        try {
+          Files.move(target, renamed);
+          return renamed;
+        } catch (IOException moveFailed) {
+          LOG.debug("钉钉文件 PDF 扩展名重命名失败，保留原文件: {}", sanitize(moveFailed.getMessage()));
         }
       }
     }
@@ -306,7 +418,7 @@ final class DingTalkInboundImageResolver {
     if (mediaHost == null || mediaHost.isBlank()) {
       return false;
     }
-    return mediaHost.equals(HOST_DINGTALK)
+    return HOST_DINGTALK.equals(mediaHost)
         || mediaHost.endsWith(HOST_SUFFIX_DINGTALK)
         || mediaHost.endsWith(HOST_SUFFIX_ALICDN)
         || mediaHost.endsWith(HOST_SUFFIX_ALIYUNCS);
@@ -359,17 +471,7 @@ final class DingTalkInboundImageResolver {
   }
 
   static String safeSegment(String raw) {
-    if (raw == null || raw.isBlank()) {
-      return FALLBACK_SEGMENT;
-    }
-    String cleaned = raw.replaceAll("[^a-zA-Z0-9._-]", String.valueOf(PATH_SAFE_REPLACEMENT));
-    if (cleaned.length() > MAX_SEGMENT_LEN) {
-      cleaned = cleaned.substring(0, MAX_SEGMENT_LEN);
-    }
-    if (cleaned.isBlank() || cleaned.chars().allMatch(ch -> ch == PATH_SAFE_REPLACEMENT)) {
-      return FALLBACK_SEGMENT;
-    }
-    return cleaned;
+    return InboundMediaPaths.safeSegment(raw);
   }
 
   private static String trimTrailingSlash(String url) {
@@ -380,9 +482,8 @@ final class DingTalkInboundImageResolver {
   }
 
   private static String sanitize(String value) {
-    return value == null
-        ? ""
-        : value.replace('\r', PATH_SAFE_REPLACEMENT).replace('\n', PATH_SAFE_REPLACEMENT);
+    // 内联替换：SpotBugs CRLF_INJECTION_LOGS 需在本类内可见的 \r/\n 清洗
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 
   private record CachedToken(String token, long expiresAtMillis) {}

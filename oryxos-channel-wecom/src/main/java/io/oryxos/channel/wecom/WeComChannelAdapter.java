@@ -10,7 +10,6 @@ import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
 import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.profile.ProfileRegistry;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
@@ -48,7 +47,6 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
   private static final long RECONNECT_MAX_MS = 60_000L;
   private static final int RECONNECT_MAX_SHIFT = 5;
   private static final String MEDIA_DIR_PREFIX = "oryxos-wecom-media-";
-  private static final String MEDIA_FALLBACK_DIR = "oryxos-wecom-media";
 
   private final ChannelConfig config;
   private final ProfileRegistry profileRegistry;
@@ -171,11 +169,16 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
 
   /** 供单测校验退避间隔，不触网。 */
   static long reconnectDelayMs(int attempt) {
-    int capped = Math.min(Math.max(attempt, 0), RECONNECT_MAX_SHIFT);
-    return Math.min(RECONNECT_BASE_MS * (1L << capped), RECONNECT_MAX_MS);
+    return io.oryxos.core.channel.ReconnectBackoff.delayMs(
+        attempt, RECONNECT_BASE_MS, RECONNECT_MAX_MS, RECONNECT_MAX_SHIFT);
   }
 
   private void connectLocked() throws Exception {
+    wsRef.set(connect());
+  }
+
+  /** 建连并返回客户端；不写入 {@link #wsRef}——由调用方在持锁处决定是否接管（重连期间可能已被 stop）。 */
+  private WeComWsClient connect() throws Exception {
     ensureOutboundStack();
     WeComWsClient client =
         new WeComWsClient(
@@ -186,7 +189,7 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
             this::handleDisconnected);
     transportRef.set(client::sendJson);
     client.connectAndSubscribe(START_TIMEOUT);
-    wsRef.set(client);
+    return client;
   }
 
   /** 懒初始化出站/入站组件；重连复用同一 {@link WeComMessageSender} 以保留 chatTypes 映射。 */
@@ -246,13 +249,13 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
       if (!running) {
         return;
       }
-      try {
-        connectLocked();
-        reconnectAttempt = 0;
-        state = ChannelStatus.State.CONNECTED;
-        lastError = null;
-        LOG.info("企微渠道 {} 长连接已恢复", sanitize(config.name()));
-      } catch (Exception e) {
+    }
+    // 建连放锁外：connectAndSubscribe 最坏阻塞 ~40s，锁内执行会把 stop()/管理端停用卡住
+    WeComWsClient client;
+    try {
+      client = connect();
+    } catch (Exception e) {
+      synchronized (this) {
         reconnectAttempt++;
         lastError = "长连接重连失败: " + sanitize(e.getMessage());
         LOG.warn(
@@ -260,8 +263,20 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
             sanitize(config.name()),
             reconnectAttempt,
             sanitize(lastError));
-        scheduleReconnect();
       }
+      scheduleReconnect();
+      return;
+    }
+    synchronized (this) {
+      if (!running) {
+        client.closeQuietly();
+        return;
+      }
+      wsRef.set(client);
+      reconnectAttempt = 0;
+      state = ChannelStatus.State.CONNECTED;
+      lastError = null;
+      LOG.info("企微渠道 {} 长连接已恢复", sanitize(config.name()));
     }
   }
 
@@ -318,13 +333,13 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
     }
   }
 
-  /** 有图：即时「处理中」→ COS URL 落盘 → 编排（Vision 吃本地文件，避免 provider 直拉临时链失败）。 */
+  /** 有图/文件：即时「处理中」→ COS URL 落盘 → 编排（图走 Vision；文件给本地路径供 read_file）。 */
   private void dispatchClaimed(InboundMessage m) {
     if (!inboundMessageService.tryClaim(m.channelName(), m.messageId())) {
       LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(m.channelName()), sanitize(m.messageId()));
       return;
     }
-    if (!WeComInboundImageResolver.hasImage(m)) {
+    if (!WeComInboundImageResolver.hasDownloadableMedia(m)) {
       inboundMessageService.onClaimedMessage(m, this);
       return;
     }
@@ -341,19 +356,7 @@ public class WeComChannelAdapter implements InboundChannelAdapter {
   }
 
   private Path createMediaRoot() {
-    String channelSeg = WeComInboundImageResolver.safeSegment(config.name());
-    try {
-      Path root = Files.createTempDirectory(MEDIA_DIR_PREFIX);
-      Path channelDir = root.resolve(channelSeg);
-      Files.createDirectories(channelDir);
-      return channelDir;
-    } catch (Exception e) {
-      LOG.warn(
-          "企微渠道 {} 创建图片缓存目录失败（{}），入站图片将保留远程 URL",
-          sanitize(config.name()),
-          sanitize(e.getMessage()));
-      return Path.of(System.getProperty("java.io.tmpdir"), MEDIA_FALLBACK_DIR, channelSeg);
-    }
+    return io.oryxos.core.channel.InboundMediaRoots.forChannel(config.name(), MEDIA_DIR_PREFIX);
   }
 
   private static String sanitize(String value) {

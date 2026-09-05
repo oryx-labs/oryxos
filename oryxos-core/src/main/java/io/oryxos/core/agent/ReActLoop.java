@@ -21,8 +21,8 @@ public class ReActLoop {
   /** 转满最大轮数的强制收尾答复（课件字面量，harness 断言点）。 */
   static final String MAX_ITERATIONS_REPLY = "达到最大轮数，已停止";
 
-  /** 用户手动中断的收尾答复。 */
-  static final String INTERRUPTED_REPLY = "已收到停止指令，推理已中断";
+  /** 用户手动中断的收尾答复（进度流据此走取消态而非绿卡「回答」）。 */
+  public static final String INTERRUPTED_REPLY = "已收到停止指令，推理已中断";
 
   private final PromptBuilder promptBuilder;
   private final ProviderService providerService;
@@ -90,6 +90,11 @@ public class ReActLoop {
         return response.text() == null ? "" : response.text();
       }
       for (ToolCallRequest call : response.toolCalls()) {
+        // 工具间隙再查一次，避免长工具链整段跑完才响应 /stop
+        if (interruptManager != null && interruptManager.isInterrupted(session.sessionId())) {
+          interruptManager.clear(session.sessionId());
+          return INTERRUPTED_REPLY;
+        }
         // 执行权只在 ToolExecutor（宪法 I/II）；失败结果同样回填，模型下一轮自行决定
         // 传 profile.name() 作为 Agent 名：记忆类工具据此落到本 Agent 专属 MEMORY.md（30 节）
         listener.onToolStart(call.name());

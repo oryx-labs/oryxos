@@ -3,6 +3,7 @@ package io.oryxos.core.channel;
 import io.oryxos.core.agent.AgentExecutionService;
 import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.agent.InterruptManager;
+import io.oryxos.core.agent.ReActLoop;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.session.Message;
 import io.oryxos.core.session.Session;
@@ -34,7 +35,7 @@ public class InboundMessageService {
   private static final String DEDUP_KEY_SEPARATOR = ":";
   private static final String STOP_COMMAND = "/stop";
 
-  static final String UNSUPPORTED_TYPE_REPLY = "当前仅支持文本提问，请用文字描述你的问题。";
+  static final String UNSUPPORTED_TYPE_REPLY = "当前仅支持文本、图片、文件、语音或视频，请用文字描述或发送图片/文件/语音/视频。";
   static final String AGENT_UNAVAILABLE_REPLY = "Agent 暂不可用（未找到绑定的 Agent），请联系管理员。";
   static final String FAILURE_REPLY = "抱歉，这次处理失败了，请稍后重试或联系管理员。";
   static final String PROCESSING_REPLY = "已收到，正在处理中，请稍候…";
@@ -57,6 +58,7 @@ public class InboundMessageService {
   private final InboundMediaEnricher mediaEnricher;
   private final Duration processingNoticeDelay;
   private final InterruptManager interruptManager;
+  private final ActiveRunRegistry activeRuns = new ActiveRunRegistry();
   private final Map<String, Long> recentNewSessionAckMs = new ConcurrentHashMap<>();
   private final Map<String, Long> recentProcessingNoticeMs = new ConcurrentHashMap<>();
 
@@ -164,6 +166,8 @@ public class InboundMessageService {
     String agent = replyVia.boundAgent();
     List<Message.MediaPart> media = InboundMediaParts.from(msg);
     InferenceJob job = buildInference(msg, replyVia, agent, agentInput, media, replyTo);
+    String chatKey = ActiveRunRegistry.chatKey(msg.channelType(), msg.chatId());
+    activeRuns.register(chatKey, job.sessionId());
     CountDownLatch done = preprocessingDone != null ? preprocessingDone : new CountDownLatch(1);
     // B5/B10：推理在虚拟线程后台跑并落 agent_executions（source = 渠道类型）
     executionService.triggerAsync(
@@ -180,6 +184,7 @@ public class InboundMessageService {
             }
             throw e;
           } finally {
+            activeRuns.unregister(chatKey, job.sessionId());
             done.countDown();
           }
         });
@@ -242,15 +247,14 @@ public class InboundMessageService {
       safeReply(replyVia, msg.chatId(), STOP_NO_SESSION_REPLY, replyTo);
       return;
     }
-    String agent = replyVia.boundAgent();
-    if (msg.chatKind() == ChatKind.P2P) {
-      Session session = sessionManager.getOrCreate(msg.channelType(), msg.userId(), agent);
-      interruptManager.interrupt(session.sessionId());
-      safeReply(replyVia, msg.chatId(), STOP_REPLY, replyTo);
-    } else {
-      // 群聊无状态，无法中断
+    String chatKey = ActiveRunRegistry.chatKey(msg.channelType(), msg.chatId());
+    String sessionId = activeRuns.current(chatKey).orElse(null);
+    if (sessionId == null) {
       safeReply(replyVia, msg.chatId(), STOP_NO_SESSION_REPLY, replyTo);
+      return;
     }
+    interruptManager.interrupt(sessionId);
+    safeReply(replyVia, msg.chatId(), STOP_REPLY, replyTo);
   }
 
   private static boolean isStopCommand(String text) {
@@ -336,7 +340,11 @@ public class InboundMessageService {
         () -> {
           try {
             String reply = streamedInference.apply(stream);
-            stream.finish(reply);
+            if (ReActLoop.INTERRUPTED_REPLY.equals(reply)) {
+              stream.fail(reply);
+            } else {
+              stream.finish(reply);
+            }
           } catch (RuntimeException e) {
             try {
               stream.fail(FAILURE_REPLY);

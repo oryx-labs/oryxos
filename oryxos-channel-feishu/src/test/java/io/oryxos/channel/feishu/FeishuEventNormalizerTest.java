@@ -88,6 +88,20 @@ class FeishuEventNormalizerTest {
   }
 
   @Test
+  @DisplayName("私聊文件：textual=false，附带 file_key 附件")
+  void p2pFile() {
+    Optional<InboundMessage> out =
+        normalizer.normalize(
+            event("p2p", "file", "{\"file_key\":\"file_x\",\"file_name\":\"a.pdf\"}"));
+    assertTrue(out.isPresent());
+    assertFalse(out.get().textual());
+    assertTrue(out.get().processable());
+    assertEquals(1, out.get().attachments().size());
+    assertEquals("file", out.get().attachments().get(0).type());
+    assertEquals("file_x", out.get().attachments().get(0).reference());
+  }
+
+  @Test
   @DisplayName("群聊 @ 本机器人：占位符剥离，归一化为 GROUP 且 mentionedBot=true")
   void groupAtBotStripsPlaceholder() {
     Optional<InboundMessage> out =

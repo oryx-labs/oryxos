@@ -186,4 +186,40 @@ class ReActLoopTest {
     // 失败结果同样进历史，模型下一轮能看到失败原因
     assertTrue(session.messages().get(2).content().contains("connect timeout"));
   }
+
+  @Test
+  @DisplayName("中断标志在迭代开头生效并清除")
+  void interruptStopsBeforeNextIteration() {
+    InterruptManager interrupts = new InterruptManager();
+    loop = new ReActLoop(promptBuilder, providerService, toolExecutor, interrupts);
+    interrupts.interrupt("s-1");
+
+    String reply = loop.run(session, "查天气", profileWithMaxIterations(10));
+
+    assertEquals(ReActLoop.INTERRUPTED_REPLY, reply);
+    verify(providerService, never()).chat(any(), any(), any());
+    assertTrue(!interrupts.isInterrupted("s-1"));
+  }
+
+  @Test
+  @DisplayName("工具间隙中断跳过后续工具")
+  void interruptBetweenToolsSkipsRemaining() {
+    InterruptManager interrupts = new InterruptManager();
+    loop = new ReActLoop(promptBuilder, providerService, toolExecutor, interrupts);
+    ToolCallRequest second = new ToolCallRequest("read_file", "{\"path\":\"/tmp/a\"}");
+    when(providerService.chat(any(), any(), any()))
+        .thenReturn(responseWithToolCall(HTTP_GET_CALL, second));
+    when(toolExecutor.execute(any(), any(), any()))
+        .thenAnswer(
+            inv -> {
+              interrupts.interrupt("s-1");
+              return ToolResult.ok("ok");
+            });
+
+    String reply = loop.run(session, "干活", profileWithMaxIterations(10));
+
+    assertEquals(ReActLoop.INTERRUPTED_REPLY, reply);
+    verify(toolExecutor, times(1)).execute(eq("s-1"), any(), eq(HTTP_GET_CALL));
+    verify(toolExecutor, never()).execute(eq("s-1"), any(), eq(second));
+  }
 }

@@ -57,3 +57,7 @@ logs/
 
 # IDEA
 .idea/
+
+# local secrets
+.env
+

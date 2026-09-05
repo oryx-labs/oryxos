@@ -26,6 +26,9 @@ public class WeComEventNormalizer {
   private static final String CHAT_GROUP = "group";
   private static final String MSG_TEXT = "text";
   private static final String MSG_IMAGE = "image";
+  private static final String MSG_FILE = "file";
+  private static final String MSG_VOICE = "voice";
+  private static final String MSG_VIDEO = "video";
   private static final Pattern LEADING_AT = Pattern.compile("^@\\S+\\s*");
 
   private final String channelName;
@@ -57,6 +60,22 @@ public class WeComEventNormalizer {
       LOG.warn("企微群消息缺 chatid，已丢弃");
       return Optional.empty();
     }
+    Payload payload = parsePayload(body, msgid, group);
+    return Optional.of(
+        new InboundMessage(
+            CHANNEL_TYPE,
+            channelName,
+            msgid,
+            single ? ChatKind.P2P : ChatKind.GROUP,
+            userid,
+            chatId,
+            payload.content,
+            payload.textual,
+            group,
+            payload.attachments));
+  }
+
+  private static Payload parsePayload(JsonNode body, String msgid, boolean group) {
     String msgtype = text(body, "msgtype");
     boolean textual = MSG_TEXT.equals(msgtype);
     String content = "";
@@ -67,30 +86,86 @@ public class WeComEventNormalizer {
         content = LEADING_AT.matcher(content).replaceFirst("");
       }
       content = content.strip();
-    } else if (MSG_IMAGE.equals(msgtype)) {
-      String imageUrl = body.path("image").path("url").asText(null);
-      if (imageUrl != null && !imageUrl.isBlank()) {
-        String aesKey = body.path("image").path("aeskey").asText(null);
-        if (aesKey != null && !aesKey.isBlank()) {
-          // reference 暂存 aeskey，下载解密后由 resolver 改回远程 URL
-          attachments.add(new InboundAttachment(InboundAttachment.TYPE_IMAGE, imageUrl, aesKey));
+    } else if (MSG_VOICE.equals(msgtype)) {
+      JsonNode voice = body.path("voice");
+      content = voice.path("content").asText("");
+      content = content == null ? "" : content.strip();
+      if (!content.isBlank()) {
+        textual = true;
+        content = "[语音转写] " + content;
+      } else {
+        Optional<InboundAttachment> audio = extractVoice(voice);
+        if (audio.isPresent()) {
+          attachments.add(audio.get());
         } else {
-          attachments.add(InboundAttachment.imageUrl(imageUrl));
+          textual = true;
+          content = "企微仅单聊提供 ASR；空转写请改发文字";
         }
       }
+    } else if (MSG_IMAGE.equals(msgtype)) {
+      extractImage(body.path("image")).ifPresent(attachments::add);
+    } else if (MSG_FILE.equals(msgtype)) {
+      extractFile(body.path("file")).ifPresent(attachments::add);
+    } else if (MSG_VIDEO.equals(msgtype)) {
+      extractVideo(body.path("video")).ifPresent(attachments::add);
+    } else if (msgtype != null && !msgtype.isBlank()) {
+      LOG.info("企微收到暂不支持的消息类型 msgtype={} msgid={}", sanitize(msgtype), sanitize(msgid));
     }
-    return Optional.of(
-        new InboundMessage(
-            CHANNEL_TYPE,
-            channelName,
-            msgid,
-            single ? ChatKind.P2P : ChatKind.GROUP,
-            userid,
-            chatId,
-            content,
-            textual,
-            group,
-            attachments));
+    return new Payload(content, textual, attachments);
+  }
+
+  private static Optional<InboundAttachment> extractImage(JsonNode image) {
+    String imageUrl = image.path("url").asText(null);
+    if (imageUrl == null || imageUrl.isBlank()) {
+      return Optional.empty();
+    }
+    String aesKey = image.path("aeskey").asText(null);
+    if (aesKey != null && !aesKey.isBlank()) {
+      return Optional.of(new InboundAttachment(InboundAttachment.TYPE_IMAGE, imageUrl, aesKey));
+    }
+    return Optional.of(InboundAttachment.imageUrl(imageUrl));
+  }
+
+  private static Optional<InboundAttachment> extractFile(JsonNode file) {
+    String fileUrl = file.path("url").asText(null);
+    if (fileUrl == null || fileUrl.isBlank()) {
+      return Optional.empty();
+    }
+    String aesKey = file.path("aeskey").asText(null);
+    String fileName = file.path("file_name").asText(null);
+    if (fileName == null || fileName.isBlank()) {
+      fileName = file.path("filename").asText(null);
+    }
+    if (aesKey != null && !aesKey.isBlank()) {
+      return Optional.of(
+          new InboundAttachment(InboundAttachment.TYPE_FILE, fileUrl, aesKey, fileName));
+    }
+    return Optional.of(InboundAttachment.fileUrl(fileUrl, fileName));
+  }
+
+  /** 空 ASR 时若有临时 URL，按文件同款带可选 aeskey 落 TYPE_AUDIO，供本地下载/转写。 */
+  private static Optional<InboundAttachment> extractVoice(JsonNode voice) {
+    String voiceUrl = voice.path("url").asText(null);
+    if (voiceUrl == null || voiceUrl.isBlank()) {
+      return Optional.empty();
+    }
+    String aesKey = voice.path("aeskey").asText(null);
+    if (aesKey != null && !aesKey.isBlank()) {
+      return Optional.of(new InboundAttachment(InboundAttachment.TYPE_AUDIO, voiceUrl, aesKey));
+    }
+    return Optional.of(InboundAttachment.audioUrl(voiceUrl));
+  }
+
+  private static Optional<InboundAttachment> extractVideo(JsonNode video) {
+    String videoUrl = video.path("url").asText(null);
+    if (videoUrl == null || videoUrl.isBlank()) {
+      return Optional.empty();
+    }
+    String aesKey = video.path("aeskey").asText(null);
+    if (aesKey != null && !aesKey.isBlank()) {
+      return Optional.of(new InboundAttachment(InboundAttachment.TYPE_VIDEO, videoUrl, aesKey));
+    }
+    return Optional.of(InboundAttachment.videoUrl(videoUrl));
   }
 
   /** 会话类型：1 单聊 / 2 群聊；未知返回 0（发送时让平台兼容解析）。 */
@@ -116,5 +191,17 @@ public class WeComEventNormalizer {
 
   private static String sanitize(String value) {
     return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
+  }
+
+  private static final class Payload {
+    private final String content;
+    private final boolean textual;
+    private final List<InboundAttachment> attachments;
+
+    private Payload(String content, boolean textual, List<InboundAttachment> attachments) {
+      this.content = content;
+      this.textual = textual;
+      this.attachments = attachments;
+    }
   }
 }

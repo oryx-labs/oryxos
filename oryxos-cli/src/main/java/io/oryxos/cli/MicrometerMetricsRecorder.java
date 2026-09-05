@@ -116,6 +116,47 @@ public class MicrometerMetricsRecorder implements MetricsRecorder {
     }
   }
 
+  @Override
+  public void recordInboundAsr(String channel, String mediaType, boolean success, String reason) {
+    try {
+      registry
+          .counter(
+              "oryxos_inbound_asr_total",
+              "channel",
+              tag(channel),
+              "media",
+              tag(mediaType),
+              "outcome",
+              success ? "success" : "failure",
+              "reason",
+              tag(reason))
+          .increment();
+    } catch (RuntimeException e) {
+      LOG.debug("入站 ASR 指标记录失败（主链路不受影响）", e);
+    }
+  }
+
+  @Override
+  public void recordInboundMediaDownload(
+      String channel, String mediaType, boolean success, String reason) {
+    try {
+      registry
+          .counter(
+              "oryxos_inbound_media_download_total",
+              "channel",
+              tag(channel),
+              "media",
+              tag(mediaType),
+              "outcome",
+              success ? "success" : "failure",
+              "reason",
+              tag(reason))
+          .increment();
+    } catch (RuntimeException e) {
+      LOG.debug("入站媒体下载指标记录失败（主链路不受影响）", e);
+    }
+  }
+
   private static String tag(String value) {
     return value == null || value.isBlank() ? "unknown" : value;
   }

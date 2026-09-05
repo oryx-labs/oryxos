@@ -5,11 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.oryxos.core.agent.ReActLoop;
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -62,6 +65,35 @@ class FeishuStreamListenerTest {
     String failed = patches.getAllValues().get(2);
     assertTrue(failed.contains("red"));
     assertTrue(failed.contains("处理失败"));
+  }
+
+  @Test
+  @DisplayName("中断 fail 用「已停止」标题")
+  void failInterruptedUsesStoppedTitle() {
+    listener.start();
+    listener.fail(ReActLoop.INTERRUPTED_REPLY);
+
+    ArgumentCaptor<String> patches = ArgumentCaptor.forClass(String.class);
+    verify(sender).patchInteractive(eq("om_card_1"), patches.capture());
+    assertTrue(patches.getValue().contains("red"));
+    assertTrue(patches.getValue().contains("已停止"));
+    assertTrue(patches.getValue().contains(ReActLoop.INTERRUPTED_REPLY));
+  }
+
+  @Test
+  @DisplayName("首 token 前 idle heartbeat 会 patch「仍在等待」")
+  void idleHeartbeatPatchesWhileWaiting() throws Exception {
+    listener = new FeishuStreamListener(sender, "oc_chat", null, Duration.ofMillis(80));
+    listener.start();
+    Thread.sleep(220);
+    listener.finish("done");
+
+    ArgumentCaptor<String> patches = ArgumentCaptor.forClass(String.class);
+    verify(sender, atLeast(1)).patchInteractive(eq("om_card_1"), patches.capture());
+    assertTrue(
+        patches.getAllValues().stream().anyMatch(p -> p.contains("仍在等待模型输出")),
+        "idle heartbeat must refresh placeholder");
+    assertTrue(patches.getAllValues().get(patches.getAllValues().size() - 1).contains("done"));
   }
 
   @Test

@@ -110,6 +110,25 @@ class DingTalkEventNormalizerTest {
   }
 
   @Test
+  @DisplayName("file + downloadCode → TYPE_FILE 附件")
+  void fileWithDownloadCode() {
+    ObjectNode body = mapper.createObjectNode();
+    body.put("msgId", "m3f");
+    body.put("conversationType", "1");
+    body.put("conversationId", "conv-p2p");
+    body.put("senderId", "u1");
+    body.put("msgtype", "file");
+    body.putObject("content").put("downloadCode", "fileCode123");
+
+    InboundMessage msg = normalizer.normalize(body).orElseThrow();
+    assertFalse(msg.textual());
+    assertTrue(msg.processable());
+    assertEquals(1, msg.attachments().size());
+    assertEquals("file", msg.attachments().get(0).type());
+    assertEquals("fileCode123", msg.attachments().get(0).reference());
+  }
+
+  @Test
   @DisplayName("缺字段 → empty")
   void missingFields() {
     ObjectNode body = mapper.createObjectNode();

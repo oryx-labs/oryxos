@@ -60,11 +60,19 @@ public class CliChannel {
         continue;
       }
       TypewriterListener listener = new TypewriterListener(out);
-      String reply = agentService.process(session, line, listener);
-      if (listener.printedAny()) {
-        out.println(); // 打字机流结束补换行
-      } else {
-        out.println(reply); // 无任何 token 流出（如迭代耗尽占位文本）时回落整段输出
+      try {
+        String reply = agentService.process(session, line, listener);
+        if (listener.printedAny()) {
+          out.println(); // 打字机流结束补换行
+        } else {
+          out.println(reply); // 无任何 token 流出（如迭代耗尽占位文本）时回落整段输出
+        }
+      } catch (RuntimeException e) {
+        // 一轮出错（provider 400/超时等）不终结整个终端会话——对齐飞书/企微事件 handler 的保活口径
+        if (listener.printedAny()) {
+          out.println();
+        }
+        out.printf("[本轮出错: %s]%n", e.getMessage());
       }
     }
   }

@@ -3,6 +3,7 @@ package io.oryxos.tool.builtin;
 import io.oryxos.core.fs.AdminConfigFileGuard;
 import io.oryxos.core.fs.WorkspaceMutationGuard;
 import io.oryxos.core.memory.MemoryMdGuard;
+import io.oryxos.core.session.InboundMediaExt;
 import io.oryxos.tool.sandbox.ActionType;
 import io.oryxos.tool.sandbox.Sandbox;
 import io.oryxos.tool.sandbox.SandboxAction;
@@ -50,7 +51,7 @@ public class FileTools {
     WorkspaceMutationGuard.rejectAgentMdDirectWrite(path);
   }
 
-  @Tool(name = "read_file", description = "读取指定路径的文本文件内容")
+  @Tool(name = "read_file", description = "读取指定路径的文本文件内容；文本型 PDF 自动抽取正文（扫描件无文本层会失败）")
   public String readFile(@ToolParam(description = "要读取的文件路径") String path) {
     // 保留文件原文（channels.yaml/mcp_servers.yaml 凭证、oryxos.db 数据）禁止经通用读入口吐出
     AdminConfigFileGuard.rejectRead(path);
@@ -63,6 +64,9 @@ public class FileTools {
       // 读前复检：与 write_file 同款——防首次校验到 readString 间路径被换成外向软链或保留文件
       sandbox.enforce(new SandboxAction(ActionType.FILE_READ, path));
       AdminConfigFileGuard.rejectRead(path);
+      if (InboundMediaExt.hasPdfExtension(file) || InboundMediaExt.isPdfMagic(file)) {
+        return PdfTextExtractor.extract(file);
+      }
       return Files.readString(file);
     } catch (IOException e) {
       throw new UncheckedIOException("读取文件失败: " + path, e);

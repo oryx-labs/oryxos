@@ -17,7 +17,7 @@ import java.util.List;
  * @param content 纯文本正文；群聊已剥离 @ 机器人片段、其余 mention 已替换为人名；非文本时为空串
  * @param textual 是否文本消息；false 且无附件时触发「仅支持文本」能力说明回复（FR-009）
  * @param mentionedBot 群聊是否 @ 了本机器人；进入编排的群消息恒为 true
- * @param attachments 图片等媒体附件（可为空）
+ * @param attachments 图片/文件等媒体附件（可为空）
  */
 public record InboundMessage(
     String channelType,
@@ -50,7 +50,7 @@ public record InboundMessage(
     }
   }
 
-  /** 文本或含可处理附件（如图片）时进入 Agent 编排。 */
+  /** 文本或含可处理附件（如图片、文件）时进入 Agent 编排。 */
   public boolean processable() {
     return textual || !attachments.isEmpty();
   }

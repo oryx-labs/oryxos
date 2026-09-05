@@ -719,6 +719,29 @@ class FileToolsTest {
   }
 
   @Test
+  @DisplayName("read_file 对文本型 PDF 抽取正文（魔数或 .pdf 后缀）")
+  void readFileExtractsTextPdf() throws IOException {
+    Path pdf = dir.resolve("note.bin");
+    try (var doc = new org.apache.pdfbox.pdmodel.PDDocument()) {
+      var page = new org.apache.pdfbox.pdmodel.PDPage();
+      doc.addPage(page);
+      var font =
+          new org.apache.pdfbox.pdmodel.font.PDType1Font(
+              org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName.HELVETICA);
+      try (var cs = new org.apache.pdfbox.pdmodel.PDPageContentStream(doc, page)) {
+        cs.beginText();
+        cs.setFont(font, 12);
+        cs.newLineAtOffset(50, 700);
+        cs.showText("OryxOS PDF inbound ok");
+        cs.endText();
+      }
+      doc.save(pdf.toFile());
+    }
+    String text = tools.readFile(pdf.toString());
+    assertTrue(text.contains("OryxOS PDF inbound ok"), text);
+  }
+
+  @Test
   @DisplayName("越界会被拦：edit/grep/glob 校验不过零动作")
   void sandboxRejectionBlocksSearchAndEdit() throws IOException {
     Sandbox denying = mock(Sandbox.class);

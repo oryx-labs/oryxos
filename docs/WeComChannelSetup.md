@@ -38,9 +38,13 @@
 
 ## 三、使用方式
 
-- **私聊**：在企微中打开该智能机器人会话，直接发文本或图片。
-- **群聊**：将机器人拉入群后 `@机器人 + 问题`（或图片）；平台只推送 @ 本机器人的群消息。
+- **私聊**：在企微中打开该智能机器人会话，直接发文本、图片、文件、语音或视频。
+- **群聊**：将机器人拉入群后 `@机器人 + 问题`（或图片/文件/视频）；平台只推送 @ 本机器人的群消息。
 - **图片**：回调里的 COS 临时 URL 会先下载落盘再送 Vision（避免 provider 直拉临时链失败）。
+- **文件**：同样先下载落盘（优先 `.oryxos/inbound-media/`），正文提示本地路径供 Agent `read_file`（须在 FILE 沙箱白名单内；**文本型 PDF 可抽正文**）；不走 Vision。
+- **语音**：智能机器人回调已含平台 ASR（`voice.content`），直接当用户问题编排；**仅单聊**。空转写且带 `voice.url` 时落盘并走 Whisper 兜底；否则明确提示改发文字。
+- **视频**：`msgtype=video` 经 COS URL（及可选 AES）落盘；配置 Whisper + ffmpeg 时可抽音轨转写（不理解画面；`ORYXOS_VIDEO_ASR=0` 可关）。
+- **媒体根**：优先 `.oryxos/inbound-media/{channel}/`（单文件 ≤50MB）；TTL/配额见 `ORYXOS_INBOUND_MEDIA_TTL_HOURS`（默认 24）与 `ORYXOS_INBOUND_MEDIA_MAX_MB`（默认 2048）。COS 下载禁用自动跟跳，重定向逐跳校验白名单。
 
 ## 四、与飞书的差异（运维须知）
 
@@ -49,13 +53,14 @@
 | 凭证 | App ID / App Secret | BotID / 长连接 Secret |
 | 连接 | `open.feishu.cn` SDK 长连接 | `openws.work.weixin.qq.com` WebSocket |
 | 回复 | im/v1 messages API（post + md） | 长连接 `aibot_send_msg`（markdown） |
-| 进度提示 | 交互卡片原地 PATCH（思考→终态） | 先发「正在思考…」占位，再发终态（无原地编辑） |
-| 入站图 | image_key 官方下载 | COS 临时 URL → AES 解密落盘 |
+| 进度提示 | 交互卡片原地 PATCH（思考→工具→终态；`/stop` 红卡「已停止」） | 占位 + 可选长 TTFT 心跳 + 至多一条工具 + 终态（无原地编辑；失败/`/stop` 专用句） |
+| 入站图/文件 | image_key 官方下载 | COS URL + AES 落盘（≤50MB；防重定向 SSRF） |
+| ASR | Whisper + ffmpeg（silk 常见） | 平台 ASR；空转写可 Whisper 兜底 |
 | 同一 Bot 连接数 | SDK 管理 | 同时仅一条有效长连接（新连踢旧） |
-| 私聊命令 | `/new` 清会话；`/stop` 见主线能力 | 同（由核心编排，渠道无特殊实现） |
+| 命令 | 私聊 `/new` 清会话；私聊/群聊 `/stop` 停进行中推理（下一轮生效） | 同（核心编排，渠道无特殊实现） |
 
 ## 五、非目标（本期不做）
 
 - 自建应用 HTTP 回调 + AES 加解密（入站图 COS 解密除外）
-- 逐 token 刷屏 / 模板卡片 HITL
-- 语音 / 视频 / 文件入站（仅图片 + 文本）
+- 逐 token 刷屏 / 模板卡片 HITL / 企微原地 PATCH
+- 群聊语音（平台仅单聊语音）；视频画面理解 / 抽帧 Vision
