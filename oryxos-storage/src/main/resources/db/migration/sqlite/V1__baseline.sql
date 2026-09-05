@@ -105,10 +105,28 @@ CREATE TABLE IF NOT EXISTS agent_executions (
     ended_at TIMESTAMP,
     success BOOLEAN,
     error_message TEXT,
-    duration_ms INTEGER
+    duration_ms INTEGER,
+    updated_at TIMESTAMP,
+    input_preview TEXT,
+    cancel_requested_at TIMESTAMP,
+    status VARCHAR(32),
+    stop_reason VARCHAR(64)
 );
 CREATE INDEX IF NOT EXISTS idx_agent_executions_agent ON agent_executions (agent_name);
+CREATE INDEX IF NOT EXISTS idx_agent_executions_started ON agent_executions (started_at, id);
 -- idx_agent_executions_trace (trace_id) 由 V2 迁移创建（同上，021）。
+
+-- agent_run_events：流式工作台 append-only 活动事件（每 Run 单调 sequence）
+CREATE TABLE IF NOT EXISTS agent_run_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL,
+    sequence INTEGER NOT NULL,
+    type VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    payload_json TEXT NOT NULL,
+    UNIQUE (run_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_run_events_run_seq ON agent_run_events (run_id, sequence);
 
 -- memory_entries：长期记忆条目（SqliteMemoryStore 后端，22 节）
 -- scope=CORE 全量注入不截断；scope=ARCHIVAL 归档只带最近 N 条（查询 LIMIT，非删除）

@@ -19,7 +19,12 @@ import static org.mockito.Mockito.when;
 import io.oryxos.core.OryxTool;
 import io.oryxos.core.ToolResult;
 import io.oryxos.core.provider.ToolCallRequest;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -214,5 +219,68 @@ class ToolExecutorTest {
             eq(false),
             anyString(),
             anyLong());
+  }
+
+  @Test
+  @DisplayName("工具完成事件对输入输出中的密钥脱敏")
+  void finishedEventPayloadsAreRedacted() {
+    MemoryEventStore store = new MemoryEventStore();
+    AgentRunEventPublisher publisher =
+        new AgentRunEventPublisher(
+            store,
+            new AgentRunEventHub(),
+            Clock.fixed(Instant.parse("2026-08-23T04:00:00Z"), ZoneOffset.UTC));
+    ToolExecutor live =
+        new ToolExecutor(Map.of("http_get", httpGet), Map.of(), null, auditor, publisher);
+    when(httpGet.execute(any()))
+        .thenReturn(ToolResult.ok("Authorization: Bearer super-secret-token"));
+
+    AgentRunExecutionContext.set(11L);
+    try {
+      live.execute(
+          "s-1",
+          "agent-x",
+          new ToolCallRequest(
+              "http_get", "{\"url\":\"https://example\",\"password\":\"hunter2\"}"));
+    } finally {
+      AgentRunExecutionContext.clear();
+    }
+
+    assertFalse(store.rows.isEmpty());
+    String payloads =
+        store.rows.stream().map(AgentRunEvent::payloadJson).reduce("", String::concat);
+    assertFalse(payloads.contains("hunter2"));
+    assertFalse(payloads.contains("super-secret-token"));
+    assertTrue(payloads.contains("***"));
+  }
+
+  private static final class MemoryEventStore implements AgentRunEventStore {
+    final List<AgentRunEvent> rows = new ArrayList<>();
+
+    @Override
+    public synchronized AgentRunEvent append(
+        long runId, String type, String payloadJson, Instant createdAt) {
+      AgentRunEvent event =
+          new AgentRunEvent(runId, rows.size() + 1L, type, createdAt, payloadJson);
+      rows.add(event);
+      return event;
+    }
+
+    @Override
+    public synchronized List<AgentRunEvent> readAfter(long runId, long afterSequence, int limit) {
+      return rows.stream()
+          .filter(event -> event.runId() == runId && event.sequence() > afterSequence)
+          .limit(limit)
+          .toList();
+    }
+
+    @Override
+    public synchronized long lastSequence(long runId) {
+      return rows.stream()
+          .filter(event -> event.runId() == runId)
+          .mapToLong(AgentRunEvent::sequence)
+          .max()
+          .orElse(0L);
+    }
   }
 }

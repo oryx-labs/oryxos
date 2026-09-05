@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test src/chat-scroll.test.js",
+    "test": "node --test src/chat-scroll.test.js src/features/runs/run-state.test.js src/features/runs/run-api.test.js src/features/runs/run-navigation.test.js src/features/runs/run-management.test.js",
     "build": "vite build",
     "preview": "vite preview"
   },

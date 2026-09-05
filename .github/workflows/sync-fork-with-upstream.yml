@@ -1,0 +1,44 @@
+name: Sync fork branch with upstream
+
+# Runs only on forks. After this file is on the fork default branch, the
+# schedule keeps a long-lived PR branch current with oryx-labs/main so OWASP
+# suppressions do not go stale. Conflicts fail the job instead of force-pushing.
+on:
+  schedule:
+    - cron: '15 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to merge oryx-labs/main into
+        required: true
+        default: docs/agent-system-research
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.event.repository.fork == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.branch || 'docs/agent-system-research' }}
+          fetch-depth: 0
+      - name: Merge oryx-labs/main
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/oryx-labs/oryxos.git
+          git fetch upstream main
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Already contains upstream/main."
+            exit 0
+          fi
+          behind="$(git rev-list --count HEAD..upstream/main)"
+          echo "Merging ${behind} commit(s) from upstream/main."
+          git merge upstream/main --no-edit
+          git push origin HEAD

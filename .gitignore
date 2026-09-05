@@ -26,8 +26,13 @@ replay_pid*
 # Maven build output
 target/
 
-# SQLite runtime database
+# SQLite runtime database（含 WAL/SHM 旁路文件）
 *.db
+*.db-shm
+*.db-wal
+
+# 个人/课件调研文档，不入库
+docs/wyl-gpt/
 
 # OWASP Dependency-Check data cache
 .dependency-check/
@@ -58,6 +63,8 @@ logs/
 # IDEA
 .idea/
 
+# macOS
+.DS_Store
 # local secrets
 .env
 

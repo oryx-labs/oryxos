@@ -1,10 +1,12 @@
 <script setup>
-import { ref, reactive, computed, nextTick } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import logoUrl from './assets/logo.svg'
 import LoginView from './views/LoginView.vue'
+import RunManagementView from './features/runs/RunManagementView.vue'
 import { isNearBottom } from './chat-scroll.js'
+import { applyRunNav, parseRunNav, runHash, runListHash } from './features/runs/run-navigation.js'
 
 // —— 012-web-auth US3：登录守卫 —— 未登录先查 /api/v1/auth/me；登录页 LoginView 调 /auth/login
 const auth = reactive({ checking: true, enabled: true, username: null })
@@ -58,6 +60,7 @@ const TOP_NAV = [
 ]
 
 const RUNTIME_NAV = [
+  { key: 'runs', label: '流式管理' },
   { key: 'sessions', label: '会话列表', path: '/api/v1/sessions' },
   { key: 'providers', label: 'Provider 列表' },
   { key: 'mcp', label: 'MCP 管理' },
@@ -190,7 +193,7 @@ async function load(key) {
   }
 }
 
-function select(key) {
+function select(key, options = {}) {
   active.value = key
   sessionDetail.value = null // 切页时收起会话详情
   execDetail.value = null // 切页时收起执行记录
@@ -206,6 +209,10 @@ function select(key) {
   if (key === 'skills') { cancelSkill(); closeSkillDetail(); loadSkills() }
   if (key === 'knowledge') { cancelKb(); closeKbDetail(); loadKnowledge() }
   if (key === 'overview') { loadOverviewStats() }
+  if (key === 'runs') {
+    runViewRef.value?.load?.()
+    if (!options.fromHash) writeRunHash(selectedRunId.value)
+  }
   if (key === 'report') { loadReport() }
 }
 
@@ -221,6 +228,7 @@ function refresh() {
   if (key === 'skills') { loadSkills(); return }
   if (key === 'knowledge') { kbDetail.value ? refreshKbDetail(kbDetail.value.name) : loadKnowledge(); return }
   if (key === 'overview') { loadOverviewStats(); return }
+  if (key === 'runs') { runViewRef.value?.load?.(); return }
   if (key === 'report') { loadReport(); return }
   if (NAV.find((n) => n.key === key)?.path) load(key)
 }
@@ -642,6 +650,42 @@ async function toggleTask(row) {
 // —— 30 节：Agent 管理（动态增删改 + 一句话生成）——
 const agents = ref({ loading: false, error: null, data: [] })
 const triggering = ref(null) // 正在“立即触发”的 agent 名，防重复点击
+const selectedRunId = ref(null)
+const runViewRef = ref(null)
+
+function writeRunHash(runId) {
+  const next = runId ? runHash(runId) : runListHash()
+  if (location.hash === next) return
+  location.hash = next
+}
+
+function applyLocationHash() {
+  const parsed = parseRunNav(location.hash)
+  if (!parsed) return
+  const next = applyRunNav(location.hash, { page: active.value, runId: selectedRunId.value })
+  selectedRunId.value = parsed.runId
+  if (active.value !== 'runs' && next.page === 'runs') {
+    select('runs', { fromHash: true })
+  }
+}
+
+function openRunWorkbench(runId) {
+  selectedRunId.value = runId
+  select('runs')
+}
+
+function closeRunWorkbench() {
+  selectedRunId.value = null
+  writeRunHash(null)
+}
+
+onMounted(() => {
+  applyLocationHash()
+  window.addEventListener('hashchange', applyLocationHash)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('hashchange', applyLocationHash)
+})
 async function loadAgents() {
   agents.value = { loading: true, error: null, data: [] }
   try {
@@ -934,7 +978,7 @@ async function triggerAgent(a) {
     })
     const body = await res.json()
     if (body.code !== 0) throw new Error(body.message || '触发失败')
-    alert(`【${a.name}】已触发，正在后台执行（执行 #${body.data?.executionId}）。\n\n进度看「详情 → 执行历史」，结果看「详情 → 会话」。`)
+    openRunWorkbench(body.data?.executionId)
   } catch (e) {
     alert(`【${a.name}】触发失败：${e.message}`)
   } finally {
@@ -1735,7 +1779,14 @@ function fmtDuration(ms) {
   return s < 60 ? s.toFixed(2) + ' s' : Math.floor(s / 60) + ' 分 ' + Math.round(s % 60) + ' 秒'
 }
 function execStatusLabel(s) {
-  return { RUNNING: '运行中', SUCCESS: '成功', FAILED: '失败' }[s] || s
+  return {
+    QUEUED: '正在启动',
+    RUNNING: '运行中',
+    CANCELLING: '正在停止',
+    SUCCESS: '成功',
+    FAILED: '失败',
+    CANCELLED: '已取消',
+  }[s] || s
 }
 
 // —— Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示
@@ -2021,9 +2072,19 @@ const outputRows = computed(() =>
         </template>
 
         <template v-else>
-          <div class="page-head">
+          <div v-if="!(active === 'runs' && selectedRunId)" class="page-head">
             <h2>{{ current.label }}</h2>
             <button class="btn" @click="refresh()">刷新</button>
+          </div>
+
+          <div v-if="active === 'runs'">
+            <RunManagementView
+              ref="runViewRef"
+              :selected-id="selectedRunId"
+              @open="openRunWorkbench"
+              @close="closeRunWorkbench"
+              @go-agents="select('agents')"
+            />
           </div>
 
           <!-- 报表（016 审计看板）：KPI 汇总 + 分布条形图 + 明细下钻；时间窗三档 -->
@@ -2188,7 +2249,7 @@ const outputRows = computed(() =>
           </div>
 
           <!-- Skill：纯 CRUD 列表（存在即已安装）；绑定一致性仅在变更后回检发现问题时展示 -->
-          <div v-if="active === 'skills'">
+          <div v-else-if="active === 'skills'">
             <template v-if="!skillDetail">
             <div class="toolbar">
               <button class="btn" @click="newImport()">从 GitHub 拉取</button>
@@ -2899,6 +2960,10 @@ const outputRows = computed(() =>
               <!-- Tab 4：会话 —— 每个 Agent 一个固定 session，直接作为对话展示 -->
               <div v-else-if="agentDetail.tab === 'chat'">
                 <div class="sess-meta"><span class="mono">{{ chat.sessionId || '（会话尚未创建）' }}</span></div>
+                <div class="chat-run-hint">
+                  <p>会话发送会等整轮结束才返回。要看实时进度，请用「立即触发」或到「流式管理」。</p>
+                  <button class="btn" type="button" @click="select('runs')">打开流式管理</button>
+                </div>
                 <p v-if="chat.loading && !chat.messages.length" class="empty">加载中…</p>
                 <p v-else-if="chat.error" class="error">出错：{{ chat.error }}</p>
                 <template v-else>
@@ -2986,7 +3051,7 @@ const outputRows = computed(() =>
                   <thead><tr><th>状态</th><th>来源</th><th>开始时间</th><th>结束时间</th><th>时长</th><th>Trace</th><th>错误</th></tr></thead>
                   <tbody>
                     <tr v-if="!execHistory.data.length"><td colspan="7" class="empty">（还没有执行记录 · 点「立即触发」跑一次）</td></tr>
-                    <tr v-for="e in execHistory.data" :key="e.id">
+                    <tr v-for="e in execHistory.data" :key="e.id" class="clickable" @click="openRunWorkbench(e.id)">
                       <td><span :class="['exec-badge', e.status.toLowerCase()]">{{ execStatusLabel(e.status) }}</span></td>
                       <td>{{ e.source === 'schedule' ? '定时' : '手动' }}</td>
                       <td class="mono">{{ fmtTime(e.startedAt) }}</td>
@@ -3532,9 +3597,11 @@ th { color: var(--text-2); font-weight: 500; }
 .tag { display: inline-block; background: var(--bg-mute); color: var(--brand); border-radius: var(--radius); padding: 2px 8px; margin-right: 6px; }
 .memtext { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; white-space: pre-wrap; }
 .exec-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; border: 1px solid var(--border); }
-.exec-badge.running { color: var(--brand); border-color: var(--brand); }
-.exec-badge.success { color: #16a34a; border-color: #16a34a; }
+.exec-badge.running, .exec-badge.queued { color: var(--brand); border-color: var(--brand); }
+.exec-badge.success { color: var(--ok); border-color: var(--ok); }
 .exec-badge.failed { color: var(--err); border-color: var(--err); }
+.exec-badge.cancelling, .exec-badge.cancelled { color: var(--brand); border-color: var(--brand); }
+.clickable { cursor: pointer; }
 
 /* 定时任务：状态标记 + 操作按钮 */
 .ok { color: var(--ok); }
@@ -3686,6 +3753,24 @@ th { color: var(--text-2); font-weight: 500; }
 .chat-send-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 8px; }
 .send-mode-toggle { margin-bottom: 0; }
 .chat-send-hint { font-size: 12px; }
+.chat-run-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.chat-run-hint p {
+  margin: 0;
+  flex: 1 1 260px;
+  color: var(--text-2);
+  line-height: 1.6;
+  font-size: 13px;
+}
 
 @media (max-width: 640px) { .layout { flex-direction: column; } .nav { width: auto; flex-direction: row; flex-wrap: wrap; } .readonly { display: none; } .ws { flex-direction: column; } .ws-tree { width: auto; } }
 

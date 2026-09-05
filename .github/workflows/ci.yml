@@ -24,6 +24,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Long-lived PRs fail OWASP when main adds CVE suppressions they have not merged.
+  # Fail fast if those files lag the PR base; other drift is still the author's call.
+  owasp-baseline:
+    name: OWASP baseline vs main
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Compare suppressions and root POM to base
+        run: |
+          set -euo pipefail
+          git fetch origin "${{ github.base_ref }}"
+          base="origin/${{ github.base_ref }}"
+          if git merge-base --is-ancestor "$base" HEAD; then
+            echo "Branch already contains $base."
+            exit 0
+          fi
+          echo "Branch is $(git rev-list --count HEAD.."$base") commit(s) behind $base."
+          changed=0
+          for f in config/dependency-check-suppressions.xml pom.xml; do
+            if ! git diff --quiet "$base" -- "$f"; then
+              echo "::error file=$f::$f differs from ${{ github.base_ref }}. Merge main so OWASP suppressions stay in sync."
+              git --no-pager diff --stat "$base" -- "$f"
+              changed=1
+            fi
+          done
+          if [ "$changed" -ne 0 ]; then
+            echo "Run: make sync-upstream && mvn -B verify"
+            exit 1
+          fi
+          echo "Behind main, but OWASP/pom baseline files match."
+
   build:
     name: Build & quality gate
     runs-on: ubuntu-latest

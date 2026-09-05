@@ -40,6 +40,7 @@ public class AgentScheduler {
   private final SessionManager sessionManager;
   private final ScheduledTaskStore taskStore;
   private final AgentExecutionStore agentExecutionStore;
+  private final AgentExecutionService agentExecutionService;
 
   /** scheduleId => in-process overlap lock. */
   private final ConcurrentMap<String, Lock> taskLocks = new ConcurrentHashMap<>();
@@ -66,12 +67,31 @@ public class AgentScheduler {
       SessionManager sessionManager,
       ScheduledTaskStore taskStore,
       AgentExecutionStore agentExecutionStore) {
+    this(
+        taskScheduler,
+        profileRegistry,
+        agentService,
+        sessionManager,
+        taskStore,
+        agentExecutionStore,
+        null);
+  }
+
+  public AgentScheduler(
+      TaskScheduler taskScheduler,
+      ProfileRegistry profileRegistry,
+      AgentService agentService,
+      SessionManager sessionManager,
+      ScheduledTaskStore taskStore,
+      AgentExecutionStore agentExecutionStore,
+      AgentExecutionService agentExecutionService) {
     this.taskScheduler = taskScheduler;
     this.profileRegistry = profileRegistry;
     this.agentService = agentService;
     this.sessionManager = sessionManager;
     this.taskStore = taskStore;
     this.agentExecutionStore = agentExecutionStore;
+    this.agentExecutionService = agentExecutionService;
   }
 
   /** Registers schedules for every currently loaded Agent. */
@@ -281,19 +301,29 @@ public class AgentScheduler {
     String sessionId = null;
     boolean success = false;
     String error = null;
-    long agentExecutionId = startAgentExecution(profile, startedAt);
+    long agentExecutionId = startAgentExecution(profile, startedAt, schedule.message());
+    if (agentExecutionService != null && agentExecutionId >= 0) {
+      agentExecutionService.attachScheduledRun(agentExecutionId, profile.name(), "schedule");
+    }
     try {
       Session session =
           sessionManager.getOrCreate(SCHEDULER_CHANNEL, SCHEDULER_USER, profile.name());
       sessionId = session.sessionId();
       agentService.process(session, schedule.message());
       success = true;
+    } catch (RunCancelledException exception) {
+      error = exception.getMessage();
+      success = false;
     } catch (Exception exception) {
       error = exception.getMessage();
       LOG.error("Schedule {} failed", sanitizeLogValue(scheduleId), exception);
     } finally {
       recordExecution(schedule, scheduleId, sessionId, startedAt, success, error, start);
-      finishAgentExecution(agentExecutionId, sessionId, success, error);
+      if (agentExecutionService != null && agentExecutionId >= 0) {
+        agentExecutionService.completeScheduledRun(agentExecutionId, sessionId, success, error);
+      } else {
+        finishAgentExecution(agentExecutionId, sessionId, success, error);
+      }
     }
   }
 
@@ -331,12 +361,12 @@ public class AgentScheduler {
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "CRLF_INJECTION_LOGS",
       justification = "The exception message is stripped of CR and LF before logging.")
-  private long startAgentExecution(Profile profile, Instant startedAt) {
+  private long startAgentExecution(Profile profile, Instant startedAt, String inputPreview) {
     if (agentExecutionStore == null) {
       return -1;
     }
     try {
-      return agentExecutionStore.start(profile.name(), "schedule", startedAt);
+      return agentExecutionStore.start(profile.name(), "schedule", startedAt, inputPreview);
     } catch (RuntimeException exception) {
       LOG.warn(
           "Could not create Agent execution record: {}", sanitizeLogValue(exception.getMessage()));

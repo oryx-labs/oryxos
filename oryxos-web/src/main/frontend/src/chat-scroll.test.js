@@ -27,3 +27,12 @@ test('用户离开底部超过阈值时保留阅读位置', () => {
 
   assert.equal(isNearBottom(aboveThreshold), false)
 })
+
+test('自动跟随意图应在追加长内容前捕获', () => {
+  const container = { scrollHeight: 1000, scrollTop: 800, clientHeight: 200 }
+  const shouldFollow = isNearBottom(container)
+  container.scrollHeight = 1500
+
+  assert.equal(shouldFollow, true)
+  assert.equal(isNearBottom(container), false)
+})

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Block push when OWASP suppressions or the root POM lag behind oryx-labs/main.
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+exec "$ROOT/scripts/sync-upstream.sh" --check

@@ -44,9 +44,10 @@ public class ToolExecutor {
 
   private final ProfileRegistry profileRegistry;
   private final ToolInvocationAuditor auditor;
+  private final AgentRunEventPublisher events;
 
   public ToolExecutor(Map<String, OryxTool> tools, ToolInvocationAuditor auditor) {
-    this(tools, Map.of(), null, auditor);
+    this(tools, Map.of(), null, auditor, null);
   }
 
   /** 装配期注入（OryxOsRuntime）；测试直构不调用即保持 ALLOW_ALL（零策略零破坏）。 */
@@ -69,17 +70,40 @@ public class ToolExecutor {
       Map<String, String> mcpToolOwners,
       ProfileRegistry profileRegistry,
       ToolInvocationAuditor auditor) {
+    this(tools, mcpToolOwners, profileRegistry, auditor, null);
+  }
+
+  public ToolExecutor(
+      Map<String, OryxTool> tools,
+      Map<String, String> mcpToolOwners,
+      ProfileRegistry profileRegistry,
+      ToolInvocationAuditor auditor,
+      AgentRunEventPublisher events) {
     this.tools = tools;
     this.mcpToolOwners = mcpToolOwners;
     this.profileRegistry = profileRegistry;
     this.auditor = auditor;
+    this.events = events;
   }
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "CRLF_INJECTION_LOGS",
       justification = "日志中的工具名已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
   public ToolResult execute(String sessionId, String agentName, ToolCallRequest call) {
+    if (AgentRunExecutionContext.isCancelRequested()) {
+      throw new RunCancelledException();
+    }
     long startedAt = System.currentTimeMillis();
+    String toolCallId = call.id() == null || call.id().isBlank() ? call.name() : call.id();
+    publish(
+        AgentRunEventTypes.TOOL_CALL_STARTED,
+        java.util.Map.of(
+            "toolCallId",
+            toolCallId,
+            "toolName",
+            call.name(),
+            "inputSummary",
+            AgentRunEventPayloads.summarizeJson(call.argumentsJson())));
     OryxTool tool = tools.get(call.name());
     if (tool == null) {
       return fail(sessionId, agentName, call, "未注册的工具: " + call.name(), startedAt);
@@ -115,54 +139,68 @@ public class ToolExecutor {
       } catch (RuntimeException e) {
         return fail(sessionId, agentName, call, e.getMessage(), startedAt);
       }
-      // 审计 fail-open：工具已执行完、副作用已发生，审计存储抖动不应让循环把这次执行当失败处理（否则模型可能
-      // 重调一次有副作用的工具）；不重试审计也不伪造第二条失败审计，失败走 ERROR 日志独立告警。
-      // 024：docker 档时补记执行后端与容器 ID（此时进程已结束，cidfile 必已写入）；local 档不置上下文，
-      // 走既有 8 参签名——对 auditor 的既有交互契约（现存测试按 8 参 stub/verify）零变化。
-      String executionBackend = ToolExecutionContext.executionBackend();
-      try {
-        if (executionBackend == null) {
-          auditor.record(
-              sessionId,
-              agentName,
-              call.name(),
-              call.argumentsJson(),
-              result.success() ? result.content() : null,
-              result.success(),
-              result.success() ? null : result.errorMessage(),
-              System.currentTimeMillis() - startedAt);
-        } else {
-          auditor.record(
-              sessionId,
-              agentName,
-              call.name(),
-              call.argumentsJson(),
-              result.success() ? result.content() : null,
-              result.success(),
-              result.success() ? null : result.errorMessage(),
-              null,
-              executionBackend,
-              ToolExecutionContext.containerId(),
-              System.currentTimeMillis() - startedAt);
-        }
-      } catch (RuntimeException auditFailure) {
-        LOG.error("工具调用审计落库失败（结果照常返回）: tool={}", sanitize(call.name()), auditFailure);
-      }
-      try {
-        metrics.recordToolInvocation(call.name(), result.success()); // 023：指标异常不伤主链路
-      } catch (RuntimeException ignored) {
-        // FR-010
-      }
-      // 021 日志与审计互查（SC-007）：处理路径关键日志点——MDC 自动携带 traceId，不记参数/结果（防敏感泄漏）
-      LOG.info(
-          "工具执行完成: tool={} success={} durationMs={}",
-          sanitize(call.name()),
-          result.success(),
-          System.currentTimeMillis() - startedAt);
+      recordCompleted(sessionId, agentName, call, toolCallId, result, startedAt);
       return result;
     } finally {
       ToolExecutionContext.clear();
     }
+  }
+
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "CRLF_INJECTION_LOGS",
+      justification = "日志中的工具名已经 sanitize() 消去 CR/LF；taint 分析不跨方法追踪该消毒，故局部抑制")
+  private void recordCompleted(
+      String sessionId,
+      String agentName,
+      ToolCallRequest call,
+      String toolCallId,
+      ToolResult result,
+      long startedAt) {
+    // 审计 fail-open：工具已执行完、副作用已发生，审计存储抖动不应让循环把这次执行当失败处理（否则模型可能
+    // 重调一次有副作用的工具）；不重试审计也不伪造第二条失败审计，失败走 ERROR 日志独立告警。
+    // 024：docker 档时补记执行后端与容器 ID（此时进程已结束，cidfile 必已写入）；local 档不置上下文，
+    // 走既有 8 参签名——对 auditor 的既有交互契约（现存测试按 8 参 stub/verify）零变化。
+    String executionBackend = ToolExecutionContext.executionBackend();
+    try {
+      if (executionBackend == null) {
+        auditor.record(
+            sessionId,
+            agentName,
+            call.name(),
+            call.argumentsJson(),
+            result.success() ? result.content() : null,
+            result.success(),
+            result.success() ? null : result.errorMessage(),
+            System.currentTimeMillis() - startedAt);
+      } else {
+        auditor.record(
+            sessionId,
+            agentName,
+            call.name(),
+            call.argumentsJson(),
+            result.success() ? result.content() : null,
+            result.success(),
+            result.success() ? null : result.errorMessage(),
+            null,
+            executionBackend,
+            ToolExecutionContext.containerId(),
+            System.currentTimeMillis() - startedAt);
+      }
+    } catch (RuntimeException auditFailure) {
+      LOG.error("工具调用审计落库失败（结果照常返回）: tool={}", sanitize(call.name()), auditFailure);
+    }
+    publishToolFinished(call, toolCallId, result, startedAt);
+    try {
+      metrics.recordToolInvocation(call.name(), result.success()); // 023：指标异常不伤主链路
+    } catch (RuntimeException ignored) {
+      // FR-010
+    }
+    // 021 日志与审计互查（SC-007）：处理路径关键日志点——MDC 自动携带 traceId，不记参数/结果（防敏感泄漏）
+    LOG.info(
+        "工具执行完成: tool={} success={} durationMs={}",
+        sanitize(call.name()),
+        result.success(),
+        System.currentTimeMillis() - startedAt);
   }
 
   /**
@@ -252,6 +290,20 @@ public class ToolExecutor {
     } catch (RuntimeException auditFailure) {
       LOG.error("工具调用失败的审计落库也失败（失败结果照常返回）: tool={}", sanitize(call.name()), auditFailure);
     }
+    String toolCallId = call.id() == null || call.id().isBlank() ? call.name() : call.id();
+    publish(
+        AgentRunEventTypes.TOOL_CALL_FINISHED,
+        java.util.Map.of(
+            "toolCallId",
+            toolCallId,
+            "toolName",
+            call.name(),
+            "success",
+            false,
+            "error",
+            AgentRunEventPayloads.summarizeText(errorMessage),
+            "durationMs",
+            System.currentTimeMillis() - startedAt));
     try {
       metrics.recordToolInvocation(call.name(), false); // 023：失败（含被拦）也计数
       if (blockedBy != null) {
@@ -261,6 +313,28 @@ public class ToolExecutor {
       // FR-010：指标失败静默
     }
     return ToolResult.error(errorMessage, false);
+  }
+
+  private void publishToolFinished(
+      ToolCallRequest call, String toolCallId, ToolResult result, long startedAt) {
+    java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+    payload.put("toolCallId", toolCallId);
+    payload.put("toolName", call.name());
+    payload.put("success", result.success());
+    payload.put("durationMs", System.currentTimeMillis() - startedAt);
+    if (result.success()) {
+      payload.put("outputSummary", AgentRunEventPayloads.summarizeText(result.content()));
+    } else {
+      payload.put("error", AgentRunEventPayloads.summarizeText(result.errorMessage()));
+    }
+    publish(AgentRunEventTypes.TOOL_CALL_FINISHED, payload);
+  }
+
+  private void publish(String type, java.util.Map<String, Object> payload) {
+    if (events == null) {
+      return;
+    }
+    events.publishCurrent(type, payload);
   }
 
   /** 日志参数消毒：去掉换行，防日志伪造（CRLF injection）。 */

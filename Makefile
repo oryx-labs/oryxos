@@ -1,10 +1,12 @@
 # OryxOS 构建 / 发行版打包
 #
-#   make build     编译并打包可执行 jar（含管理台前端）
-#   make release   打发行版 dist/oryxos-<version>.tar.gz（bin/ config/ libs/）
-#   make docker    用已构建的胖 jar 构建本地镜像 oryxos:<version>（不跑 Maven，镜像内只有 JRE）
-#   make clean     清理 dist/ 与 maven target/
-#   make help      帮助
+#   make build           编译并打包可执行 jar（含管理台前端）
+#   make release         打发行版 dist/oryxos-<version>.tar.gz（bin/ config/ libs/）
+#   make docker          用已构建的胖 jar 构建本地镜像 oryxos:<version>（不跑 Maven，镜像内只有 JRE）
+#   make sync-upstream   把 oryx-labs/main 合并进当前分支（避免 OWASP 抑制落后）
+#   make hooks           安装 .githooks（push 前检查 OWASP/pom 是否落后 main）
+#   make clean           清理 dist/ 与 maven target/
+#   make help            帮助
 #
 # 发行版结构（解压后）：
 #   oryxos-<version>/
@@ -22,14 +24,22 @@ STAGE     := $(DIST_DIR)/$(DIST_NAME)
 BOOT_JAR  := oryxos-boot/target/oryxos-boot-$(VERSION).jar
 TARBALL   := $(DIST_DIR)/$(DIST_NAME).tar.gz
 
-.PHONY: help build release docker clean
+.PHONY: help build release docker clean sync-upstream hooks
 
 help:
 	@echo "OryxOS make 目标（version = $(VERSION)）："
-	@echo "  make build     编译打包可执行 jar（含管理台前端）"
-	@echo "  make release   打发行版 $(TARBALL)（bin/ config/ libs/）"
-	@echo "  make docker    构建本地镜像 oryxos:$(VERSION)（依赖 build 产出的胖 jar）"
-	@echo "  make clean     清理 dist/ 与 maven target/"
+	@echo "  make build          编译打包可执行 jar（含管理台前端）"
+	@echo "  make release        打发行版 $(TARBALL)（bin/ config/ libs/）"
+	@echo "  make docker         构建本地镜像 oryxos:$(VERSION)（依赖 build 产出的胖 jar）"
+	@echo "  make sync-upstream  合并 oryx-labs/main 到当前分支"
+	@echo "  make hooks          安装 push 前的 OWASP/pom 落后检查"
+	@echo "  make clean          清理 dist/ 与 maven target/"
+
+sync-upstream:
+	@bash scripts/sync-upstream.sh
+
+hooks:
+	@bash scripts/install-git-hooks.sh
 
 # 全量打包：frontend-maven-plugin 会一并构建管理台前端进 jar（不加 -Dfrontend.skip）
 build:

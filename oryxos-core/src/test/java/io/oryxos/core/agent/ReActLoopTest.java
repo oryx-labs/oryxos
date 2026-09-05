@@ -149,6 +149,30 @@ class ReActLoopTest {
   }
 
   @Test
+  @DisplayName("最大轮数为 6 时第 5、6 轮注入收敛提示，仍返回达到最大轮数")
+  void remainingTwoIterationsReceiveConvergenceHint() {
+    when(providerService.chat(any(), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              return responseWithToolCall(HTTP_GET_CALL);
+            });
+    when(toolExecutor.execute(any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+
+    String reply = loop.run(session, "持续调查", profileWithMaxIterations(6));
+
+    var systemPrompts = org.mockito.ArgumentCaptor.forClass(ProviderRequest.class);
+    verify(providerService, times(6)).chat(any(), any(), systemPrompts.capture());
+    List<ProviderRequest> requests = systemPrompts.getAllValues();
+    assertEquals(6, requests.size());
+    assertTrue(
+        requests.get(0).systemPrompt() == null
+            || !requests.get(0).systemPrompt().contains(ReActLoop.CONVERGENCE_HINT));
+    assertTrue(requests.get(4).systemPrompt().contains(ReActLoop.CONVERGENCE_HINT));
+    assertTrue(requests.get(5).systemPrompt().contains(ReActLoop.CONVERGENCE_HINT));
+    assertTrue(reply.contains("达到最大轮数"));
+  }
+
+  @Test
   @DisplayName("最大轮数按 Agent 配置生效（5 轮即停）")
   void maxIterationsIsPerProfileNotHardcoded() {
     when(providerService.chat(any(), any(), any())).thenReturn(responseWithToolCall(HTTP_GET_CALL));

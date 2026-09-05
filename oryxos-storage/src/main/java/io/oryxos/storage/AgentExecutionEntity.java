@@ -44,6 +44,21 @@ public class AgentExecutionEntity {
   @Column(name = "duration_ms")
   private Long durationMs;
 
+  @Column(name = "updated_at")
+  private Instant updatedAt;
+
+  @Column(name = "input_preview")
+  private String inputPreview;
+
+  @Column(name = "cancel_requested_at")
+  private Instant cancelRequestedAt;
+
+  @Column(name = "status")
+  private String status;
+
+  @Column(name = "stop_reason")
+  private String stopReason;
+
   public Long getId() {
     return id;
   }
@@ -118,5 +133,45 @@ public class AgentExecutionEntity {
 
   public void setDurationMs(Long durationMs) {
     this.durationMs = durationMs;
+  }
+
+  public Instant getUpdatedAt() {
+    return updatedAt;
+  }
+
+  public void setUpdatedAt(Instant updatedAt) {
+    this.updatedAt = updatedAt;
+  }
+
+  public String getInputPreview() {
+    return inputPreview;
+  }
+
+  public void setInputPreview(String inputPreview) {
+    this.inputPreview = inputPreview;
+  }
+
+  public Instant getCancelRequestedAt() {
+    return cancelRequestedAt;
+  }
+
+  public void setCancelRequestedAt(Instant cancelRequestedAt) {
+    this.cancelRequestedAt = cancelRequestedAt;
+  }
+
+  public String getStatus() {
+    return status;
+  }
+
+  public void setStatus(String status) {
+    this.status = status;
+  }
+
+  public String getStopReason() {
+    return stopReason;
+  }
+
+  public void setStopReason(String stopReason) {
+    this.stopReason = stopReason;
   }
 }

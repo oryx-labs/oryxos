@@ -6,6 +6,9 @@ import io.oryxos.core.agent.AgentExecutionService;
 import io.oryxos.core.agent.AgentExecutionStore;
 import io.oryxos.core.agent.AgentLifecycleService;
 import io.oryxos.core.agent.AgentLoader;
+import io.oryxos.core.agent.AgentRunEventHub;
+import io.oryxos.core.agent.AgentRunEventPublisher;
+import io.oryxos.core.agent.AgentRunEventStore;
 import io.oryxos.core.agent.AgentScheduler;
 import io.oryxos.core.agent.AgentService;
 import io.oryxos.core.agent.AgentStore;
@@ -53,9 +56,11 @@ import io.oryxos.provider.ProvidersProperties;
 import io.oryxos.provider.SpringAiProviderServiceImpl;
 import io.oryxos.provider.ToolSchemaAdapter;
 import io.oryxos.storage.AgentExecutionRepository;
+import io.oryxos.storage.AgentRunEventRepository;
 import io.oryxos.storage.ApiKeyRepository;
 import io.oryxos.storage.ApiKeyService;
 import io.oryxos.storage.JpaAgentExecutionStore;
+import io.oryxos.storage.JpaAgentRunEventStore;
 import io.oryxos.storage.JpaLlmCallAuditor;
 import io.oryxos.storage.JpaNotifyChannelRegistry;
 import io.oryxos.storage.JpaPricingStore;
@@ -120,6 +125,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
@@ -884,11 +890,13 @@ public class OryxOsRuntime {
       ToolRegistry toolRegistry,
       ProfileRegistry profileRegistry,
       ToolInvocationAuditor auditor,
+      AgentRunEventPublisher agentRunEventPublisher,
       io.oryxos.core.policy.ToolPolicyService toolPolicyService,
       io.oryxos.core.metrics.MetricsRecorder metricsRecorder) {
     // 31 节：mcp_servers 白名单在此接线。mcpToolOwners() 是活视图，与 tools bean 一样不能在构造时 copyOf。
     ToolExecutor executor =
-        new ToolExecutor(tools, toolRegistry.mcpToolOwners(), profileRegistry, auditor);
+        new ToolExecutor(
+            tools, toolRegistry.mcpToolOwners(), profileRegistry, auditor, agentRunEventPublisher);
     executor.setToolPolicy(toolPolicyService); // 020：事中裁决——防幻觉调用与热更新窗口
     executor.setMetricsRecorder(metricsRecorder); // 023：工具调用/策略拦截指标
     return executor;
@@ -904,8 +912,10 @@ public class OryxOsRuntime {
       PromptBuilder promptBuilder,
       ProviderService providerService,
       ToolExecutor toolExecutor,
+      AgentRunEventPublisher agentRunEventPublisher,
       InterruptManager interruptManager) {
-    return new ReActLoop(promptBuilder, providerService, toolExecutor, interruptManager);
+    return new ReActLoop(
+        promptBuilder, providerService, toolExecutor, agentRunEventPublisher, interruptManager);
   }
 
   @Bean
@@ -1063,20 +1073,50 @@ public class OryxOsRuntime {
       AgentService agentService,
       SessionManager sessionManager,
       ScheduledTaskStore scheduledTaskStore,
-      AgentExecutionStore agentExecutionStore) {
+      AgentExecutionStore agentExecutionStore,
+      AgentExecutionService agentExecutionService) {
     return new AgentScheduler(
         taskScheduler,
         profileRegistry,
         agentService,
         sessionManager,
         scheduledTaskStore,
-        agentExecutionStore);
+        agentExecutionStore,
+        agentExecutionService);
+  }
+
+  @Bean
+  @DependsOn("flywayInitializer")
+  io.oryxos.storage.AgentRunSchemaUpgrade agentRunSchemaUpgrade(DataSource dataSource) {
+    return new io.oryxos.storage.AgentRunSchemaUpgrade(dataSource);
   }
 
   /** 32 节：Agent 执行历史落 SQLite（手动触发 + 定时触发都记，起止时间 / 状态）。 */
   @Bean
-  AgentExecutionStore agentExecutionStore(AgentExecutionRepository repository) {
+  AgentExecutionStore agentExecutionStore(
+      AgentExecutionRepository repository,
+      io.oryxos.storage.AgentRunSchemaUpgrade agentRunSchemaUpgrade) {
+    agentRunSchemaUpgrade.upgrade();
     return new JpaAgentExecutionStore(repository);
+  }
+
+  @Bean
+  AgentRunEventStore agentRunEventStore(
+      AgentRunEventRepository repository,
+      io.oryxos.storage.AgentRunSchemaUpgrade agentRunSchemaUpgrade) {
+    agentRunSchemaUpgrade.upgrade();
+    return new JpaAgentRunEventStore(repository);
+  }
+
+  @Bean
+  AgentRunEventHub agentRunEventHub() {
+    return new AgentRunEventHub();
+  }
+
+  @Bean
+  AgentRunEventPublisher agentRunEventPublisher(
+      AgentRunEventStore agentRunEventStore, AgentRunEventHub agentRunEventHub) {
+    return new AgentRunEventPublisher(agentRunEventStore, agentRunEventHub, Clock.systemUTC());
   }
 
   /** 32 节：异步触发的后台执行器——虚拟线程（宪法 VII：虚拟线程处理并发，非 Reactor/WebFlux）。 */
@@ -1086,10 +1126,15 @@ public class OryxOsRuntime {
     return Executors.newVirtualThreadPerTaskExecutor();
   }
 
-  @Bean
+  @Bean(initMethod = "reconcileOnStartup")
   AgentExecutionService agentExecutionService(
-      AgentExecutionStore agentExecutionStore, ExecutorService agentExecutionExecutor) {
+      AgentExecutionStore agentExecutionStore,
+      ExecutorService agentExecutionExecutor,
+      AgentRunEventPublisher agentRunEventPublisher) {
     return new AgentExecutionService(
-        agentExecutionStore, agentExecutionExecutor, Clock.systemDefaultZone());
+        agentExecutionStore,
+        agentExecutionExecutor,
+        Clock.systemDefaultZone(),
+        agentRunEventPublisher);
   }
 }

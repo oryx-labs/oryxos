@@ -1,0 +1,113 @@
+/* 管理台共用控件：必须全局，子页面才能吃到（App.vue 的 scoped 样式不会下渗）。 */
+.btn {
+  background: var(--bg-mute);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  margin-right: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn:focus-visible {
+  outline: 1px solid var(--brand);
+  outline-offset: 1px;
+}
+.btn-primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 500;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-2);
+  border-color: var(--brand-2);
+  color: #fff;
+}
+.btn-danger {
+  color: var(--err);
+  border-color: var(--err);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--bg-mute);
+  border-color: var(--err);
+  color: var(--err);
+}
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.data th,
+table.data td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.data th {
+  color: var(--text-2);
+  font-weight: 500;
+}
+table.data tr.clickable {
+  cursor: pointer;
+}
+table.data tbody tr.clickable:hover {
+  background: var(--bg-mute);
+}
+
+.exec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.exec-badge.running,
+.exec-badge.queued {
+  color: var(--brand);
+  border-color: var(--brand);
+}
+.exec-badge.success {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.exec-badge.failed {
+  color: var(--err);
+  border-color: var(--err);
+}
+.exec-badge.cancelling,
+.exec-badge.cancelled {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.exec-badge .pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: exec-pulse 1.6s infinite;
+}
+@keyframes exec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .exec-badge .pulse { animation: none; }
+}
+
+.empty { color: var(--text-3); }
+.error { color: var(--err); }
