@@ -10,6 +10,9 @@ import java.util.Map;
  *
  * <p>022：config 敏感项（{@link SensitiveConfigKeys} 名录）只回显掩码——口径与 {@link ProviderView#mask} 一致（确定性 +
  * 幂等），杜绝明文经查询接口泄露；掩码值被前端原样提交时由 controller 识别为"未修改"，保留原值。
+ *
+ * <p>webhook URL 本身也是凭证（拿到即可推送）：query 整体打码（钉钉 access_token / 企微 key 在 query）、 多段 path 末段打码（飞书 hook
+ * id 在末段），scheme+host 与单段 path 保留以辨认端点。
  */
 public record NotifyChannelView(
     String name, String type, String url, String description, Map<String, String> config) {
@@ -21,7 +24,11 @@ public record NotifyChannelView(
 
   public static NotifyChannelView from(NotifyChannelDef d) {
     return new NotifyChannelView(
-        d.name(), d.type(), d.url(), d.description(), maskConfig(d.config()));
+        d.name(),
+        d.type(),
+        CredentialMasks.maskWebhookUrl(d.url()),
+        d.description(),
+        maskConfig(d.config()));
   }
 
   /**

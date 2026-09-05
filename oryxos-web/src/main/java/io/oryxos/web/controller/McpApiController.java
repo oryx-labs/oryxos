@@ -5,6 +5,7 @@ import io.oryxos.core.mcp.McpCatalogEntry;
 import io.oryxos.core.mcp.McpServerAdmin;
 import io.oryxos.core.mcp.McpServerConfig;
 import io.oryxos.web.common.ApiResponse;
+import io.oryxos.web.controller.dto.CredentialMasks;
 import io.oryxos.web.controller.dto.EnableMcpCatalogRequest;
 import io.oryxos.web.controller.dto.McpCatalogView;
 import io.oryxos.web.controller.dto.McpServerStatusView;
@@ -85,12 +86,16 @@ public class McpApiController {
   @PutMapping("/{name}")
   public ApiResponse<McpServerView> update(
       @PathVariable String name, @RequestBody McpServerView req) {
-    if (admin.list().stream().noneMatch(c -> c.name().equals(name))) {
-      throw new ResourceNotFoundException("MCP server 不存在: " + name); // → 404
-    }
+    McpServerConfig existing =
+        admin.list().stream()
+            .filter(c -> c.name().equals(name))
+            .findFirst()
+            .orElseThrow(() -> new ResourceNotFoundException("MCP server 不存在: " + name)); // → 404
+    // 视图回显的是掩码值；提交掩码 = 未修改，保留原凭证——否则打码值会覆盖真实 token（Provider 同款口径）
+    Map<String, String> env = CredentialMasks.mergeUnchanged(existing.env(), req.env());
+    Map<String, String> headers = CredentialMasks.mergeUnchanged(existing.headers(), req.headers());
     McpServerConfig config =
-        new McpServerConfig(
-            name, req.transport(), req.command(), req.env(), req.url(), req.headers());
+        new McpServerConfig(name, req.transport(), req.command(), env, req.url(), headers);
     return ApiResponse.ok(McpServerView.from(admin.update(name, config)));
   }
 

@@ -5,6 +5,7 @@ import io.oryxos.core.notify.NotifyChannelDef;
 import io.oryxos.core.notify.NotifyChannelRegistry;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.CreateNotifyChannelRequest;
+import io.oryxos.web.controller.dto.CredentialMasks;
 import io.oryxos.web.controller.dto.NotifyChannelView;
 import io.oryxos.web.controller.dto.UpdateNotifyChannelRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
@@ -90,6 +91,10 @@ public class NotifyChannelApiController {
     // 022：前端编辑表单回填的是敏感项掩码；提交掩码原样或留空 = 未修改，保留原值——否则打码值会覆盖真实凭证
     Map<String, String> config = keepUnchangedSecrets(existing.config(), req.config());
     String url = normalizeUrl(req.type(), req.url());
+    // webhook URL 同口径：提交值等于原 URL 的掩码 = 未修改，保留原 URL
+    if (CredentialMasks.maskWebhookUrl(existing.url()).equals(url)) {
+      url = existing.url();
+    }
     validate(req.type(), url, config);
     NotifyChannelDef saved =
         registry.save(new NotifyChannelDef(name, req.type(), url, req.description(), config));
