@@ -14,7 +14,9 @@ import io.oryxos.web.controller.dto.SkillView;
 import io.oryxos.web.controller.dto.UpdateSkillRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
 import io.oryxos.web.skill.GithubFolderFetcher;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.IDN;
 import java.net.InetAddress;
@@ -162,9 +164,9 @@ public class SkillApiController {
       guardPublicHost(uri); // 每跳都校验（防重定向绕过）
       HttpRequest request =
           HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(10)).GET().build();
-      HttpResponse<String> resp;
+      HttpResponse<InputStream> resp;
       try {
-        resp = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        resp = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
       } catch (IOException e) {
         throw new UncheckedIOException("拉取 URL 失败: " + uri, e);
       } catch (InterruptedException e) {
@@ -173,12 +175,14 @@ public class SkillApiController {
       }
       int status = resp.statusCode();
       if (status / 100 == 2) {
-        String body = resp.body();
-        if (body != null && body.length() > MAX_SKILL_BYTES) {
-          throw new IllegalArgumentException("SKILL.md 过大（>512KB），拒绝导入");
+        // 有界流式读：超限即断——ofString 会把整个 body 缓冲进内存，512KB 上限挡不住 GB 级响应的 OOM
+        try (InputStream in = resp.body()) {
+          return readBoundedUtf8(in, MAX_SKILL_BYTES);
+        } catch (IOException e) {
+          throw new UncheckedIOException("读取响应体失败: " + uri, e);
         }
-        return body;
       }
+      closeQuietly(resp.body()); // 3xx/错误路径不消费 body，主动关流释放连接
       if (status / 100 == 3) {
         String location = resp.headers().firstValue("location").orElse(null);
         if (location == null || location.isBlank()) {
@@ -190,6 +194,30 @@ public class SkillApiController {
       throw new IllegalArgumentException("拉取失败，HTTP " + status + ": " + uri);
     }
     throw new IllegalArgumentException("重定向次数过多，拒绝导入");
+  }
+
+  /** 有界读取响应体并按 UTF-8 解码：超过 maxBytes 即拒绝（不多占内存）；截断点落在多字节字符上会由解码器落替换符。包私有供单测。 */
+  static String readBoundedUtf8(InputStream in, long maxBytes) throws IOException {
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    byte[] buffer = new byte[8192];
+    long total = 0;
+    int n;
+    while ((n = in.read(buffer)) != -1) {
+      total += n;
+      if (total > maxBytes) {
+        throw new IllegalArgumentException("SKILL.md 过大（>512KB），拒绝导入");
+      }
+      out.write(buffer, 0, n);
+    }
+    return out.toString(StandardCharsets.UTF_8);
+  }
+
+  private static void closeQuietly(InputStream in) {
+    try {
+      in.close();
+    } catch (IOException ignored) {
+      // 释放连接的兜底路径，异常无意义
+    }
   }
 
   /**

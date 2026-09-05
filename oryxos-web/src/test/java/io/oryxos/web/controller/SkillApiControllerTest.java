@@ -44,6 +44,29 @@ class SkillApiControllerTest {
   }
 
   @Test
+  @DisplayName("readBoundedUtf8 超限即拒（流式上限，不再先全量缓冲）")
+  void readBoundedRejectsOversizedStream() throws Exception {
+    byte[] big = new byte[600 * 1024];
+    java.util.Arrays.fill(big, (byte) 'a');
+
+    IllegalArgumentException ex =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            IllegalArgumentException.class,
+            () ->
+                SkillApiController.readBoundedUtf8(
+                    new java.io.ByteArrayInputStream(big), 512L * 1024));
+    org.junit.jupiter.api.Assertions.assertTrue(ex.getMessage().contains("过大"));
+
+    // 上限内照常解码
+    String small =
+        SkillApiController.readBoundedUtf8(
+            new java.io.ByteArrayInputStream(
+                "内容".getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+            1024);
+    org.junit.jupiter.api.Assertions.assertEquals("内容", small);
+  }
+
+  @Test
   @DisplayName("create → list/get 能取到")
   void create_thenListAndGet() throws Exception {
     mvc.perform(

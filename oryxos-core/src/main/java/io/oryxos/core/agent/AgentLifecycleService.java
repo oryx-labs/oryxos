@@ -803,7 +803,12 @@ public class AgentLifecycleService {
     if (relative.isAbsolute() || relative.startsWith(PARENT_PATH_SEGMENT)) {
       return true;
     }
-    return relative.getNameCount() > 0 && "skills".equals(relative.getName(0).toString());
+    // skills/ 与 knowledge/ 都是「只许受控软链」的绑定保留目录，草稿不得产出普通文件占位
+    if (relative.getNameCount() > 0) {
+      String first = relative.getName(0).toString();
+      return "skills".equals(first) || "knowledge".equals(first);
+    }
+    return false;
   }
 
   /**

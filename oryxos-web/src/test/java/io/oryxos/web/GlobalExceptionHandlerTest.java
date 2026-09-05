@@ -92,6 +92,25 @@ class GlobalExceptionHandlerTest {
         .andExpect(content().string(not(containsString("jdbc:sqlite")))); // 连接串一个字不漏
   }
 
+  @Test
+  @DisplayName("请求体JSON语法错/缺失_映射400而非500（Spring MVC 客户端错误不再落 catch-all）")
+  void malformedJson_maps400() throws Exception {
+    mvc.perform(
+            MockMvcRequestBuilders.post("/throw/echo")
+                .contentType("application/json")
+                .content("{bad json"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+  }
+
+  @Test
+  @DisplayName("参数类型不匹配_映射400而非500")
+  void typeMismatch_maps400() throws Exception {
+    mvc.perform(MockMvcRequestBuilders.get("/throw/typed").param("limit", "abc"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+  }
+
   /** 内联 dummy：每个路径抛一种异常，交给真 GlobalExceptionHandler 翻译。 */
   @RestController
   static class ThrowingController {
@@ -128,6 +147,17 @@ class GlobalExceptionHandlerTest {
     @GetMapping("/throw/internal")
     void internal() {
       throw new RuntimeException("jdbc:sqlite:/data/oryxos.db connect failed");
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/throw/echo")
+    String echo(
+        @org.springframework.web.bind.annotation.RequestBody java.util.Map<String, String> body) {
+      return "ok";
+    }
+
+    @GetMapping("/throw/typed")
+    String typed(@org.springframework.web.bind.annotation.RequestParam int limit) {
+      return "ok";
     }
   }
 }

@@ -107,6 +107,17 @@ class AgentStoreTest {
   }
 
   @Test
+  @DisplayName("write/writeAll 拒绝占用 knowledge 保留命名空间（与 skills/ 同口径）")
+  void writesRejectReservedKnowledgeNamespace() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> store.writeAll("demo", Map.of("knowledge/ops.md", "copy")));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> store.writeAll("demo", Map.of("knowledge/ops/README.md", "copy")));
+  }
+
+  @Test
   @DisplayName("writeAll 全量预校验失败时已存在文件保持原样")
   void writeAllValidationFailureIsAtomic() throws IOException {
     Path agent = store.write("demo", "old");

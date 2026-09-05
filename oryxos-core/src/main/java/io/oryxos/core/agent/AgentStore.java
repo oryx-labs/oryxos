@@ -30,6 +30,9 @@ public class AgentStore {
 
   private static final String SKILLS_NAMESPACE = "skills";
 
+  /** 知识库绑定视图目录：与 skills/ 同为「只许受控软链」的绑定事实来源，禁止写普通文件。 */
+  private static final String KNOWLEDGE_NAMESPACE = "knowledge";
+
   private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]+");
   private static final String AGENT_FILE = "AGENT.md";
 
@@ -226,9 +229,15 @@ public class AgentStore {
       throw new IllegalArgumentException("非法文件路径: " + relativePath);
     }
     Path relative = dir.relativize(target);
-    if (relative.getNameCount() > 0
-        && SKILLS_NAMESPACE.equalsIgnoreCase(relative.getName(0).toString())) {
-      throw new IllegalArgumentException("skills/ 是 Agent Skill 绑定保留目录，禁止写普通文件");
+    if (relative.getNameCount() > 0) {
+      String first = relative.getName(0).toString();
+      if (SKILLS_NAMESPACE.equalsIgnoreCase(first)) {
+        throw new IllegalArgumentException("skills/ 是 Agent Skill 绑定保留目录，禁止写普通文件");
+      }
+      if (KNOWLEDGE_NAMESPACE.equalsIgnoreCase(first)) {
+        // 普通文件会被 KnowledgeBindingService 判 INVALID_TARGET 并卡死 replaceBindings 整体替换
+        throw new IllegalArgumentException("knowledge/ 是 Agent 知识库绑定保留目录，禁止写普通文件");
+      }
     }
     requireSafe(target);
     if (isNonRegularTarget(target)) {

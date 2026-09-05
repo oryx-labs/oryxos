@@ -45,6 +45,20 @@ public class GlobalExceptionHandler {
         .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
   }
 
+  /** 400 — Spring MVC 层的客户端错误：请求体缺失/JSON 语法错、参数类型不匹配、缺必填参数。 */
+  @ExceptionHandler({
+    org.springframework.http.converter.HttpMessageNotReadableException.class,
+    org.springframework.web.bind.MissingServletRequestParameterException.class,
+    org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class
+  })
+  public ResponseEntity<ApiResponse<Void>> handleClientError(Exception ex) {
+    // 这类异常此前落进 catch-all 变成 500 + ERROR 堆栈——客户端错误不应污染服务端告警
+    LOG.warn("Client error: {}", sanitize(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+        .body(ApiResponse.error(HttpStatus.BAD_REQUEST.value(), "Bad request"));
+  }
+
   /** 404 — no handler or static resource matched the request. */
   @ExceptionHandler(NoResourceFoundException.class)
   public ResponseEntity<ApiResponse<Void>> handleNotFound(NoResourceFoundException ex) {

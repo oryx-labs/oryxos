@@ -108,7 +108,8 @@ public class GithubFolderFetcher {
         continue;
       }
       String content = httpGet.apply(URI.create(downloadUrl));
-      totalBytes[0] += content.length();
+      // 按 UTF-8 字节数累计（content.length() 是字符数，中文场景低估内存占用）
+      totalBytes[0] += content.getBytes(StandardCharsets.UTF_8).length;
       if (totalBytes[0] > MAX_TOTAL_BYTES) {
         throw new IllegalArgumentException("目录总大小超过上限（5MB），拒绝导入");
       }
