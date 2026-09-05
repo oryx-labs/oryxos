@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.oryxos.core.channel.ChatKind;
+import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,6 +78,55 @@ class DiscordEventNormalizerTest {
   void otherEventsIgnored() {
     ObjectNode data = baseMessage("x", null);
     assertTrue(normalizer.normalize("MESSAGE_UPDATE", data).isEmpty());
+  }
+
+  @Test
+  @DisplayName("私聊图片附件 → TYPE_IMAGE")
+  void dmImageAttachment() {
+    ObjectNode data = baseMessage("", null);
+    var attachments = data.putArray("attachments");
+    ObjectNode file = attachments.addObject();
+    file.put("id", "att-1");
+    file.put("filename", "shot.png");
+    file.put("content_type", "image/png");
+    file.put("url", "https://cdn.discordapp.com/attachments/1/2/shot.png");
+    file.put("proxy_url", "https://media.discordapp.net/attachments/1/2/shot.png");
+    Optional<InboundMessage> msg = normalizer.normalize("MESSAGE_CREATE", data);
+    assertTrue(msg.isPresent());
+    InboundMessage m = msg.get();
+    assertEquals(1, m.attachments().size());
+    assertEquals(InboundAttachment.TYPE_IMAGE, m.attachments().get(0).type());
+    assertEquals("shot.png", m.attachments().get(0).fileName());
+    assertEquals(
+        "https://cdn.discordapp.com/attachments/1/2/shot.png", m.attachments().get(0).url());
+  }
+
+  @Test
+  @DisplayName("私聊非图片附件 → TYPE_FILE；公会仅附件+@Bot 可入站")
+  void fileAttachmentAndGuildMediaOnly() {
+    ObjectNode dm = baseMessage("", null);
+    dm.putArray("attachments")
+        .addObject()
+        .put("filename", "notes.pdf")
+        .put("content_type", "application/pdf")
+        .put("url", "https://cdn.discordapp.com/attachments/1/2/notes.pdf");
+    Optional<InboundMessage> dmMsg = normalizer.normalize("MESSAGE_CREATE", dm);
+    assertTrue(dmMsg.isPresent());
+    assertEquals(InboundAttachment.TYPE_FILE, dmMsg.get().attachments().get(0).type());
+
+    ObjectNode guild = baseMessage("<@" + APP_ID + ">", "guild-1");
+    guild.putArray("mentions").addObject().put("id", APP_ID).put("username", "oryxos");
+    guild
+        .putArray("attachments")
+        .addObject()
+        .put("filename", "a.jpg")
+        .put("content_type", "image/jpeg")
+        .put("url", "https://cdn.discordapp.com/attachments/9/8/a.jpg");
+    Optional<InboundMessage> guildMsg = normalizer.normalize("MESSAGE_CREATE", guild);
+    assertTrue(guildMsg.isPresent());
+    assertEquals(ChatKind.GROUP, guildMsg.get().chatKind());
+    assertEquals(1, guildMsg.get().attachments().size());
+    assertTrue(guildMsg.get().content().isBlank());
   }
 
   private static ObjectNode baseMessage(String content, String guildId) {

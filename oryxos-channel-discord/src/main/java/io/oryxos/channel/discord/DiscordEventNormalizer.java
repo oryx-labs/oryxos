@@ -2,7 +2,9 @@ package io.oryxos.channel.discord;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.oryxos.core.channel.ChatKind;
+import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -12,7 +14,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Discord Gateway {@code MESSAGE_CREATE} → 归一化 {@link InboundMessage}。
  *
- * <p>私聊（无 {@code guild_id}）直接收文本；公会频道仅当提及本 Bot（Application ID）时接受。
+ * <p>私聊（无 {@code guild_id}）收文本/附件；公会频道仅当提及本 Bot（Application ID）时接受。
  */
 public class DiscordEventNormalizer {
 
@@ -23,6 +25,8 @@ public class DiscordEventNormalizer {
   private static final String FIELD_AUTHOR = "author";
   private static final String FIELD_BOT = "bot";
   private static final String FIELD_WEBHOOK_ID = "webhook_id";
+  private static final String FIELD_ATTACHMENTS = "attachments";
+  private static final String MIME_IMAGE_PREFIX = "image/";
   private static final Pattern MENTION = Pattern.compile("<@!?([0-9]+)>\\s*");
 
   private final String channelName;
@@ -56,13 +60,14 @@ public class DiscordEventNormalizer {
       return Optional.empty();
     }
     String content = data.path("content").asText("").strip();
+    List<InboundAttachment> attachments = extractAttachments(data.path(FIELD_ATTACHMENTS));
     boolean inGuild = data.hasNonNull("guild_id") && !data.path("guild_id").asText("").isBlank();
     if (inGuild) {
       if (!mentionsBot(data, content)) {
         return Optional.empty();
       }
       content = stripMentions(content).strip();
-      if (content.isBlank()) {
+      if (content.isBlank() && attachments.isEmpty()) {
         return Optional.empty();
       }
       return Optional.of(
@@ -74,11 +79,11 @@ public class DiscordEventNormalizer {
               userId,
               chatId,
               content,
+              !content.isBlank(),
               true,
-              true,
-              List.of()));
+              attachments));
     }
-    if (content.isBlank()) {
+    if (content.isBlank() && attachments.isEmpty()) {
       return Optional.empty();
     }
     return Optional.of(
@@ -90,9 +95,47 @@ public class DiscordEventNormalizer {
             userId,
             chatId,
             content,
-            true,
+            !content.isBlank(),
             false,
-            List.of()));
+            attachments));
+  }
+
+  static List<InboundAttachment> extractAttachments(JsonNode attachments) {
+    List<InboundAttachment> out = new ArrayList<>();
+    if (attachments == null || !attachments.isArray()) {
+      return out;
+    }
+    for (JsonNode file : attachments) {
+      if (file == null || !file.isObject()) {
+        continue;
+      }
+      String url = text(file, "url");
+      if (url == null) {
+        url = text(file, "proxy_url");
+      }
+      if (url == null) {
+        continue;
+      }
+      String fileName = text(file, "filename");
+      String contentType = text(file, "content_type");
+      if (contentType != null && asciiLower(contentType).startsWith(MIME_IMAGE_PREFIX)) {
+        out.add(new InboundAttachment(InboundAttachment.TYPE_IMAGE, url, null, fileName));
+      } else {
+        out.add(InboundAttachment.fileUrl(url, fileName));
+      }
+    }
+    return out;
+  }
+
+  private static String asciiLower(String value) {
+    char[] chars = value.toCharArray();
+    for (int i = 0; i < chars.length; i++) {
+      char c = chars[i];
+      if (c >= 'A' && c <= 'Z') {
+        chars[i] = (char) (c + ('a' - 'A'));
+      }
+    }
+    return new String(chars);
   }
 
   private boolean mentionsBot(JsonNode data, String content) {

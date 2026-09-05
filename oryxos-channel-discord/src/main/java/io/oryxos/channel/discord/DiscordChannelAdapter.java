@@ -36,6 +36,7 @@ public class DiscordChannelAdapter implements InboundChannelAdapter {
   private static final long RECONNECT_BASE_MS = 2_000L;
   private static final long RECONNECT_MAX_MS = 60_000L;
   private static final int RECONNECT_MAX_SHIFT = 5;
+  private static final String MEDIA_DIR_PREFIX = "oryxos-discord-media-";
 
   private final ChannelConfig config;
   private final ProfileRegistry profileRegistry;
@@ -45,6 +46,7 @@ public class DiscordChannelAdapter implements InboundChannelAdapter {
   private final AtomicReference<DiscordGatewayClient> gatewayRef = new AtomicReference<>();
   private volatile DiscordMessageSender sender;
   private volatile DiscordEventNormalizer normalizer;
+  private volatile DiscordInboundMediaResolver mediaResolver;
   private volatile DiscordDisconnectKind lastDisconnectKind = DiscordDisconnectKind.ABRUPT;
   private volatile ChannelStatus.State state = ChannelStatus.State.DISCONNECTED;
   private volatile String lastError;
@@ -123,6 +125,7 @@ public class DiscordChannelAdapter implements InboundChannelAdapter {
     }
     sender = null;
     normalizer = null;
+    mediaResolver = null;
     state = ChannelStatus.State.DISCONNECTED;
   }
 
@@ -183,6 +186,13 @@ public class DiscordChannelAdapter implements InboundChannelAdapter {
     if (sender == null) {
       sender =
           new DiscordMessageSender(guard, config.appId(), DiscordMessageSender.DEFAULT_CHUNK_SIZE);
+    }
+    if (mediaResolver == null) {
+      mediaResolver =
+          new DiscordInboundMediaResolver(
+              config.appId(),
+              io.oryxos.core.channel.InboundMediaRoots.forChannel(config.name(), MEDIA_DIR_PREFIX),
+              config.name());
     }
   }
 
@@ -309,7 +319,25 @@ public class DiscordChannelAdapter implements InboundChannelAdapter {
       LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(m.channelName()), sanitize(m.messageId()));
       return;
     }
-    inboundMessageService.onClaimedMessage(m, this);
+    String replyTo = m.chatKind() == io.oryxos.core.channel.ChatKind.GROUP ? m.messageId() : null;
+    java.util.concurrent.CountDownLatch slowWork = null;
+    if (DiscordInboundMediaResolver.hasDownloadableMedia(m)) {
+      slowWork = inboundMessageService.beginSlowWork(this, m.chatId(), replyTo);
+    }
+    try {
+      DiscordInboundMediaResolver resolver = mediaResolver;
+      InboundMessage enriched = resolver == null ? m : resolver.resolve(m);
+      if (slowWork != null) {
+        inboundMessageService.onClaimedMessage(enriched, this, slowWork);
+      } else {
+        inboundMessageService.onClaimedMessage(enriched, this);
+      }
+    } catch (RuntimeException e) {
+      if (slowWork != null) {
+        slowWork.countDown();
+      }
+      throw e;
+    }
   }
 
   private static String sanitize(String value) {

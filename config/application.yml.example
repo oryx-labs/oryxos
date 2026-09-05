@@ -104,6 +104,10 @@ http:
     - "*.slack.com"             # Slack Socket Mode WSS（wss-primary / wss-backup 等）
     - discord.com               # Discord REST API（发消息）
     - gateway.discord.gg        # Discord Gateway WSS
+    - cdn.discordapp.com        # Discord 入站附件 CDN
+    - media.discordapp.net      # Discord 入站媒体代理
+    - "*.discordapp.com"        # Discord CDN 子域
+    - "*.discordapp.net"        # Discord 媒体子域
     - api.open-meteo.com        # 天气 Agent 免 key 天气源（31 节 Demo 一）
     - hn.algolia.com            # 科技日报 Agent 新闻源（31 节 Demo 二）
     - api.github.com            # GitHub 日报脚本子进程网络（31 节 Demo 三）
