@@ -20,7 +20,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Discord 入站图片/文件：{@code attachments[].url} 下载后落盘，再交给 enricher / Vision。
+ * Discord 入站图片/文件/语音：{@code attachments[].url} 下载后落盘，再交给 enricher / Vision / Whisper。
  *
  * <p>失败保留原远程 URL（降级，不阻断编排）。
  */
@@ -29,6 +29,7 @@ final class DiscordInboundMediaResolver {
   private static final Logger LOG = LoggerFactory.getLogger(DiscordInboundMediaResolver.class);
 
   private static final String DEFAULT_EXTENSION = ".bin";
+  private static final String DEFAULT_AUDIO_EXTENSION = ".ogg";
   private static final String EXT_DOT = ".";
   private static final String SAFE_EXTENSION_PATTERN = "\\.[a-z0-9]{1,8}";
   private static final int DOWNLOAD_ATTEMPTS = 2;
@@ -95,7 +96,9 @@ final class DiscordInboundMediaResolver {
       return false;
     }
     String type = attachment.type();
-    return InboundAttachment.TYPE_IMAGE.equals(type) || InboundAttachment.TYPE_FILE.equals(type);
+    return InboundAttachment.TYPE_IMAGE.equals(type)
+        || InboundAttachment.TYPE_FILE.equals(type)
+        || InboundAttachment.TYPE_AUDIO.equals(type);
   }
 
   static boolean hasDownloadableMedia(InboundMessage message) {
@@ -209,7 +212,13 @@ final class DiscordInboundMediaResolver {
       }
     }
     String fromUrl = extensionOf(remoteUrl);
-    return fromUrl == null ? DEFAULT_EXTENSION : fromUrl;
+    if (fromUrl != null) {
+      return fromUrl;
+    }
+    if (InboundAttachment.TYPE_AUDIO.equals(attachment.type())) {
+      return DEFAULT_AUDIO_EXTENSION;
+    }
+    return DEFAULT_EXTENSION;
   }
 
   private static String extensionOf(String nameOrUrl) {

@@ -14,7 +14,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Discord Gateway {@code MESSAGE_CREATE} → 归一化 {@link InboundMessage}。
  *
- * <p>私聊（无 {@code guild_id}）收文本/附件；公会频道仅当提及本 Bot（Application ID）时接受。
+ * <p>私聊（无 {@code guild_id}）收文本/附件；公会频道仅当提及本 Bot（Application ID）时接受。 附件按 {@code content_type}
+ * 分流：{@code image/*} → 图、{@code audio/*} → 语音、其余 → 文件。
  */
 public class DiscordEventNormalizer {
 
@@ -26,8 +27,17 @@ public class DiscordEventNormalizer {
   private static final String FIELD_BOT = "bot";
   private static final String FIELD_WEBHOOK_ID = "webhook_id";
   private static final String FIELD_ATTACHMENTS = "attachments";
+  private static final String FIELD_WAVEFORM = "waveform";
+  private static final String FIELD_DURATION_SECS = "duration_secs";
   private static final String MIME_IMAGE_PREFIX = "image/";
+  private static final String MIME_AUDIO_PREFIX = "audio/";
+
+  /** Discord Voice Message 标志位（{@code 1 << 13}）。 */
+  private static final int FLAG_IS_VOICE_MESSAGE = 8192;
+
   private static final Pattern MENTION = Pattern.compile("<@!?([0-9]+)>\\s*");
+  private static final Pattern AUDIO_FILENAME =
+      Pattern.compile("(?i).*\\.(ogg|opus|mp3|wav|m4a|aac|flac|webm)$");
 
   private final String channelName;
   private final String applicationId;
@@ -60,7 +70,9 @@ public class DiscordEventNormalizer {
       return Optional.empty();
     }
     String content = data.path("content").asText("").strip();
-    List<InboundAttachment> attachments = extractAttachments(data.path(FIELD_ATTACHMENTS));
+    boolean voiceMessage = (data.path("flags").asInt(0) & FLAG_IS_VOICE_MESSAGE) != 0;
+    List<InboundAttachment> attachments =
+        extractAttachments(data.path(FIELD_ATTACHMENTS), voiceMessage);
     boolean inGuild = data.hasNonNull("guild_id") && !data.path("guild_id").asText("").isBlank();
     if (inGuild) {
       if (!mentionsBot(data, content)) {
@@ -101,6 +113,10 @@ public class DiscordEventNormalizer {
   }
 
   static List<InboundAttachment> extractAttachments(JsonNode attachments) {
+    return extractAttachments(attachments, false);
+  }
+
+  static List<InboundAttachment> extractAttachments(JsonNode attachments, boolean voiceMessage) {
     List<InboundAttachment> out = new ArrayList<>();
     if (attachments == null || !attachments.isArray()) {
       return out;
@@ -118,13 +134,31 @@ public class DiscordEventNormalizer {
       }
       String fileName = text(file, "filename");
       String contentType = text(file, "content_type");
-      if (contentType != null && asciiLower(contentType).startsWith(MIME_IMAGE_PREFIX)) {
+      String mime = contentType == null ? "" : asciiLower(contentType);
+      if (mime.startsWith(MIME_IMAGE_PREFIX)) {
         out.add(new InboundAttachment(InboundAttachment.TYPE_IMAGE, url, null, fileName));
+      } else if (isAudioAttachment(mime, fileName, file, voiceMessage)) {
+        out.add(new InboundAttachment(InboundAttachment.TYPE_AUDIO, url, null, fileName));
       } else {
         out.add(InboundAttachment.fileUrl(url, fileName));
       }
     }
     return out;
+  }
+
+  /** 语音：MIME {@code audio/*}、语音气泡标志、附件带 {@code waveform}/{@code duration_secs}、或常见音频扩展名。 */
+  private static boolean isAudioAttachment(
+      String mime, String fileName, JsonNode file, boolean voiceMessage) {
+    if (mime.startsWith(MIME_AUDIO_PREFIX)) {
+      return true;
+    }
+    if (voiceMessage) {
+      return true;
+    }
+    if (file.hasNonNull(FIELD_WAVEFORM) || file.hasNonNull(FIELD_DURATION_SECS)) {
+      return true;
+    }
+    return fileName != null && AUDIO_FILENAME.matcher(fileName).matches();
   }
 
   private static String asciiLower(String value) {

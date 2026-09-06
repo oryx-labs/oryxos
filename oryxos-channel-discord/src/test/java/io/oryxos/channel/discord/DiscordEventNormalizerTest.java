@@ -129,6 +129,37 @@ class DiscordEventNormalizerTest {
     assertTrue(guildMsg.get().content().isBlank());
   }
 
+  @Test
+  @DisplayName("私聊 audio/* 附件 → TYPE_AUDIO")
+  void dmAudioMime() {
+    ObjectNode data = baseMessage("", null);
+    data.putArray("attachments")
+        .addObject()
+        .put("filename", "voice-message.ogg")
+        .put("content_type", "audio/ogg")
+        .put("url", "https://cdn.discordapp.com/attachments/1/2/voice-message.ogg")
+        .put("waveform", "AAAA")
+        .put("duration_secs", 2.5);
+    Optional<InboundMessage> msg = normalizer.normalize("MESSAGE_CREATE", data);
+    assertTrue(msg.isPresent());
+    assertEquals(InboundAttachment.TYPE_AUDIO, msg.get().attachments().get(0).type());
+    assertEquals("voice-message.ogg", msg.get().attachments().get(0).fileName());
+  }
+
+  @Test
+  @DisplayName("Discord Voice Message flags → TYPE_AUDIO")
+  void voiceMessageFlag() {
+    ObjectNode data = baseMessage("", null);
+    data.put("flags", 8192);
+    data.putArray("attachments")
+        .addObject()
+        .put("filename", "voice-message.ogg")
+        .put("url", "https://cdn.discordapp.com/attachments/1/2/voice-message.ogg");
+    Optional<InboundMessage> msg = normalizer.normalize("MESSAGE_CREATE", data);
+    assertTrue(msg.isPresent());
+    assertEquals(InboundAttachment.TYPE_AUDIO, msg.get().attachments().get(0).type());
+  }
+
   private static ObjectNode baseMessage(String content, String guildId) {
     ObjectNode data = MAPPER.createObjectNode();
     data.put("id", "msg-1");
