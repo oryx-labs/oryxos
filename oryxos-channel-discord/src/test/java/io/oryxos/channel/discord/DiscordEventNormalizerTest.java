@@ -175,6 +175,21 @@ class DiscordEventNormalizerTest {
     assertEquals("clip.mp4", msg.get().attachments().get(0).fileName());
   }
 
+  @Test
+  @DisplayName("视频带 duration_secs 仍为 TYPE_VIDEO（不被语音启发式抢走）")
+  void videoWithDurationSecsNotAudio() {
+    ObjectNode data = baseMessage("", null);
+    data.putArray("attachments")
+        .addObject()
+        .put("filename", "clip.mp4")
+        .put("content_type", "video/mp4")
+        .put("duration_secs", 45.6)
+        .put("url", "https://cdn.discordapp.com/attachments/1/2/clip.mp4");
+    Optional<InboundMessage> msg = normalizer.normalize("MESSAGE_CREATE", data);
+    assertTrue(msg.isPresent());
+    assertEquals(InboundAttachment.TYPE_VIDEO, msg.get().attachments().get(0).type());
+  }
+
   private static ObjectNode baseMessage(String content, String guildId) {
     ObjectNode data = MAPPER.createObjectNode();
     data.put("id", "msg-1");

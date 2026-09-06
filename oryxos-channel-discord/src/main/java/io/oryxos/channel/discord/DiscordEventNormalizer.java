@@ -28,7 +28,6 @@ public class DiscordEventNormalizer {
   private static final String FIELD_WEBHOOK_ID = "webhook_id";
   private static final String FIELD_ATTACHMENTS = "attachments";
   private static final String FIELD_WAVEFORM = "waveform";
-  private static final String FIELD_DURATION_SECS = "duration_secs";
   private static final String MIME_IMAGE_PREFIX = "image/";
   private static final String MIME_AUDIO_PREFIX = "audio/";
   private static final String MIME_VIDEO_PREFIX = "video/";
@@ -140,10 +139,11 @@ public class DiscordEventNormalizer {
       String mime = contentType == null ? "" : asciiLower(contentType);
       if (mime.startsWith(MIME_IMAGE_PREFIX)) {
         out.add(new InboundAttachment(InboundAttachment.TYPE_IMAGE, url, null, fileName));
+      } else if (isVideoAttachment(mime, fileName)) {
+        // 先于语音：Discord 视频附件常带 duration_secs，勿被语音启发式抢走
+        out.add(new InboundAttachment(InboundAttachment.TYPE_VIDEO, url, null, fileName));
       } else if (isAudioAttachment(mime, fileName, file, voiceMessage)) {
         out.add(new InboundAttachment(InboundAttachment.TYPE_AUDIO, url, null, fileName));
-      } else if (isVideoAttachment(mime, fileName)) {
-        out.add(new InboundAttachment(InboundAttachment.TYPE_VIDEO, url, null, fileName));
       } else {
         out.add(InboundAttachment.fileUrl(url, fileName));
       }
@@ -151,7 +151,11 @@ public class DiscordEventNormalizer {
     return out;
   }
 
-  /** 语音：MIME {@code audio/*}、语音气泡标志、附件带 {@code waveform}/{@code duration_secs}、或常见音频扩展名。 */
+  /**
+   * 语音：MIME {@code audio/*}、语音气泡标志、附件带 {@code waveform}（Voice Message）、或常见音频扩展名。
+   *
+   * <p>不用 {@code duration_secs} 单独判定——视频附件也带该字段。
+   */
   private static boolean isAudioAttachment(
       String mime, String fileName, JsonNode file, boolean voiceMessage) {
     if (mime.startsWith(MIME_AUDIO_PREFIX)) {
@@ -160,7 +164,7 @@ public class DiscordEventNormalizer {
     if (voiceMessage) {
       return true;
     }
-    if (file.hasNonNull(FIELD_WAVEFORM) || file.hasNonNull(FIELD_DURATION_SECS)) {
+    if (file.hasNonNull(FIELD_WAVEFORM)) {
       return true;
     }
     return fileName != null && AUDIO_FILENAME.matcher(fileName).matches();
