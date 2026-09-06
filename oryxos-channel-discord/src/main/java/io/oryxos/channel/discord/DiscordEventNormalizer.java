@@ -14,8 +14,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Discord Gateway {@code MESSAGE_CREATE} → 归一化 {@link InboundMessage}。
  *
- * <p>私聊（无 {@code guild_id}）收文本/附件；公会频道仅当提及本 Bot（Application ID）时接受。 附件按 {@code content_type}
- * 分流：{@code image/*} → 图、{@code audio/*} → 语音、其余 → 文件。
+ * <p>私聊（无 {@code guild_id}）收文本/附件；公会频道仅当提及本 Bot（Application ID）时接受。附件按 {@code content_type}
+ * 分流：{@code image/*} → 图、{@code audio/*} → 语音、{@code video/*} → 视频、其余 → 文件。
  */
 public class DiscordEventNormalizer {
 
@@ -31,13 +31,16 @@ public class DiscordEventNormalizer {
   private static final String FIELD_DURATION_SECS = "duration_secs";
   private static final String MIME_IMAGE_PREFIX = "image/";
   private static final String MIME_AUDIO_PREFIX = "audio/";
+  private static final String MIME_VIDEO_PREFIX = "video/";
 
   /** Discord Voice Message 标志位（{@code 1 << 13}）。 */
   private static final int FLAG_IS_VOICE_MESSAGE = 8192;
 
   private static final Pattern MENTION = Pattern.compile("<@!?([0-9]+)>\\s*");
   private static final Pattern AUDIO_FILENAME =
-      Pattern.compile("(?i).*\\.(ogg|opus|mp3|wav|m4a|aac|flac|webm)$");
+      Pattern.compile("(?i).*\\.(ogg|opus|mp3|wav|m4a|aac|flac)$");
+  private static final Pattern VIDEO_FILENAME =
+      Pattern.compile("(?i).*\\.(mp4|mov|mkv|webm|avi|m4v)$");
 
   private final String channelName;
   private final String applicationId;
@@ -139,6 +142,8 @@ public class DiscordEventNormalizer {
         out.add(new InboundAttachment(InboundAttachment.TYPE_IMAGE, url, null, fileName));
       } else if (isAudioAttachment(mime, fileName, file, voiceMessage)) {
         out.add(new InboundAttachment(InboundAttachment.TYPE_AUDIO, url, null, fileName));
+      } else if (isVideoAttachment(mime, fileName)) {
+        out.add(new InboundAttachment(InboundAttachment.TYPE_VIDEO, url, null, fileName));
       } else {
         out.add(InboundAttachment.fileUrl(url, fileName));
       }
@@ -159,6 +164,14 @@ public class DiscordEventNormalizer {
       return true;
     }
     return fileName != null && AUDIO_FILENAME.matcher(fileName).matches();
+  }
+
+  /** 视频：MIME {@code video/*} 或常见视频扩展名。 */
+  private static boolean isVideoAttachment(String mime, String fileName) {
+    if (mime.startsWith(MIME_VIDEO_PREFIX)) {
+      return true;
+    }
+    return fileName != null && VIDEO_FILENAME.matcher(fileName).matches();
   }
 
   private static String asciiLower(String value) {

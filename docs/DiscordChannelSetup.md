@@ -2,7 +2,7 @@
 
 本文是 OryxOS Discord 入站渠道的部署操作手册。架构对称飞书/企微/钉钉/Slack：以 **Gateway WebSocket** 主动连接 Discord（免公网回调 URL）；回复经 REST `POST /channels/{id}/messages`。
 
-> 范围：Discord Bot **Gateway v10**。文本私聊与公会频道 `@Bot`；入站图片/文件/语音经 CDN 下载落盘（语音走 Whisper ASR，对齐飞书/企微/钉钉）。
+> 范围：Discord Bot **Gateway v10**。文本私聊与公会频道 `@Bot`；入站图片/文件/语音/视频经 CDN 下载落盘（语音/视频音轨走 Whisper ASR，对齐飞书/企微/钉钉）。
 
 ## 一、Discord 侧：创建 Application 并启用 Intents
 
@@ -28,8 +28,10 @@
    ```bash
    export DISCORD_BOT_TOKEN=...
    export DISCORD_APPLICATION_ID=...
-   # 语音转写（与其它 IM 渠道共用）
+   # 语音 / 视频音轨转写（与其它 IM 渠道共用）
    export OPENAI_API_KEY=...   # 或 ORYXOS_ASR_API_KEY / ORYXOS_ASR_BASE_URL
+   # 视频抽轨 / 非原生音频格式常需 ffmpeg
+   export ORYXOS_FFMPEG=...    # 或确保 ffmpeg 在 PATH
    ```
 
 2. **渠道绑定** `.oryxos/channels.yaml`（模板见 `config/channels.yaml.example`）：
@@ -53,10 +55,11 @@
 
 ## 三、使用方式
 
-- **私聊**：在 Discord 中打开该 Bot 的 DM，直接发文本、图片、文件或语音气泡。
+- **私聊**：在 Discord 中打开该 Bot 的 DM，直接发文本、图片、文件、语音或视频。
 - **公会频道**：将 Bot 拉入服务器/频道后 `@Bot + 问题`（可带附件；平台推送 `MESSAGE_CREATE` 且含提及）。
 - **图片 / 文件**：经 `attachments[].url`（CDN）带 Bot Token 落盘到 `.oryxos/inbound-media/`；图片可供 Vision，文件路径写入 Agent 提示。
-- **语音**：`content_type` 为 `audio/*`、Voice Message（`flags` 含语音位）、或带 `waveform`/`duration_secs` 的附件 → 落盘后经 Whisper 转写注入正文（需配置 ASR Key；格式需 ffmpeg 时设置 `ORYXOS_FFMPEG` 或 PATH）。
+- **语音**：`content_type` 为 `audio/*`、Voice Message（`flags` 含语音位）、或带 `waveform`/`duration_secs` 的附件 → 落盘后经 Whisper 转写注入正文。
+- **视频**：`content_type` 为 `video/*` 或常见视频扩展名 → 落盘；默认尝试抽音轨 ASR（可用 `ORYXOS_VIDEO_ASR=0` 关闭）；**不自动理解画面**。
 - **联网检索**：须在绑定 Agent 的 `AGENT.md` `tools:` 中加入 `web_search` 等，见 Tool 文档。
 
 ## 四、与其它渠道的差异
@@ -66,11 +69,11 @@
 | 凭证 | App ID/Secret 等 | Bot Token + App-Level Token | Bot Token + Application ID |
 | 连接 | 各家长连接 | Socket Mode WSS | Gateway WSS v10 |
 | 回复 | 各平台 API | chat.postMessage | channels/{id}/messages |
-| MVP 媒体 | 图/文件/音视频 | 图片+文件 | **图片 + 文件 + 语音**（视频后续） |
+| MVP 媒体 | 图/文件/音视频 | 图片+文件 | **图片 + 文件 + 语音 + 视频** |
 
 ## 五、非目标（本期不做）
 
-- 视频入站
+- 视频画面理解 / 抽帧 Vision
 - Slash Commands / Interactions / Components
 - HTTP Interactions 公网回调
 - Notify `type=discord`
