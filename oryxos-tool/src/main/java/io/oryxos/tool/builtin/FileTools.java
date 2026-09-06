@@ -69,7 +69,12 @@ public class FileTools {
       }
       return Files.readString(file);
     } catch (IOException e) {
-      throw new UncheckedIOException("读取文件失败: " + path, e);
+      String detail = e.getMessage();
+      if (detail == null || detail.isBlank()) {
+        throw new UncheckedIOException("读取文件失败: " + path, e);
+      }
+      // 把根因（如「PDF 无文本层」）透出给 Agent，避免只看到笼统的「读取文件失败」后乱猜路径
+      throw new UncheckedIOException("读取文件失败: " + path + " — " + detail.strip(), e);
     }
   }
 

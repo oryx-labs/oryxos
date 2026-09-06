@@ -20,6 +20,10 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
   private static final String FILE_WITH_REF = "[用户发送了一个文件]\n文件资源: ";
   private static final String FILE_NAME_LINE = "\n文件名: ";
   private static final String FILE_HINT = "\n可用 read_file 读取该路径（文本或文本型 PDF；须在 FILE 沙箱白名单内）。";
+  private static final String FILE_HINT_PDF =
+      "\n可用 read_file 读取该路径（仅文本型 PDF 可抽取正文；扫描件/纯图片 PDF 无文本层会失败——请改发可复制文字的 PDF，或把页面截图当图片发送走 Vision）。"
+          + "\n请使用上方「本地路径」原样调用 read_file，勿改文件名。";
+  private static final String PDF_SUFFIX = ".pdf";
   private static final String AUDIO_PREFIX = "[用户发送了一段语音]\n转写: ";
   private static final String AUDIO_PATH = "[用户发送了一段语音]\n本地路径: ";
   private static final String AUDIO_NO_ASR =
@@ -100,9 +104,29 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
       sb.append(FILE_NAME_LINE).append(attachment.fileName().strip());
     }
     if (attachment.url() != null && !attachment.url().isBlank()) {
-      sb.append(FILE_HINT);
+      sb.append(looksLikePdf(attachment) ? FILE_HINT_PDF : FILE_HINT);
     }
     return sb.toString();
+  }
+
+  private static boolean looksLikePdf(InboundAttachment attachment) {
+    String url = attachment.url();
+    if (url != null && asciiLower(url).contains(PDF_SUFFIX)) {
+      return true;
+    }
+    String name = attachment.fileName();
+    return name != null && asciiLower(name).endsWith(PDF_SUFFIX);
+  }
+
+  private static String asciiLower(String value) {
+    char[] chars = value.toCharArray();
+    for (int i = 0; i < chars.length; i++) {
+      char c = chars[i];
+      if (c >= 'A' && c <= 'Z') {
+        chars[i] = (char) (c + ('a' - 'A'));
+      }
+    }
+    return new String(chars);
   }
 
   private String enrichAudio(InboundAttachment attachment, String channel) {

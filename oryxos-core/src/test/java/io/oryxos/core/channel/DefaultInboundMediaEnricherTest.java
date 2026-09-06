@@ -78,6 +78,8 @@ class DefaultInboundMediaEnricherTest {
     assertTrue(input.contains("季度报告.pdf"));
     assertTrue(input.contains("文件"));
     assertTrue(input.contains("read_file"));
+    assertTrue(input.contains("扫描件") || input.contains("文本型 PDF"));
+    assertTrue(input.contains("勿改文件名"));
   }
 
   @Test
