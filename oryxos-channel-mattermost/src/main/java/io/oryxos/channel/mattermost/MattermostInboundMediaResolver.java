@@ -209,16 +209,38 @@ final class MattermostInboundMediaResolver {
     if (ext == null) {
       ext = extensionOf(fileName);
     }
-    if (mime.startsWith(MIME_IMAGE_PREFIX) || (ext != null && IMAGE_EXT.contains(ext))) {
+    if (matchesMimeOrExt(mime, MIME_IMAGE_PREFIX, ext, IMAGE_EXT)) {
       return InboundAttachment.TYPE_IMAGE;
     }
-    if (mime.startsWith(MIME_AUDIO_PREFIX) || (ext != null && AUDIO_EXT.contains(ext))) {
+    if (matchesMimeOrExt(mime, MIME_AUDIO_PREFIX, ext, AUDIO_EXT)) {
       return InboundAttachment.TYPE_AUDIO;
     }
-    if (mime.startsWith(MIME_VIDEO_PREFIX) || (ext != null && VIDEO_EXT.contains(ext))) {
+    if (matchesMimeOrExt(mime, MIME_VIDEO_PREFIX, ext, VIDEO_EXT)) {
       return InboundAttachment.TYPE_VIDEO;
     }
     return InboundAttachment.TYPE_FILE;
+  }
+
+  private static boolean matchesMimeOrExt(
+      String mime, String mimePrefix, String ext, Set<String> extensions) {
+    if (mime.startsWith(mimePrefix)) {
+      return true;
+    }
+    return ext != null && extensions.contains(ext);
+  }
+
+  /** Webhook 无 mime 时，用事件侧已推断的 type 补齐。 */
+  private static String applyFallbackType(String type, String mimeType, String fallbackType) {
+    if (mimeType != null && !mimeType.isBlank()) {
+      return type;
+    }
+    if (fallbackType == null || fallbackType.isBlank()) {
+      return type;
+    }
+    if (!InboundAttachment.TYPE_FILE.equals(type)) {
+      return type;
+    }
+    return fallbackType;
   }
 
   private List<FileSpec> fetchFileSpecs(String postId) {
@@ -250,12 +272,7 @@ final class MattermostInboundMediaResolver {
 
   private InboundAttachment downloadOrKeep(String messageId, FileSpec spec, String fallbackType) {
     String type = classifyType(spec.mimeType(), spec.name(), spec.extension());
-    if ((spec.mimeType() == null || spec.mimeType().isBlank())
-        && fallbackType != null
-        && !fallbackType.isBlank()
-        && InboundAttachment.TYPE_FILE.equals(type)) {
-      type = fallbackType;
-    }
+    type = applyFallbackType(type, spec.mimeType(), fallbackType);
     String url = baseUrl + "/api/v4/files/" + spec.id();
     guard.check(url);
     try {
@@ -273,9 +290,7 @@ final class MattermostInboundMediaResolver {
       String ext = extensionFor(spec, type);
       Path target = dir.resolve("mm-media" + ext);
       LimitedMediaWriter.writeLimited(bytes, target, InboundMediaLimits.MAX_FILE_BYTES);
-      if (InboundAttachment.TYPE_IMAGE.equals(type)
-          && DEFAULT_EXTENSION.equals(ext)
-          && ImageMime.hasRecognizedMagic(target)) {
+      if (shouldProbeImageExtension(type, ext, target)) {
         String betterExt = ImageMime.extensionFor(ImageMime.probeFile(target));
         target = renameIfBetter(dir, target, ext, betterExt);
         ext = extensionOf(target.getFileName().toString());
@@ -305,6 +320,16 @@ final class MattermostInboundMediaResolver {
       }
       return InboundAttachment.fileReference(spec.id(), spec.name());
     }
+  }
+
+  private static boolean shouldProbeImageExtension(String type, String ext, Path target) {
+    if (!InboundAttachment.TYPE_IMAGE.equals(type)) {
+      return false;
+    }
+    if (!DEFAULT_EXTENSION.equals(ext)) {
+      return false;
+    }
+    return ImageMime.hasRecognizedMagic(target);
   }
 
   private Path renameIfBetter(Path dir, Path current, String currentExt, String betterExt) {

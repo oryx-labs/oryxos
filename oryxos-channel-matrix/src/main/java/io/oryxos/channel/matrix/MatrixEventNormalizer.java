@@ -26,6 +26,8 @@ public class MatrixEventNormalizer {
   private static final String FIELD_MENTIONS = "m.mentions";
   private static final String FIELD_USER_IDS = "user_ids";
   private static final String DEFAULT_MXC = "mxc";
+  private static final char MXID_PREFIX = '@';
+  private static final int MXID_MIN_LEN = 2;
 
   private final String channelName;
   private final String botUserId;
@@ -184,7 +186,7 @@ public class MatrixEventNormalizer {
 
   /** Element 常显示 {@code @localpart}，不全写 MXID。 */
   private String localMention() {
-    if (botUserId.length() < 2 || botUserId.charAt(0) != '@') {
+    if (botUserId.length() < MXID_MIN_LEN || botUserId.charAt(0) != MXID_PREFIX) {
       return "";
     }
     int colon = botUserId.indexOf(':');

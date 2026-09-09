@@ -15,6 +15,7 @@ public class MattermostMessageSender {
 
   private static final int HTTP_STATUS_OK_MIN = 200;
   private static final int HTTP_STATUS_OK_MAX_EXCLUSIVE = 300;
+  private static final int ERROR_BODY_MAX_LEN = 200;
   private static final Duration TIMEOUT = Duration.ofSeconds(20);
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -57,8 +58,8 @@ public class MattermostMessageSender {
       if (response.statusCode() < HTTP_STATUS_OK_MIN
           || response.statusCode() >= HTTP_STATUS_OK_MAX_EXCLUSIVE) {
         String errorBody = response.body() == null ? "" : response.body().strip();
-        if (errorBody.length() > 200) {
-          errorBody = errorBody.substring(0, 200);
+        if (errorBody.length() > ERROR_BODY_MAX_LEN) {
+          errorBody = errorBody.substring(0, ERROR_BODY_MAX_LEN);
         }
         throw new IllegalStateException(
             "Mattermost 发消息失败 HTTP "

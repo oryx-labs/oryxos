@@ -31,8 +31,10 @@ final class MatrixInboundMediaResolver {
   private static final int HTTP_OK_MIN = 200;
   private static final int HTTP_OK_MAX_EXCLUSIVE = 300;
   private static final String MXC_PREFIX = "mxc://";
+  private static final String PATH_SEP = "/";
   private static final String DEFAULT_EXTENSION = ".bin";
   private static final String FILE_PREFIX = "mx-media";
+  private static final String SAFE_EXTENSION_PATTERN = "\\.[a-z0-9]{1,8}";
 
   private final HttpClient http;
   private final OutboundGuard guard;
@@ -147,7 +149,7 @@ final class MatrixInboundMediaResolver {
     }
     String server = rest.substring(0, slash);
     String mediaId = rest.substring(slash + 1);
-    if (server.isBlank() || mediaId.isBlank() || mediaId.contains("/")) {
+    if (server.isBlank() || mediaId.isBlank() || mediaId.contains(PATH_SEP)) {
       return null;
     }
     return new Mxc(server, mediaId);
@@ -204,9 +206,7 @@ final class MatrixInboundMediaResolver {
     }
     Path target = dir.resolve(FILE_PREFIX + ext);
     LimitedMediaWriter.writeLimited(bytes, target, InboundMediaLimits.MAX_FILE_BYTES);
-    if (InboundAttachment.TYPE_IMAGE.equals(type)
-        && DEFAULT_EXTENSION.equals(ext)
-        && ImageMime.hasRecognizedMagic(target)) {
+    if (shouldProbeImageExtension(type, ext, target)) {
       String betterExt = ImageMime.extensionFor(ImageMime.probeFile(target));
       target = renameIfBetter(dir, target, ext, betterExt);
       ext = extensionOf(target.getFileName().toString());
@@ -224,6 +224,16 @@ final class MatrixInboundMediaResolver {
         sanitize(type));
     return new InboundAttachment(
         type, target.toAbsolutePath().toString(), attachment.reference(), name);
+  }
+
+  private static boolean shouldProbeImageExtension(String type, String ext, Path target) {
+    if (!InboundAttachment.TYPE_IMAGE.equals(type)) {
+      return false;
+    }
+    if (!DEFAULT_EXTENSION.equals(ext)) {
+      return false;
+    }
+    return ImageMime.hasRecognizedMagic(target);
   }
 
   private Path renameIfBetter(Path dir, Path current, String currentExt, String betterExt) {
@@ -257,7 +267,7 @@ final class MatrixInboundMediaResolver {
       return null;
     }
     String ext = asciiLower(path.substring(dot));
-    if (!ext.matches("\\.[a-z0-9]{1,8}")) {
+    if (!ext.matches(SAFE_EXTENSION_PATTERN)) {
       return null;
     }
     return ext;
