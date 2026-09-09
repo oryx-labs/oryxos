@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.oryxos.core.channel.OutboundGuard;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -99,7 +100,10 @@ public class MattermostMessageSender {
       JsonNode node = MAPPER.readTree(response.body());
       String root = node.path("root_id").asText("");
       return root.isBlank() ? postId : root;
-    } catch (Exception e) {
+    } catch (IOException | InterruptedException e) {
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
       return null;
     }
   }

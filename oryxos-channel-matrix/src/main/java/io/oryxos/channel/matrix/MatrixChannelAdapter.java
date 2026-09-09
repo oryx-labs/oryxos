@@ -10,6 +10,7 @@ import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
 import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.profile.ProfileRegistry;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -209,7 +210,10 @@ public class MatrixChannelAdapter implements InboundChannelAdapter {
         } else {
           LOG.warn("Matrix 渠道 {} 加入邀请失败 HTTP {}", sanitize(config.name()), response.statusCode());
         }
-      } catch (Exception e) {
+      } catch (IOException | InterruptedException e) {
+        if (e instanceof InterruptedException) {
+          Thread.currentThread().interrupt();
+        }
         LOG.warn("Matrix 渠道 {} 加入邀请异常: {}", sanitize(config.name()), sanitize(e.getMessage()));
       }
     }
@@ -309,7 +313,10 @@ public class MatrixChannelAdapter implements InboundChannelAdapter {
           && !response.body().isBlank()) {
         rooms.replaceFromContent(MAPPER.readTree(response.body()));
       }
-    } catch (Exception e) {
+    } catch (IOException | InterruptedException e) {
+      if (e instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
       LOG.debug(
           "Matrix 渠道 {} 预载 m.direct 跳过: {}", sanitize(config.name()), sanitize(e.getMessage()));
     }

@@ -209,7 +209,8 @@ final class MatrixInboundMediaResolver {
     if (shouldProbeImageExtension(type, ext, target)) {
       String betterExt = ImageMime.extensionFor(ImageMime.probeFile(target));
       target = renameIfBetter(dir, target, ext, betterExt);
-      ext = extensionOf(target.getFileName().toString());
+      Path fileName = target.getFileName();
+      ext = fileName == null ? DEFAULT_EXTENSION : extensionOf(fileName.toString());
     }
     String sniffed =
         InboundMediaExt.betterFileExtension(target, ext == null ? DEFAULT_EXTENSION : ext);
@@ -288,7 +289,8 @@ final class MatrixInboundMediaResolver {
   }
 
   private static String sanitize(String value) {
-    return InboundMediaPaths.sanitizeLog(value);
+    // 内联替换：SpotBugs CRLF_INJECTION_LOGS 需在本类内可见的 \r/\n 清洗
+    return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 
   record Mxc(String server, String mediaId) {}
