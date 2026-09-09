@@ -781,16 +781,24 @@ public class OryxOsRuntime {
       UserInteraction userInteraction,
       io.oryxos.core.knowledge.KnowledgeService knowledgeService,
       ExecutionBackendProperties executionBackendProperties,
-      ProfileRegistry profileRegistry) {
+      org.springframework.beans.factory.ObjectProvider<ProfileRegistry> profileRegistryProvider) {
     ToolRegistry registry = new ToolRegistry();
     // 内置工具走 @Tool 注解管道（schema 自动生成，宪法 II 第二件事）
     registry.registerAnnotated(new FileTools(sandbox)); // read/write/list/edit/grep/glob
     // 024：执行后端按档位装配（local=现状零变化 / docker=短命容器），白名单 enforce 仍在工具内部前置（FR-007）；
-    // US2：全局档为基线，frontmatter sandbox 段按 Agent 覆写（D8 收敛在 AgentAwareProcessStarter）
+    // US2：全局档为基线，frontmatter sandbox 段按 Agent 覆写（D8 收敛在 AgentAwareProcessStarter）。
+    // ProfileRegistry 走 ObjectProvider 惰性解析——直接注入会成环：
+    // toolRegistry → profileRegistry → agentLoader → tools → toolRegistry（E2E 实证）；
+    // shell 首次执行时上下文必然就绪，getIfAvailable 安全。
     ProcessStarter shellStarter =
         new AgentAwareProcessStarter(
             executionBackendProperties,
-            agentName -> profileRegistry.get(agentName).map(Profile::sandbox).orElse(null),
+            agentName -> {
+              ProfileRegistry profiles = profileRegistryProvider.getIfAvailable();
+              return profiles == null
+                  ? null
+                  : profiles.get(agentName).map(Profile::sandbox).orElse(null);
+            },
             new LocalProcessStarter(),
             effective ->
                 new DockerProcessStarter(

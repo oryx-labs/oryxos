@@ -37,6 +37,8 @@ public class ExecutionBackendController {
   private final ProfileRegistry profileRegistry;
   private final DockerStatusProbe probe;
 
+  // 双构造器并存时 Spring 无法择一——@Autowired 指定装配用本构造器（测试桩走包级三参构造器）
+  @org.springframework.beans.factory.annotation.Autowired
   public ExecutionBackendController(
       ExecutionBackendSnapshot props, ProfileRegistry profileRegistry) {
     this(props, profileRegistry, ExecutionBackendController::processProbe);
