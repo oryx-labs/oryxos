@@ -42,6 +42,10 @@ public class DingTalkNotifyAdapter implements NotifyChannelAdapter {
 
   private final NotifyPoster poster;
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification =
+          "NotifyPoster is a Spring singleton shared by notify adapters; storing the reference is intentional.")
   public DingTalkNotifyAdapter(NotifyPoster poster) {
     this.poster = poster;
   }

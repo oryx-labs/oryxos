@@ -15,6 +15,10 @@ public class TelegramNotifyAdapter implements NotifyChannelAdapter {
 
   private final NotifyPoster poster;
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification =
+          "NotifyPoster is a Spring singleton shared by notify adapters; storing the reference is intentional.")
   public TelegramNotifyAdapter(NotifyPoster poster) {
     this.poster = poster;
   }

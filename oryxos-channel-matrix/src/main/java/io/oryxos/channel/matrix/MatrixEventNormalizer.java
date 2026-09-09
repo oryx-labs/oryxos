@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.oryxos.core.channel.ChatKind;
 import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -27,6 +26,8 @@ public class MatrixEventNormalizer {
   private static final String FIELD_MENTIONS = "m.mentions";
   private static final String FIELD_USER_IDS = "user_ids";
   private static final String DEFAULT_MXC = "mxc";
+  private static final char MXID_PREFIX = '@';
+  private static final int MXID_MIN_LEN = 2;
 
   private final String channelName;
   private final String botUserId;
@@ -53,20 +54,13 @@ public class MatrixEventNormalizer {
     }
     JsonNode content = event.path(FIELD_CONTENT);
     String msgtype = content.path(FIELD_MSGTYPE).asText("");
-    String body = content.path(FIELD_BODY).asText("").strip();
-    List<InboundAttachment> attachments = new ArrayList<>();
-    if (MSG_IMAGE.equals(msgtype)) {
-      attachments.add(
-          InboundAttachment.imageReference(content.path(FIELD_URL).asText(DEFAULT_MXC)));
-    } else if (MSG_AUDIO.equals(msgtype)) {
-      attachments.add(
-          InboundAttachment.audioReference(content.path(FIELD_URL).asText(DEFAULT_MXC)));
-    } else if (MSG_VIDEO.equals(msgtype)) {
-      attachments.add(
-          InboundAttachment.videoReference(content.path(FIELD_URL).asText(DEFAULT_MXC)));
-    } else if (MSG_FILE.equals(msgtype)) {
-      attachments.add(InboundAttachment.fileReference(content.path(FIELD_URL).asText(DEFAULT_MXC)));
+    String rawBody = content.path(FIELD_BODY).asText("").strip();
+    String fileName = content.path("filename").asText("");
+    if (fileName.isBlank()) {
+      fileName = rawBody;
     }
+    List<InboundAttachment> attachments = extractAttachments(msgtype, content, fileName);
+    String body = captionOrEmpty(msgtype, rawBody, fileName);
     if (!direct) {
       if (!mentionsBot(content, body)) {
         return Optional.empty();
@@ -116,6 +110,45 @@ public class MatrixEventNormalizer {
             attachments));
   }
 
+  private static List<InboundAttachment> extractAttachments(
+      String msgtype, JsonNode content, String fileName) {
+    String mxc = content.path(FIELD_URL).asText(DEFAULT_MXC);
+    if (MSG_IMAGE.equals(msgtype)) {
+      return List.of(new InboundAttachment(InboundAttachment.TYPE_IMAGE, null, mxc, fileName));
+    }
+    if (MSG_AUDIO.equals(msgtype)) {
+      return List.of(new InboundAttachment(InboundAttachment.TYPE_AUDIO, null, mxc, fileName));
+    }
+    if (MSG_VIDEO.equals(msgtype)) {
+      return List.of(new InboundAttachment(InboundAttachment.TYPE_VIDEO, null, mxc, fileName));
+    }
+    if (MSG_FILE.equals(msgtype)) {
+      return List.of(InboundAttachment.fileReference(mxc, fileName));
+    }
+    return List.of();
+  }
+
+  private static String captionOrEmpty(String msgtype, String rawBody, String fileName) {
+    if (!MSG_IMAGE.equals(msgtype)
+        && !MSG_AUDIO.equals(msgtype)
+        && !MSG_VIDEO.equals(msgtype)
+        && !MSG_FILE.equals(msgtype)) {
+      return rawBody;
+    }
+    if (rawBody == null || rawBody.isBlank()) {
+      return "";
+    }
+    if (rawBody.equals(fileName) || looksLikeFilename(rawBody)) {
+      return "";
+    }
+    return rawBody;
+  }
+
+  private static boolean looksLikeFilename(String body) {
+    int dot = body.lastIndexOf('.');
+    return dot > 0 && dot < body.length() - 1 && !body.contains(" ");
+  }
+
   private boolean mentionsBot(JsonNode content, String body) {
     if (botUserId.isBlank()) {
       return false;
@@ -128,14 +161,39 @@ public class MatrixEventNormalizer {
         }
       }
     }
-    return body != null && asciiLower(body).contains(asciiLower(botUserId));
+    if (body == null) {
+      return false;
+    }
+    String lower = asciiLower(body);
+    if (lower.contains(asciiLower(botUserId))) {
+      return true;
+    }
+    String local = localMention();
+    return !local.isEmpty() && lower.contains(local);
   }
 
   private String stripBot(String body) {
     if (body == null || botUserId.isBlank()) {
       return body == null ? "" : body;
     }
-    return body.replace(botUserId, "").strip();
+    String stripped = body.replace(botUserId, "");
+    String local = localMention();
+    if (!local.isEmpty()) {
+      stripped = stripped.replace(local, "");
+    }
+    return stripped.strip();
+  }
+
+  /** Element 常显示 {@code @localpart}，不全写 MXID。 */
+  private String localMention() {
+    if (botUserId.length() < MXID_MIN_LEN || botUserId.charAt(0) != MXID_PREFIX) {
+      return "";
+    }
+    int colon = botUserId.indexOf(':');
+    if (colon <= 1) {
+      return "";
+    }
+    return asciiLower(botUserId.substring(0, colon));
   }
 
   private static String asciiLower(String value) {

@@ -172,8 +172,8 @@ website/zh/docs/tool.md / profile.md   # 渠道表同步
 - [ ] B2 WhatsApp 入站 + notify + 会话窗错误 + Setup  
 - [ ] B3 Teams 入站 + notify + Setup  
 - [ ] B4 Google Chat 入站 + notify + Setup  
-- [ ] B5 Mattermost 入站 + notify + Setup  
-- [ ] B6 Matrix 入站 + notify + Setup  
+- [x] B5 Mattermost 入站 + notify + Setup（本机 Docker 2026-09-09）  
+- [x] B6 Matrix 入站 + notify + Setup（本机 Synapse + Element 2026-09-09）  
 - [ ] 网站文档渠道表与 `channels.yaml.example` 与上表一致  
 - [ ] 不把「未过 Meta/Azure 审核的演示」写成生产就绪  
 

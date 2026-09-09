@@ -58,7 +58,19 @@ public class MattermostEventNormalizer {
       }
       text = stripMention(text);
       if (text.isBlank()) {
-        return Optional.empty();
+        // 只 @Bot / 配图无说明：先放行，适配器再按 post 拉 file_ids；无附件则不进编排
+        return Optional.of(
+            new InboundMessage(
+                CHANNEL_TYPE,
+                channelName,
+                messageId,
+                ChatKind.GROUP,
+                userId,
+                chatId,
+                "",
+                false,
+                true,
+                List.of()));
       }
       return Optional.of(
           new InboundMessage(
