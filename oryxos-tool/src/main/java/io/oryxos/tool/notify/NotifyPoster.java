@@ -60,13 +60,24 @@ public final class NotifyPoster {
 
   /** 同 {@link #postJson(String, Object)}，可带额外请求头（Bot Token 等）。 */
   public void postJson(String url, Object body, Map<String, String> headers) {
+    sendJson(HttpMethod.POST, url, body, headers);
+  }
+
+  /**
+   * PUT JSON。Matrix Client-Server {@code /send/m.room.message/{txn}} 必须用 PUT，POST 会被 homeserver 拒绝。
+   */
+  public void putJson(String url, Object body, Map<String, String> headers) {
+    sendJson(HttpMethod.PUT, url, body, headers);
+  }
+
+  private void sendJson(HttpMethod method, String url, Object body, Map<String, String> headers) {
     String current = url;
-    HttpMethod hopMethod = HttpMethod.POST;
+    HttpMethod hopMethod = method;
     Object hopBody = body;
     Map<String, String> hopHeaders = headers == null ? Map.of() : headers;
     for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
       sandbox.enforce(new SandboxAction(ActionType.HTTP_REQUEST, current));
-      RestClient.RequestBodySpec spec = hopClient.method(hopMethod).uri(current);
+      RestClient.RequestBodySpec spec = hopClient.method(hopMethod).uri(URI.create(current));
       hopHeaders.forEach(spec::header);
       if (hopBody != null) {
         spec.contentType(MediaType.APPLICATION_JSON).body(hopBody);

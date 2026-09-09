@@ -88,6 +88,7 @@ channels:
   #   agent: ops-agent
   #   extra:
   #     base_url: ${MATTERMOST_BASE_URL}
+  #     access_token: ${MATTERMOST_ACCESS_TOKEN}
   #   enabled: true
 
   # Matrix /sync 长轮询（见 docs/MatrixChannelSetup.md）

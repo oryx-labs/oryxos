@@ -33,6 +33,19 @@ class MattermostEventNormalizerTest {
   }
 
   @Test
+  @DisplayName("频道只 @bot 无正文 → 非文本 GROUP，留给媒体解析")
+  void channelMentionOnly() {
+    var msg =
+        normalizer.normalize(
+            "token=t&user_id=u1&channel_id=c1&post_id=p1&channel_type=O&text=@oryxbot&trigger_word=@oryxbot");
+    assertTrue(msg.isPresent());
+    assertEquals(ChatKind.GROUP, msg.get().chatKind());
+    assertEquals("", msg.get().content());
+    assertTrue(msg.get().mentionedBot());
+    assertTrue(msg.get().attachments().isEmpty());
+  }
+
+  @Test
   @DisplayName("频道 @bot → GROUP")
   void channelMention() {
     var msg =

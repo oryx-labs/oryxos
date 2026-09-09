@@ -1,5 +1,6 @@
 package io.oryxos.channel.mattermost;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.oryxos.core.channel.OutboundGuard;
@@ -40,8 +41,9 @@ public class MattermostMessageSender {
       ObjectNode body = MAPPER.createObjectNode();
       body.put("channel_id", channelId);
       body.put("message", text == null ? "" : text);
-      if (replyToMessageId != null && !replyToMessageId.isBlank()) {
-        body.put("root_id", replyToMessageId);
+      String rootId = resolveThreadRootId(replyToMessageId);
+      if (rootId != null && !rootId.isBlank()) {
+        body.put("root_id", rootId);
       }
       HttpRequest request =
           HttpRequest.newBuilder()
@@ -54,12 +56,50 @@ public class MattermostMessageSender {
       HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
       if (response.statusCode() < HTTP_STATUS_OK_MIN
           || response.statusCode() >= HTTP_STATUS_OK_MAX_EXCLUSIVE) {
-        throw new IllegalStateException("Mattermost 发消息失败 HTTP " + response.statusCode());
+        String errorBody = response.body() == null ? "" : response.body().strip();
+        if (errorBody.length() > 200) {
+          errorBody = errorBody.substring(0, 200);
+        }
+        throw new IllegalStateException(
+            "Mattermost 发消息失败 HTTP "
+                + response.statusCode()
+                + (errorBody.isEmpty() ? "" : ": " + errorBody));
       }
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
       throw new IllegalStateException("Mattermost 发消息失败: " + e.getMessage(), e);
+    }
+  }
+
+  /**
+   * Outgoing Webhook 只给当前帖 {@code post_id}。线程里回帖的 id 不能当 {@code root_id}，须解析到根帖；查不到则不跟帖，避免 HTTP
+   * 400。
+   */
+  private String resolveThreadRootId(String postId) {
+    if (postId == null || postId.isBlank()) {
+      return null;
+    }
+    String url = baseUrl + "/api/v4/posts/" + postId;
+    guard.check(url);
+    try {
+      HttpRequest request =
+          HttpRequest.newBuilder()
+              .uri(URI.create(url))
+              .timeout(TIMEOUT)
+              .header("Authorization", "Bearer " + token)
+              .GET()
+              .build();
+      HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() < HTTP_STATUS_OK_MIN
+          || response.statusCode() >= HTTP_STATUS_OK_MAX_EXCLUSIVE) {
+        return null;
+      }
+      JsonNode node = MAPPER.readTree(response.body());
+      String root = node.path("root_id").asText("");
+      return root.isBlank() ? postId : root;
+    } catch (Exception e) {
+      return null;
     }
   }
 

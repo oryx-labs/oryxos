@@ -39,6 +39,29 @@ class MatrixEventNormalizerTest {
     assertEquals("查天气", msg.get().content());
   }
 
+  @Test
+  @DisplayName("房间只写 @localpart 也算提及")
+  void roomLocalpartMention() {
+    var msg = normalizer.normalize("!r:hs", event("@oryx 查天气", false), false);
+    assertTrue(msg.isPresent());
+    assertEquals("查天气", msg.get().content());
+  }
+
+  @Test
+  @DisplayName("图片文件名不当正文")
+  void imageFilenameNotText() {
+    var root = event("shot.png", false);
+    ((com.fasterxml.jackson.databind.node.ObjectNode) root.get("content"))
+        .put("msgtype", "m.image")
+        .put("url", "mxc://hs/img")
+        .put("filename", "shot.png");
+    var msg = normalizer.normalize("!dm:hs", root, true);
+    assertTrue(msg.isPresent());
+    assertEquals("", msg.get().content());
+    assertEquals(false, msg.get().textual());
+    assertEquals("shot.png", msg.get().attachments().get(0).fileName());
+  }
+
   private ObjectNode event(String body, boolean mention) {
     ObjectNode root = mapper.createObjectNode();
     root.put("type", "m.room.message");

@@ -47,7 +47,7 @@ public class MatrixNotifyAdapter implements NotifyChannelAdapter {
     if (token != null && !token.isBlank()) {
       headers.put("Authorization", "Bearer " + token);
     }
-    poster.postJson(url, body, headers);
+    poster.putJson(url, body, headers);
   }
 
   private static String trimSlash(String homeserver) {
