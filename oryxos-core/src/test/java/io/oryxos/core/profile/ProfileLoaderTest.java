@@ -898,4 +898,51 @@ class ProfileLoaderTest {
     assertTrue(profile.provider().fallbacks().isEmpty());
     assertEquals("deepseek", profile.provider().name()); // 既有解析不受影响
   }
+
+  @Test
+  void sandbox段_合法值解析_缺省继承_非法值WARN回落() throws IOException {
+    write(
+        "docker-agent.yaml",
+        """
+        name: docker-agent
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        sandbox:
+          backend: docker
+          memory: 1g
+        """);
+    write(
+        "typical-agent.yaml",
+        """
+        name: typical-agent
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        """);
+    write(
+        "bad-backend.yaml",
+        """
+        name: bad-backend
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        sandbox:
+          backend: kubernetes
+        """);
+
+    var registry = loader().loadAll();
+
+    var docker = registry.get("docker-agent").orElseThrow();
+    assertEquals("docker", docker.sandbox().backend());
+    assertEquals("1g", docker.sandbox().memory());
+
+    // 缺省：段未声明 → sandbox 为 null（完全继承全局）
+    assertNull(registry.get("typical-agent").orElseThrow().sandbox());
+
+    // 非法 backend：不阻断加载，backend 回落 null（继承），Agent 仍注册
+    var bad = registry.get("bad-backend").orElseThrow();
+    assertNull(bad.sandbox().backend());
+    assertEquals(3, registry.all().size(), "非法值不阻断该 Agent 与其它 Agent 加载（EC-4）");
+  }
 }

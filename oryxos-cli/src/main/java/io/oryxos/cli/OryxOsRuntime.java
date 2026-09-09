@@ -19,6 +19,7 @@ import io.oryxos.core.agent.WorkspaceWatcher;
 import io.oryxos.core.context.ContextLoader;
 import io.oryxos.core.memory.MemoryService;
 import io.oryxos.core.notify.NotifyChannelRegistry;
+import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.LlmCallAuditor;
 import io.oryxos.core.provider.PricingStore;
@@ -107,6 +108,7 @@ import io.oryxos.tool.notify.TelegramNotifyAdapter;
 import io.oryxos.tool.notify.WeComNotifyAdapter;
 import io.oryxos.tool.notify.WebhookNotifyAdapter;
 import io.oryxos.tool.notify.WhatsAppNotifyAdapter;
+import io.oryxos.tool.sandbox.AgentAwareProcessStarter;
 import io.oryxos.tool.sandbox.CidfileProcessWrapper;
 import io.oryxos.tool.sandbox.DockerProcessStarter;
 import io.oryxos.tool.sandbox.ExecutionBackendProperties;
@@ -778,18 +780,23 @@ public class OryxOsRuntime {
       McpClientService mcpClientService,
       UserInteraction userInteraction,
       io.oryxos.core.knowledge.KnowledgeService knowledgeService,
-      ExecutionBackendProperties executionBackendProperties) {
+      ExecutionBackendProperties executionBackendProperties,
+      ProfileRegistry profileRegistry) {
     ToolRegistry registry = new ToolRegistry();
     // 内置工具走 @Tool 注解管道（schema 自动生成，宪法 II 第二件事）
     registry.registerAnnotated(new FileTools(sandbox)); // read/write/list/edit/grep/glob
-    // 024：执行后端按档位装配（local=现状零变化 / docker=短命容器），白名单 enforce 仍在工具内部前置（FR-007）
+    // 024：执行后端按档位装配（local=现状零变化 / docker=短命容器），白名单 enforce 仍在工具内部前置（FR-007）；
+    // US2：全局档为基线，frontmatter sandbox 段按 Agent 覆写（D8 收敛在 AgentAwareProcessStarter）
     ProcessStarter shellStarter =
-        executionBackendProperties.isDocker()
-            ? new DockerProcessStarter(
-                executionBackendProperties,
-                new WorkspacePathMapper(oryxosRoot()),
-                CidfileProcessWrapper.dockerCliKiller())
-            : new LocalProcessStarter();
+        new AgentAwareProcessStarter(
+            executionBackendProperties,
+            agentName -> profileRegistry.get(agentName).map(Profile::sandbox).orElse(null),
+            new LocalProcessStarter(),
+            effective ->
+                new DockerProcessStarter(
+                    effective,
+                    new WorkspacePathMapper(oryxosRoot()),
+                    CidfileProcessWrapper.dockerCliKiller()));
     registry.registerAnnotated(new ShellTools(sandbox, shellStarter));
     registry.registerAnnotated(
         new HttpTools(sandbox, restClient)); // + http_request/fetch_webpage/download_file
@@ -879,6 +886,22 @@ public class OryxOsRuntime {
           org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication.Type.SERVLET)
   DockerBackendStartupCheck dockerBackendStartupCheck(ExecutionBackendProperties props) {
     return new DockerBackendStartupCheck(props);
+  }
+
+  /**
+   * 024 US3：执行后端配置快照——web 状态页 controller（组件扫描自动装配）经 core 契约读取； web 与 cli 互不依赖，转换（tool Properties →
+   * core Snapshot）只能在同时看得见两者的本模块完成。
+   */
+  @Bean
+  io.oryxos.core.execution.ExecutionBackendSnapshot executionBackendSnapshot(
+      ExecutionBackendProperties props) {
+    return new io.oryxos.core.execution.ExecutionBackendSnapshot(
+        props.backend(),
+        props.image(),
+        props.memory(),
+        props.cpus(),
+        props.network(),
+        props.user());
   }
 
   @Bean

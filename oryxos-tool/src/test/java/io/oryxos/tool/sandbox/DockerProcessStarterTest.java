@@ -91,7 +91,7 @@ class DockerProcessStarterTest {
   }
 
   /** 最小假 CLI 进程（无 IO 语义，只验证包装与上下文）。 */
-  private static final class FakeCliProcess extends Process {
+  static final class FakeCliProcess extends Process {
     @Override
     public java.io.OutputStream getOutputStream() {
       return java.io.OutputStream.nullOutputStream();

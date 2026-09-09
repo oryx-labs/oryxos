@@ -118,13 +118,22 @@ public class AuditMetricsService {
   }
 
   public List<ToolInvocationView> toolList(Instant from, Instant to, int limit) {
-    return toolList(from, to, limit, null);
+    return toolList(from, to, limit, null, null);
   }
 
-  /** 020：blockedBy 非空时只返回该拦截来源的记录（如 'policy'=策略拒绝，FR-006 可筛口径）。 */
   public List<ToolInvocationView> toolList(Instant from, Instant to, int limit, String blockedBy) {
+    return toolList(from, to, limit, blockedBy, null);
+  }
+
+  /**
+   * 020：blockedBy 非空时只返回该拦截来源的记录（如 'policy'=策略拒绝，FR-006 可筛口径）。 024：executionBackend
+   * 非空时按执行后端筛选（SC-007；历史行 NULL ≡ local，不匹配 'docker' 但匹配 null 查询由前端处理）。
+   */
+  public List<ToolInvocationView> toolList(
+      Instant from, Instant to, int limit, String blockedBy, String executionBackend) {
     return toolInvocationRepository.findByCreatedAtBetween(from, to).stream()
         .filter(t -> blockedBy == null || blockedBy.equals(t.getBlockedBy()))
+        .filter(t -> executionBackend == null || executionBackend.equals(t.getExecutionBackend()))
         .sorted(
             Comparator.comparing(
                 ToolInvocation::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
