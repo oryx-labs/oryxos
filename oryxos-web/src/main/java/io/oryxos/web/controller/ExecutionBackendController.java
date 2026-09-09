@@ -19,6 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
  * 执行后端状态页 API（024 US3 / FR-012，只读）：全局档位、docker 可用性（按需探测 D5——无常驻心跳）、 生效镜像与限额、各 Agent 的 frontmatter
  * 覆写一览。配置修改走 application.yml / AGENT.md（GitOps 路径），本 API 不提供写操作。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = {"SPRING_ENDPOINT", "EI_EXPOSE_REP2"},
+    justification = "core-stage web API is unauthenticated by design (internal network + gateway).")
 @RestController
 @RequestMapping("/api/v1/sandbox/execution")
 public class ExecutionBackendController {
@@ -107,6 +110,9 @@ public class ExecutionBackendController {
   }
 
   /** docker --version 的 stdout（如 "Docker version 28.4.0, build xxx"）。 */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "COMMAND_INJECTION",
+      justification = "argv 为内部常量（docker --version），非模型/用户输入，argv 直传不经 shell")
   private String probeVersion() {
     try {
       Process process = new ProcessBuilder(DOCKER, "--version").redirectErrorStream(true).start();
@@ -124,6 +130,9 @@ public class ExecutionBackendController {
   }
 
   /** 镜像 digest（daemon 可达且 backend 配了镜像时才有值）。 */
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "COMMAND_INJECTION",
+      justification = "argv 为内部常量与管理员配置的镜像名（非模型/用户输入），argv 直传不经 shell")
   private String imageDigest() {
     if (!props.isDocker() || props.image().isBlank()) {
       return null;
@@ -143,7 +152,7 @@ public class ExecutionBackendController {
       if (e instanceof InterruptedException) {
         Thread.currentThread().interrupt();
       }
-      LOG.debug("镜像 digest 探测失败: {}", e.getMessage());
+      LOG.debug("镜像 digest 探测失败", e); // throwable 直传（栈帧由 logback 格式化，无 CRLF 注入面）
       return null;
     }
   }
@@ -173,7 +182,12 @@ public class ExecutionBackendController {
       String cpus,
       String network,
       String user,
-      List<AgentOverrideView> agentOverrides) {}
+      List<AgentOverrideView> agentOverrides) {
+
+    public StatusView {
+      agentOverrides = agentOverrides == null ? List.of() : List.copyOf(agentOverrides);
+    }
+  }
 
   public record DockerStatusView(boolean reachable, String version, String error) {}
 
