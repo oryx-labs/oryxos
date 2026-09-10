@@ -14,7 +14,14 @@ final class WeixinAesCdn {
   private static final int KEY_LEN = 16;
   private static final int HEX_KEY_ASCII_LEN = 32;
 
+  /** 32 位 hex AES key（Hermes image_item.aeskey / base64(hex) 解码后）。 */
+  private static final String HEX_AES_KEY_PATTERN = "(?i)[0-9a-f]{32}";
+
   private WeixinAesCdn() {}
+
+  static boolean isHexAesKey(String value) {
+    return value != null && value.matches(HEX_AES_KEY_PATTERN);
+  }
 
   static byte[] decryptIfNeeded(byte[] ciphertext, String aesKeyB64) throws Exception {
     if (ciphertext == null) {
@@ -33,7 +40,7 @@ final class WeixinAesCdn {
     }
     if (decoded.length == HEX_KEY_ASCII_LEN) {
       String text = new String(decoded, StandardCharsets.US_ASCII);
-      if (text.matches("(?i)[0-9a-f]{32}")) {
+      if (isHexAesKey(text)) {
         return hexToBytes(text);
       }
     }

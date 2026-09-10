@@ -78,7 +78,7 @@ public class WeixinEventNormalizer {
       msgId = from + "-" + System.currentTimeMillis();
     }
     Extracted extracted = extractItems(message.path(FIELD_ITEM_LIST));
-    if ((extracted.text == null || extracted.text.isBlank()) && extracted.attachments.isEmpty()) {
+    if (extracted.isEmpty()) {
       return Optional.empty();
     }
     String body = extracted.text == null ? "" : extracted.text.strip();
@@ -204,7 +204,7 @@ public class WeixinEventNormalizer {
   /** 对齐 Hermes：优先 image_item.aeskey（hex）→ base64(hex 字符串)；否则 media.aes_key。 */
   private static String imageAesKey(JsonNode imageItem, JsonNode media) {
     String hex = text(imageItem, FIELD_AESKEY);
-    if (hex != null && hex.matches("(?i)[0-9a-f]{32}")) {
+    if (WeixinAesCdn.isHexAesKey(hex)) {
       return Base64.getEncoder().encodeToString(hex.getBytes(StandardCharsets.US_ASCII));
     }
     return text(media, FIELD_AES_KEY);
@@ -237,5 +237,10 @@ public class WeixinEventNormalizer {
     return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
   }
 
-  private record Extracted(String text, List<InboundAttachment> attachments) {}
+  private record Extracted(String text, List<InboundAttachment> attachments) {
+    boolean isEmpty() {
+      boolean noText = text == null || text.isBlank();
+      return noText && attachments.isEmpty();
+    }
+  }
 }

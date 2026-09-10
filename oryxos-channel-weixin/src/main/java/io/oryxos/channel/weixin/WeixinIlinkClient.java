@@ -25,6 +25,9 @@ public class WeixinIlinkClient {
   private static final int ITEM_TEXT = 1;
   private static final int MSG_TYPE_BOT = 2;
   private static final int MSG_STATE_FINISH = 2;
+  private static final int HTTP_STATUS_OK_MIN = 200;
+  private static final int HTTP_STATUS_OK_MAX_EXCLUSIVE = 300;
+  private static final int SANITIZE_MAX_LEN = 200;
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(20);
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final SecureRandom RANDOM = new SecureRandom();
@@ -95,7 +98,8 @@ public class WeixinIlinkClient {
             .POST(HttpRequest.BodyPublishers.ofByteArray(bytes))
             .build();
     HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+    if (response.statusCode() < HTTP_STATUS_OK_MIN
+        || response.statusCode() >= HTTP_STATUS_OK_MAX_EXCLUSIVE) {
       throw new IllegalStateException(
           "iLink HTTP " + response.statusCode() + ": " + sanitize(response.body()));
     }
@@ -123,7 +127,8 @@ public class WeixinIlinkClient {
     if (value == null) {
       return "";
     }
-    String trimmed = value.length() > 200 ? value.substring(0, 200) : value;
+    String trimmed =
+        value.length() > SANITIZE_MAX_LEN ? value.substring(0, SANITIZE_MAX_LEN) : value;
     return trimmed.replace('\r', '_').replace('\n', '_');
   }
 }
