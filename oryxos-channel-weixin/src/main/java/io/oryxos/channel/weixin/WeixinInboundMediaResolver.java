@@ -16,7 +16,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -178,7 +177,7 @@ final class WeixinInboundMediaResolver {
       throw new IllegalStateException("下载临时文件为空");
     }
     byte[] plain = WeixinAesCdn.decryptIfNeeded(encrypted, attachment.reference());
-    if (plain == null || plain.length == 0) {
+    if (plain.length == 0) {
       throw new IllegalStateException("解密后媒体为空");
     }
     String ext = extensionFor(attachment, remoteUrl);
@@ -219,11 +218,11 @@ final class WeixinInboundMediaResolver {
     if (uri == null || uri.getScheme() == null || uri.getHost() == null) {
       return false;
     }
-    String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
+    String scheme = asciiLower(uri.getScheme());
     if (!SCHEME_HTTPS.equals(scheme)) {
       return false;
     }
-    String host = uri.getHost().toLowerCase(Locale.ROOT);
+    String host = asciiLower(uri.getHost());
     return HOST_CDN.equals(host)
         || HOST_ILINK.equals(host)
         || host.endsWith(HOST_SUFFIX_WEIXIN)
@@ -233,6 +232,17 @@ final class WeixinInboundMediaResolver {
         || HOST_MMBIZ_QPIC.equals(host)
         || HOST_MMBIZ_QLOGO.equals(host)
         || (host.endsWith(HOST_SUFFIX_QQ) && host.contains("wx"));
+  }
+
+  private static String asciiLower(String value) {
+    char[] chars = value.toCharArray();
+    for (int i = 0; i < chars.length; i++) {
+      char c = chars[i];
+      if (c >= 'A' && c <= 'Z') {
+        chars[i] = (char) (c + ('a' - 'A'));
+      }
+    }
+    return new String(chars);
   }
 
   private static String extensionFor(InboundAttachment attachment, String remoteUrl) {
@@ -275,7 +285,7 @@ final class WeixinInboundMediaResolver {
     if (dot < 0 || dot == path.length() - 1) {
       return null;
     }
-    String ext = path.substring(dot).toLowerCase(Locale.ROOT);
+    String ext = asciiLower(path.substring(dot));
     if (!ext.matches(SAFE_EXTENSION_PATTERN)) {
       return null;
     }

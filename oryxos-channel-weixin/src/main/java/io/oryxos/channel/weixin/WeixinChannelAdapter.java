@@ -23,8 +23,10 @@ import org.slf4j.LoggerFactory;
  * app_id}=ilink_bot_id，{@code app_secret}=bot_token。支持私聊文本与图/语音/文件/视频入站。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-    value = "UWF_FIELD_NOT_INITIALIZED_IN_CONSTRUCTOR",
-    justification = "client/normalizer/sender/mediaResolver 在 start() 内初始化；sendReply 有显式空判。")
+    value = {"UWF_FIELD_NOT_INITIALIZED_IN_CONSTRUCTOR", "EI_EXPOSE_REP2"},
+    justification =
+        "client/normalizer/sender/mediaResolver 在 start() 内初始化；sendReply 有显式空判。"
+            + "构造注入的 registry/service/guard 为 Spring/运行时单例，不对外再暴露可变副本。")
 public class WeixinChannelAdapter implements InboundChannelAdapter {
 
   private static final Logger LOG = LoggerFactory.getLogger(WeixinChannelAdapter.class);
@@ -193,7 +195,7 @@ public class WeixinChannelAdapter implements InboundChannelAdapter {
           return;
         }
         lastError = sanitize(e.getMessage());
-        LOG.warn("微信渠道 {} 轮询异常: {}", sanitize(config.name()), lastError);
+        LOG.warn("微信渠道 {} 轮询异常: {}", sanitize(config.name()), sanitize(lastError));
         sleepQuietly(2_000L);
       }
     }
