@@ -11,7 +11,6 @@ import io.oryxos.core.channel.InboundMessageService;
 import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.profile.ProfileRegistry;
 import java.time.Duration;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
@@ -340,7 +339,7 @@ public class QqChannelAdapter implements InboundChannelAdapter {
       if (!fn.isBlank()) {
         int dot = fn.lastIndexOf('.');
         if (dot >= 0 && dot < fn.length() - 1) {
-          sb.append(sanitize(fn.substring(dot).toLowerCase(Locale.ROOT)));
+          sb.append(sanitize(asciiLower(fn.substring(dot))));
         }
       }
       sb.append(hasUrl ? "+url" : "-url");
@@ -380,5 +379,16 @@ public class QqChannelAdapter implements InboundChannelAdapter {
 
   private static String sanitize(String value) {
     return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
+  }
+
+  private static String asciiLower(String value) {
+    char[] chars = value.toCharArray();
+    for (int i = 0; i < chars.length; i++) {
+      char c = chars[i];
+      if (c >= 'A' && c <= 'Z') {
+        chars[i] = (char) (c + ('a' - 'A'));
+      }
+    }
+    return new String(chars);
   }
 }

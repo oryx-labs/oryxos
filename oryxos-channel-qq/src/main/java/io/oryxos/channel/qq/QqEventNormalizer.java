@@ -6,7 +6,6 @@ import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -154,7 +153,7 @@ public class QqEventNormalizer {
       }
       String fileName = text(file, FIELD_FILENAME);
       String contentType = text(file, FIELD_CONTENT_TYPE);
-      String mime = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
+      String mime = contentType == null ? "" : asciiLower(contentType);
       boolean voice = MIME_AUDIO.equals(mime) || mime.startsWith(MIME_AUDIO_PREFIX);
       String voiceWav = text(file, FIELD_VOICE_WAV_URL);
       String url = text(file, FIELD_URL);
@@ -200,7 +199,18 @@ public class QqEventNormalizer {
     if (name == null || suffix == null) {
       return false;
     }
-    return name.toLowerCase(Locale.ROOT).endsWith(suffix);
+    return asciiLower(name).endsWith(asciiLower(suffix));
+  }
+
+  private static String asciiLower(String value) {
+    char[] chars = value.toCharArray();
+    for (int i = 0; i < chars.length; i++) {
+      char c = chars[i];
+      if (c >= 'A' && c <= 'Z') {
+        chars[i] = (char) (c + ('a' - 'A'));
+      }
+    }
+    return new String(chars);
   }
 
   static String stripMentions(String content) {
