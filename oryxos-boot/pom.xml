@@ -94,6 +94,10 @@
         </dependency>
         <dependency>
             <groupId>io.oryxos</groupId>
+            <artifactId>oryxos-channel-douyin</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.oryxos</groupId>
             <artifactId>oryxos-web</artifactId>
         </dependency>
         <dependency>

@@ -62,11 +62,12 @@ OryxOS 入站已有飞书 / 企微 / 钉钉 / Slack / Discord（+ CLI）。出�
 | Line / Kakao / 微信个人号 | 非本清单欧美+国内企业主路径；个微无合规 Bot |
 | IRC | 仅演示，不当产品渠道 |
 
-### D. 国内后续候选（不在 026 波次内）
+### D. 国内后续（不在 026 波次内）
 
 | 渠道 | 说明 | 建议 |
 |------|------|------|
-| QQ（开放平台官方 Bot） | 026 主清单未排入；国内 C 端/社群触达。个人 QQ 协议号不合规，口径同「微信个人号」 | **已另开 [029](../029-qq-im-channel/plan.md)**：官方 Bot API v2 + Gateway；群 `@Bot` + 单聊 MVP；频道二期。**本 PLAN 不实现、勿双开** |
+| QQ（开放平台官方 Bot） | 国内 C 端/社群触达。个人 QQ 协议号不合规 | **已落地 [029](../029-qq-im-channel/plan.md)**（#434/#435）。**本 PLAN 不实现、勿双开** |
+| 抖音 / 支付宝 / 快手 / B 站 / 小红书 | 经营私信 / 客服消息（非员工协作 IM） | **总表 [030](../030-cn-c-im-roadmap/plan.md)**：官方成熟才直连；下一刀抖音 031。**勿塞进 026 海外真机队列** |
 
 ## 场景对照（刚需怎么覆盖）
 
@@ -77,7 +78,7 @@ OryxOS 入站已有飞书 / 企微 / 钉钉 / Slack / Discord（+ CLI）。出�
 出海对客 C 端 ──── WhatsApp + Telegram         TG✅；WA 真平台⏸
 私有化 / 不出域 ── Mattermost + Matrix         ✅（本机；#432）
 主动推送 ───────── 各渠道 notify + 已有 email  P0 + 各波次适配器
-国内后续候选 ───── QQ（官方 Bot 面）            → [029](../029-qq-im-channel/plan.md)
+国内后续 ───────── QQ ✅ 029；经营私信 → [030](../030-cn-c-im-roadmap/plan.md)
 ```
 
 同一 Agent 可绑多条 `channels.yaml` 条目（一应用一 Agent）。出海项目典型绑法：
@@ -183,7 +184,8 @@ website/zh/docs/tool.md / profile.md   # 渠道表同步
 - [x] B6 Matrix 入站 + notify + Setup（本机 Synapse + Element；#432）  
 - [ ] 网站文档渠道表与 `channels.yaml.example` 与上表一致  
 - [ ] 不把「未过 Meta/Azure 审核的演示」写成生产就绪  
-- [x] （非 026）国内 QQ → [029](../029-qq-im-channel/plan.md)（另分支落地，不塞进 026 海外真机队列）
+- [x] （非 026）国内 QQ → [029](../029-qq-im-channel/plan.md)（另分支落地，不塞进 026 海外真机队列）  
+- [x] （非 026）国内经营私信总表 → [030](../030-cn-c-im-roadmap/plan.md)（抖音起 031+；勿塞进 026 海外真机队列）
 
 ## 建议开工顺序（刚需仍要排队）
 
@@ -191,6 +193,6 @@ website/zh/docs/tool.md / profile.md   # 渠道表同步
 2. ~~**Telegram**~~（已合入 + 真机）。  
 3. **WhatsApp** 真平台恢复后，再 Teams / Google Chat（当前暂停）。  
 4. ~~Mattermost → Matrix~~（本机真机 + #432）。  
-5. 国内 C 端 QQ：走 **029**，勿塞进 026 未完成的海外真机项。
+5. 国内 C 端：QQ → **029**；经营私信（抖音等）→ **[030](../030-cn-c-im-roadmap/plan.md)**，勿塞进 026 未完成的海外真机项。
 
 下一步若恢复海外真机：先解决 Meta Developers 登录与**固定**公网 Callback（避免 quick tunnel 每次换域）；Teams/GChat 补本机 `${ENV}` 后再测。

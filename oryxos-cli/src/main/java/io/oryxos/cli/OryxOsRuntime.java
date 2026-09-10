@@ -1108,6 +1108,11 @@ public class OryxOsRuntime {
         resolved ->
             new io.oryxos.channel.qq.QqChannelAdapter(
                 resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
+    factories.put(
+        io.oryxos.channel.douyin.DouyinChannelAdapter.TYPE,
+        resolved ->
+            new io.oryxos.channel.douyin.DouyinChannelAdapter(
+                resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
     return new io.oryxos.core.channel.ChannelAdminService(
         channelConfigLoader, inboundChannelRegistry, profileRegistry, factories);
   }

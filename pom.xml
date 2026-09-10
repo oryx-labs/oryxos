@@ -82,6 +82,7 @@
         <module>oryxos-channel-mattermost</module>
         <module>oryxos-channel-matrix</module>
         <module>oryxos-channel-qq</module>
+        <module>oryxos-channel-douyin</module>
         <module>oryxos-web</module>
         <module>oryxos-storage</module>
         <module>oryxos-cli</module>
@@ -193,6 +194,11 @@
             <dependency>
                 <groupId>io.oryxos</groupId>
                 <artifactId>oryxos-channel-qq</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.oryxos</groupId>
+                <artifactId>oryxos-channel-douyin</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
