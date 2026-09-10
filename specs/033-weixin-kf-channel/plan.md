@@ -2,7 +2,7 @@
 
 **Branch（BUILD 时）**: `feat/033-weixin-kf-channel`  
 **Date**: 2026-09-11  
-**Status**: PLANNED（**未 BUILD**）  
+**Status**: BUILT（单测绿；真机待资质）  
 **对照**: [research](./research.md)、[030](../030-cn-c-im-roadmap/plan.md)、[017 契约](../017-feishu-im-channel/contracts/inbound-channel-contract.md)
 
 ## Summary

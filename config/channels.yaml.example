@@ -128,3 +128,16 @@ channels:
   #   app_secret: ${WEIXIN_TOKEN}
   #   agent: demo-agent
   #   enabled: true
+
+  # 微信客服（企业对客，见 docs/WeixinKfChannelSetup.md）
+  # 回调：GET/POST /api/v1/channels/inbound/ops-weixin-kf
+  # - name: ops-weixin-kf
+  #   type: weixin_kf
+  #   app_id: ${WECOM_CORP_ID}
+  #   app_secret: ${WEIXIN_KF_SECRET}
+  #   agent: demo-agent
+  #   extra:
+  #     token: ${WEIXIN_KF_TOKEN}
+  #     encoding_aes_key: ${WEIXIN_KF_AES_KEY}
+  #     open_kfid: ${WEIXIN_KF_OPEN_KFID}
+  #   enabled: true
