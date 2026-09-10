@@ -108,6 +108,7 @@ http:
     - media.discordapp.net      # Discord 入站媒体代理
     - "*.discordapp.com"        # Discord CDN 子域
     - "*.discordapp.net"        # Discord 媒体子域
+    - api.bot.qq.com            # QQ 官方 Bot OpenAPI + Gateway
     - api.open-meteo.com        # 天气 Agent 免 key 天气源（31 节 Demo 一）
     - hn.algolia.com            # 科技日报 Agent 新闻源（31 节 Demo 二）
     - api.github.com            # GitHub 日报脚本子进程网络（31 节 Demo 三）

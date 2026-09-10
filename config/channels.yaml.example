@@ -100,3 +100,11 @@ channels:
   #   extra:
   #     homeserver: ${MATRIX_HOMESERVER}
   #   enabled: true
+
+  # QQ 官方 Bot Gateway（见 docs/QqChannelSetup.md）
+  # - name: ops-qq
+  #   type: qq
+  #   app_id: ${QQ_APP_ID}
+  #   app_secret: ${QQ_APP_SECRET}
+  #   agent: demo-agent
+  #   enabled: true

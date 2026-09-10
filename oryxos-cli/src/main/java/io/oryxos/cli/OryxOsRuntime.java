@@ -106,6 +106,7 @@ import io.oryxos.tool.notify.MatrixNotifyAdapter;
 import io.oryxos.tool.notify.MattermostNotifyAdapter;
 import io.oryxos.tool.notify.NotifyChannelAdapter;
 import io.oryxos.tool.notify.NotifyPoster;
+import io.oryxos.tool.notify.QqNotifyAdapter;
 import io.oryxos.tool.notify.SlackNotifyAdapter;
 import io.oryxos.tool.notify.TeamsNotifyAdapter;
 import io.oryxos.tool.notify.TelegramNotifyAdapter;
@@ -823,6 +824,7 @@ public class OryxOsRuntime {
     notifyAdapters.put("gchat", new GoogleChatNotifyAdapter(notifyPoster));
     notifyAdapters.put("mattermost", new MattermostNotifyAdapter(notifyPoster));
     notifyAdapters.put("matrix", new MatrixNotifyAdapter(notifyPoster));
+    notifyAdapters.put("qq", new QqNotifyAdapter(notifyPoster));
     registry.register(new NotifyTools(notifyAdapters, sandbox, notifyChannelRegistry));
     // 记忆工具：save_memory / recall_memory（补齐 20 节预留的两工具面），只认门面对后端无感
     registry.registerAnnotated(new MemoryTools(memoryService));
@@ -1100,6 +1102,11 @@ public class OryxOsRuntime {
         io.oryxos.channel.matrix.MatrixChannelAdapter.TYPE,
         resolved ->
             new io.oryxos.channel.matrix.MatrixChannelAdapter(
+                resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
+    factories.put(
+        io.oryxos.channel.qq.QqChannelAdapter.TYPE,
+        resolved ->
+            new io.oryxos.channel.qq.QqChannelAdapter(
                 resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
     return new io.oryxos.core.channel.ChannelAdminService(
         channelConfigLoader, inboundChannelRegistry, profileRegistry, factories);

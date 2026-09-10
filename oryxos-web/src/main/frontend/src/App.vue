@@ -1025,10 +1025,10 @@ async function loadNotifyChannels() {
 }
 
 // 新建/编辑表单：editing 存被编辑渠道的 name（此时 name 只读），null 表示新建
-const nc = reactive({ open: false, editing: null, name: '', type: 'feishu', url: '', description: '', host: '', port: '', from: '', to: '', username: '', password: '', subject: '', encryption: '', token: '', chatId: '', channelId: '', phoneNumberId: '', homeserver: '', roomId: '', busy: false, error: null })
+const nc = reactive({ open: false, editing: null, name: '', type: 'feishu', url: '', description: '', host: '', port: '', from: '', to: '', username: '', password: '', subject: '', encryption: '', token: '', chatId: '', channelId: '', phoneNumberId: '', homeserver: '', roomId: '', groupOpenid: '', userOpenid: '', busy: false, error: null })
 
 function notifyNeedsUrl(type) {
-  return !['email', 'telegram', 'slack', 'discord', 'whatsapp', 'matrix'].includes(type)
+  return !['email', 'telegram', 'slack', 'discord', 'whatsapp', 'matrix', 'qq'].includes(type)
 }
 
 function buildNotifyConfig() {
@@ -1045,6 +1045,10 @@ function buildNotifyConfig() {
     if (nc.homeserver) config.homeserver = nc.homeserver
     if (nc.roomId) config.room_id = nc.roomId
   }
+  if (nc.type === 'qq') {
+    if (nc.groupOpenid) config.group_openid = nc.groupOpenid
+    if (nc.userOpenid) config.user_openid = nc.userOpenid
+  }
   return Object.keys(config).length ? config : undefined
 }
 
@@ -1056,6 +1060,7 @@ function notifyFormReady() {
   if (nc.type === 'slack' || nc.type === 'discord') return !!(nc.token && nc.channelId)
   if (nc.type === 'whatsapp') return !!(nc.token && nc.phoneNumberId && nc.to)
   if (nc.type === 'matrix') return !!(nc.homeserver && nc.token && nc.roomId)
+  if (nc.type === 'qq') return !!(nc.token && (nc.groupOpenid || nc.userOpenid))
   return false
 }
 
@@ -1091,6 +1096,7 @@ function editNotifyChannel(row) {
   nc.username = c.username || ''; nc.password = c.password || ''; nc.subject = c.subject || ''; nc.encryption = c.encryption || ''
   nc.token = c.token || ''; nc.chatId = c.chat_id || ''; nc.channelId = c.channel_id || ''
   nc.phoneNumberId = c.phone_number_id || ''; nc.homeserver = c.homeserver || ''; nc.roomId = c.room_id || ''
+  nc.groupOpenid = c.group_openid || ''; nc.userOpenid = c.user_openid || ''
   nc.error = null
   nc.open = true
 }
@@ -1107,6 +1113,7 @@ function cancelNc() {
   nc.open = false; nc.editing = null; nc.name = ''; nc.type = 'feishu'; nc.url = ''; nc.description = ''
   nc.host = ''; nc.port = ''; nc.from = ''; nc.to = ''; nc.username = ''; nc.password = ''; nc.subject = ''; nc.encryption = ''
   nc.token = ''; nc.chatId = ''; nc.channelId = ''; nc.phoneNumberId = ''; nc.homeserver = ''; nc.roomId = ''
+  nc.groupOpenid = ''; nc.userOpenid = ''
   nc.error = null
 }
 
@@ -3298,6 +3305,7 @@ const outputRows = computed(() =>
                     <option value="gchat">gchat</option>
                     <option value="mattermost">mattermost</option>
                     <option value="matrix">matrix</option>
+                    <option value="qq">qq</option>
                   </select>
                   <input v-if="nc.type !== 'email'" v-model="nc.url" class="gen-input" :placeholder="notifyNeedsUrl(nc.type) ? 'Webhook URL' : 'Webhook URL（可选；也可用下方 token 字段）'" />
                   <template v-if="nc.type === 'telegram'">
@@ -3317,6 +3325,11 @@ const outputRows = computed(() =>
                     <input v-model="nc.homeserver" class="gen-input" placeholder="homeserver（https://matrix.example）" />
                     <input v-model="nc.token" class="gen-input" placeholder="access token" />
                     <input v-model="nc.roomId" class="gen-input" placeholder="room_id" />
+                  </template>
+                  <template v-if="nc.type === 'qq'">
+                    <input v-model="nc.token" class="gen-input" placeholder="access_token（建议环境变量占位）" />
+                    <input v-model="nc.groupOpenid" class="gen-input" placeholder="group_openid（群；与 user_openid 二选一）" />
+                    <input v-model="nc.userOpenid" class="gen-input" placeholder="user_openid（单聊；与 group_openid 二选一）" />
                   </template>
                   <template v-if="nc.type === 'email'">
                     <input v-model="nc.host" class="gen-input" placeholder="SMTP host（如 smtp.example.com）" />
