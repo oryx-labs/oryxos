@@ -42,11 +42,14 @@ channels:
 | 场景 | 行为 |
 |------|------|
 | 群 `@Bot` 文本 | 进编排；回复带被动 `msg_id`（约 5 分钟窗） |
-| 单聊文本 | 进编排；无私聊 @ 要求；回复走 `/v2/users/{openid}/messages` |
+| 单聊文本 | 进编排；无私聊 @ 要求 |
+| 单聊/群 图片、PDF、语音、视频 | `attachments[].url` 鉴权下载落盘；语音优先 `voice_wav_url`（可选 `asr_refer_text`）；视频 `video/mp4` → Vision / ASR / `read_file` |
 | 重复 `msg_id` | 去重，只答一次 |
 | 频道消息 | MVP 不处理 |
 
 内部 `chatId` 形如 `group:{group_openid}` / `user:{user_openid}`（发信路径编码，对用户不可见）。
+
+`http.allowed_domains` 另需 `multimedia.nt.qq.com.cn`、`*.qq.com.cn`、`*.myqcloud.com`、`*.ugcimg.cn`（入站附件 / 语音 WAV CDN）。
 
 ## 四、Notify
 

@@ -3,13 +3,16 @@ package io.oryxos.channel.qq;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.oryxos.core.channel.ChannelConfig;
 import io.oryxos.core.channel.ChannelStatus;
+import io.oryxos.core.channel.ChatKind;
 import io.oryxos.core.channel.InboundChannelAdapter;
+import io.oryxos.core.channel.InboundMediaRoots;
 import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
 import io.oryxos.core.channel.OutboundGuard;
 import io.oryxos.core.profile.ProfileRegistry;
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -21,11 +24,12 @@ import org.slf4j.LoggerFactory;
 /**
  * QQ 官方机器人入站：一实例 = 一条 Gateway 长连接。
  *
- * <p>凭证：{@code app_id}=AppID，{@code app_secret}=AppSecret（换 access_token）。
+ * <p>凭证：{@code app_id}=AppID，{@code app_secret}=AppSecret（换 access_token）。入站图/文件落盘对齐飞书/Discord。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
     value = "UWF_FIELD_NOT_INITIALIZED_IN_CONSTRUCTOR",
-    justification = "gateway/normalizer/sender/tokens 在 start() 内初始化；sendReply 有显式空判。")
+    justification =
+        "gateway/normalizer/sender/tokens/mediaResolver 在 start() 内初始化；sendReply 有显式空判。")
 public class QqChannelAdapter implements InboundChannelAdapter {
 
   private static final Logger LOG = LoggerFactory.getLogger(QqChannelAdapter.class);
@@ -36,6 +40,7 @@ public class QqChannelAdapter implements InboundChannelAdapter {
   private static final long RECONNECT_BASE_MS = 2_000L;
   private static final long RECONNECT_MAX_MS = 60_000L;
   private static final int RECONNECT_MAX_SHIFT = 5;
+  private static final String MEDIA_DIR_PREFIX = "oryxos-qq-media-";
 
   private final ChannelConfig config;
   private final ProfileRegistry profileRegistry;
@@ -46,6 +51,7 @@ public class QqChannelAdapter implements InboundChannelAdapter {
   private volatile QqAccessTokenClient tokens;
   private volatile QqMessageSender sender;
   private volatile QqEventNormalizer normalizer;
+  private volatile QqInboundMediaResolver mediaResolver;
   private volatile QqDisconnectKind lastDisconnectKind = QqDisconnectKind.ABRUPT;
   private volatile ChannelStatus.State state = ChannelStatus.State.DISCONNECTED;
   private volatile String lastError;
@@ -121,6 +127,7 @@ public class QqChannelAdapter implements InboundChannelAdapter {
     }
     sender = null;
     normalizer = null;
+    mediaResolver = null;
     tokens = null;
     state = ChannelStatus.State.DISCONNECTED;
   }
@@ -173,6 +180,14 @@ public class QqChannelAdapter implements InboundChannelAdapter {
     }
     if (sender == null) {
       sender = new QqMessageSender(guard, tokens);
+    }
+    if (mediaResolver == null) {
+      QqAccessTokenClient tokenClient = tokens;
+      mediaResolver =
+          new QqInboundMediaResolver(
+              tokenClient::authorizationHeader,
+              InboundMediaRoots.forChannel(config.name(), MEDIA_DIR_PREFIX),
+              config.name());
     }
   }
 
@@ -285,14 +300,95 @@ public class QqChannelAdapter implements InboundChannelAdapter {
 
   private void handleDispatch(String eventName, JsonNode data) {
     try {
+      if (QqEventNormalizer.EVENT_C2C.equals(eventName)
+          || QqEventNormalizer.EVENT_GROUP_AT.equals(eventName)) {
+        LOG.info(
+            "QQ 渠道 {} 收到 {}（{}）",
+            sanitize(config.name()),
+            sanitize(eventName),
+            summarizeAttachments(data));
+      }
       Optional<InboundMessage> msg = normalizer.normalize(eventName, data);
-      msg.ifPresent(m -> inboundMessageService.onMessage(m, this));
+      msg.ifPresent(this::dispatchClaimed);
     } catch (RuntimeException e) {
       LOG.error("QQ 渠道 {} 事件处理异常: {}", sanitize(config.name()), sanitize(e.getMessage()));
     }
   }
 
+  /** 仅摘要 content_type / 是否有 url·wav，不落完整 URL。 */
+  static String summarizeAttachments(JsonNode data) {
+    if (data == null || !data.isObject()) {
+      return "attachments=0";
+    }
+    JsonNode arr = data.path("attachments");
+    if (!arr.isArray() || arr.isEmpty()) {
+      return "attachments=0";
+    }
+    StringBuilder sb = new StringBuilder("attachments=").append(arr.size()).append('[');
+    for (int i = 0; i < arr.size(); i++) {
+      if (i > 0) {
+        sb.append(',');
+      }
+      JsonNode a = arr.get(i);
+      String ct = a.path("content_type").asText("?");
+      String fn = a.path("filename").asText("");
+      boolean hasUrl = a.hasNonNull("url") && !a.path("url").asText("").isBlank();
+      boolean hasWav =
+          a.hasNonNull("voice_wav_url") && !a.path("voice_wav_url").asText("").isBlank();
+      sb.append(sanitize(ct));
+      if (!fn.isBlank()) {
+        int dot = fn.lastIndexOf('.');
+        if (dot >= 0 && dot < fn.length() - 1) {
+          sb.append(sanitize(asciiLower(fn.substring(dot))));
+        }
+      }
+      sb.append(hasUrl ? "+url" : "-url");
+      if (hasWav) {
+        sb.append("+wav");
+      }
+    }
+    sb.append(']');
+    return sb.toString();
+  }
+
+  private void dispatchClaimed(InboundMessage m) {
+    if (!inboundMessageService.tryClaim(m.channelName(), m.messageId())) {
+      LOG.info("渠道 {} 重复事件已忽略: {}", sanitize(m.channelName()), sanitize(m.messageId()));
+      return;
+    }
+    String replyTo = m.chatKind() == ChatKind.GROUP ? m.messageId() : null;
+    CountDownLatch slowWork = null;
+    if (QqInboundMediaResolver.hasDownloadableMedia(m)) {
+      slowWork = inboundMessageService.beginSlowWork(this, m.chatId(), replyTo);
+    }
+    try {
+      QqInboundMediaResolver resolver = mediaResolver;
+      InboundMessage enriched = resolver == null ? m : resolver.resolve(m);
+      if (slowWork != null) {
+        inboundMessageService.onClaimedMessage(enriched, this, slowWork);
+      } else {
+        inboundMessageService.onClaimedMessage(enriched, this);
+      }
+    } catch (RuntimeException e) {
+      if (slowWork != null) {
+        slowWork.countDown();
+      }
+      throw e;
+    }
+  }
+
   private static String sanitize(String value) {
     return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
+  }
+
+  private static String asciiLower(String value) {
+    char[] chars = value.toCharArray();
+    for (int i = 0; i < chars.length; i++) {
+      char c = chars[i];
+      if (c >= 'A' && c <= 'Z') {
+        chars[i] = (char) (c + ('a' - 'A'));
+      }
+    }
+    return new String(chars);
   }
 }
