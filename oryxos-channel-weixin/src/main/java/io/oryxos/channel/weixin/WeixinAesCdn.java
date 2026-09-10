@@ -8,6 +8,11 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * iLink CDN：AES-128-ECB + PKCS7（对齐 Hermes {@code _aes128_ecb_decrypt} / {@code _parse_aes_key}）。
  */
+@edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+    value = {"CIPHER_INTEGRITY", "ECB_MODE"},
+    justification =
+        "腾讯 iLink Bot 媒体 CDN 协议固定 AES-128-ECB（Hermes/OpenClaw 同路），无法改用 AEAD；"
+            + "密钥为每文件独立 aes_key，仅解密平台侧已加密的临时资源。")
 final class WeixinAesCdn {
 
   private static final String TRANSFORMATION = "AES/ECB/NoPadding";
