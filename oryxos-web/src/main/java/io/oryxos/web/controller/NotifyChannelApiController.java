@@ -42,6 +42,7 @@ public class NotifyChannelApiController {
   private static final String TYPE_TELEGRAM = "telegram";
   private static final String TYPE_WHATSAPP = "whatsapp";
   private static final String TYPE_MATRIX = "matrix";
+  private static final String TYPE_QQ = "qq";
   private static final String CFG_URL = "url";
   private static final String CFG_TOKEN = "token";
   private static final String CFG_CHANNEL_ID = "channel_id";
@@ -50,6 +51,8 @@ public class NotifyChannelApiController {
   private static final String CFG_TO = "to";
   private static final String CFG_HOMESERVER = "homeserver";
   private static final String CFG_ROOM_ID = "room_id";
+  private static final String CFG_GROUP_OPENID = "group_openid";
+  private static final String CFG_USER_OPENID = "user_openid";
 
   /** email 渠道 port 的合法上限（TCP 端口最大值）。 */
   private static final int MAX_PORT = 65535;
@@ -68,7 +71,8 @@ public class NotifyChannelApiController {
           "teams",
           "gchat",
           "mattermost",
-          TYPE_MATRIX);
+          TYPE_MATRIX,
+          TYPE_QQ);
 
   private final NotifyChannelRegistry registry;
 
@@ -182,7 +186,21 @@ public class NotifyChannelApiController {
       requireConfigKeys(config, type, CFG_HOMESERVER, CFG_TOKEN, CFG_ROOM_ID);
       return;
     }
+    if (TYPE_QQ.equals(type)) {
+      validateQq(config);
+      return;
+    }
     throw new IllegalArgumentException("渠道 url 为空");
+  }
+
+  private static void validateQq(Map<String, String> config) {
+    if (!hasConfig(config, CFG_TOKEN)) {
+      throw new IllegalArgumentException("qq 渠道缺少 url，或缺少 token + group_openid/user_openid");
+    }
+    if (hasConfig(config, CFG_GROUP_OPENID) || hasConfig(config, CFG_USER_OPENID)) {
+      return;
+    }
+    throw new IllegalArgumentException("qq 渠道缺少 url，或缺少 token + group_openid/user_openid");
   }
 
   private static void requireConfigPair(

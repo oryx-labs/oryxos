@@ -66,7 +66,7 @@ OryxOS 入站已有飞书 / 企微 / 钉钉 / Slack / Discord（+ CLI）。出�
 
 | 渠道 | 说明 | 建议 |
 |------|------|------|
-| QQ（开放平台 / 频道机器人等） | 026 主清单未排入；与飞书/企微/钉钉并列的国内 C 端触达面。个人 QQ 协议号不合规，口径同「微信个人号」 | **另开国内 PLAN** 再评估：官方 Bot 面是否够用、Webhook vs 长连接、是否值得新 `oryxos-channel-qq`；**本 PLAN 不实现** |
+| QQ（开放平台官方 Bot） | 026 主清单未排入；国内 C 端/社群触达。个人 QQ 协议号不合规，口径同「微信个人号」 | **已另开 [029](../029-qq-im-channel/plan.md)**：官方 Bot API v2 + Gateway；群 `@Bot` + 单聊 MVP；频道二期。**本 PLAN 不实现、勿双开** |
 
 ## 场景对照（刚需怎么覆盖）
 
@@ -77,7 +77,7 @@ OryxOS 入站已有飞书 / 企微 / 钉钉 / Slack / Discord（+ CLI）。出�
 出海对客 C 端 ──── WhatsApp + Telegram         TG✅；WA 真平台⏸
 私有化 / 不出域 ── Mattermost + Matrix         ✅（本机；#432）
 主动推送 ───────── 各渠道 notify + 已有 email  P0 + 各波次适配器
-国内后续候选 ───── QQ（官方 Bot 面）            ⬜ 见 §D，另开 PLAN
+国内后续候选 ───── QQ（官方 Bot 面）            → [029](../029-qq-im-channel/plan.md)
 ```
 
 同一 Agent 可绑多条 `channels.yaml` 条目（一应用一 Agent）。出海项目典型绑法：
@@ -183,7 +183,7 @@ website/zh/docs/tool.md / profile.md   # 渠道表同步
 - [x] B6 Matrix 入站 + notify + Setup（本机 Synapse + Element；#432）  
 - [ ] 网站文档渠道表与 `channels.yaml.example` 与上表一致  
 - [ ] 不把「未过 Meta/Azure 审核的演示」写成生产就绪  
-- [ ] （非 026）国内 QQ 候选 → 另开 PLAN 评估后再排期  
+- [x] （非 026）国内 QQ → [029](../029-qq-im-channel/plan.md)（另分支落地，不塞进 026 海外真机队列）
 
 ## 建议开工顺序（刚需仍要排队）
 
@@ -191,6 +191,6 @@ website/zh/docs/tool.md / profile.md   # 渠道表同步
 2. ~~**Telegram**~~（已合入 + 真机）。  
 3. **WhatsApp** 真平台恢复后，再 Teams / Google Chat（当前暂停）。  
 4. ~~Mattermost → Matrix~~（本机真机 + #432）。  
-5. 若要补国内 C 端触达：按 §D **另开 QQ PLAN**，勿塞进 026 未完成的海外真机项。
+5. 国内 C 端 QQ：走 **029**，勿塞进 026 未完成的海外真机项。
 
 下一步若恢复海外真机：先解决 Meta Developers 登录与**固定**公网 Callback（避免 quick tunnel 每次换域）；Teams/GChat 补本机 `${ENV}` 后再测。
