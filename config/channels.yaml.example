@@ -120,3 +120,11 @@ channels:
   #     open_id: ${DOUYIN_OPEN_ID}
   #     access_token: ${DOUYIN_ACCESS_TOKEN}
   #   enabled: true
+
+  # 个人微信 iLink Bot（个人 Harness，见 docs/WeixinChannelSetup.md）
+  # - name: ops-weixin
+  #   type: weixin
+  #   app_id: ${WEIXIN_ACCOUNT_ID}
+  #   app_secret: ${WEIXIN_TOKEN}
+  #   agent: demo-agent
+  #   enabled: true

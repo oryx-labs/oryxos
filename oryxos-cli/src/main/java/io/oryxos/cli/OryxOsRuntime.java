@@ -1113,6 +1113,11 @@ public class OryxOsRuntime {
         resolved ->
             new io.oryxos.channel.douyin.DouyinChannelAdapter(
                 resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
+    factories.put(
+        io.oryxos.channel.weixin.WeixinChannelAdapter.TYPE,
+        resolved ->
+            new io.oryxos.channel.weixin.WeixinChannelAdapter(
+                resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
     return new io.oryxos.core.channel.ChannelAdminService(
         channelConfigLoader, inboundChannelRegistry, profileRegistry, factories);
   }
