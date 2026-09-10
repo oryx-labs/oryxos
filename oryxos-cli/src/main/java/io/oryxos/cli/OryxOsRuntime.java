@@ -1074,7 +1074,8 @@ public class OryxOsRuntime {
       Map<
               String,
               java.util.function.Function<
-                  io.oryxos.core.channel.ChannelConfig, io.oryxos.core.channel.InboundChannelAdapter>>
+                  io.oryxos.core.channel.ChannelConfig,
+                  io.oryxos.core.channel.InboundChannelAdapter>>
           factories,
       ProfileRegistry profileRegistry,
       io.oryxos.core.channel.InboundMessageService inboundMessageService,
@@ -1115,7 +1116,8 @@ public class OryxOsRuntime {
       Map<
               String,
               java.util.function.Function<
-                  io.oryxos.core.channel.ChannelConfig, io.oryxos.core.channel.InboundChannelAdapter>>
+                  io.oryxos.core.channel.ChannelConfig,
+                  io.oryxos.core.channel.InboundChannelAdapter>>
           factories,
       ProfileRegistry profileRegistry,
       io.oryxos.core.channel.InboundMessageService inboundMessageService,
