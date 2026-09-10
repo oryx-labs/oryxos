@@ -1,7 +1,8 @@
 # 026 验收记录
 
-**日期**: 2026-09-08（WhatsApp 接线 / Mattermost 本机往返 / Matrix 本机往返补记 2026-09-09）  
-**范围**: 波次 0–5 代码 + 契约/归一化单测。真平台按已有凭证推进。
+**日期**: 2026-09-08（WhatsApp 接线 / Mattermost·Matrix 本机往返补记 2026-09-09；对齐与合入补记 2026-09-10）  
+**范围**: 波次 0–5 代码 + 契约/归一化单测。真平台按已有凭证推进。  
+**合入**: Mattermost/Matrix 入站媒体与 Matrix notify PUT → [PR #432](https://github.com/oryx-labs/oryxos/pull/432)。
 
 ## 单测（本机 JDK 21）
 
@@ -31,7 +32,7 @@
 | Slack / Discord `notify` | 026 [PR #429](https://github.com/oryx-labs/oryxos/pull/429) 已补适配器；出站路径与入站回复同源（Slack `chat.postMessage` / Discord REST）。不要把后续 `conversations.list` / 列频道探测当成「未打真实频道」 |
 | WhatsApp 入站接线 | 本机 `.env` 已有 `WHATSAPP_*`（不入库）。`cs-whatsapp` 绑 `demo-agent` 后 `GET /api/v1/channels/status` 为 `CONNECTED`。本机与 Cloudflare quick tunnel 的 GET 订阅挑战均回写 `hub.challenge`（200）。未宣称 COMPLETE |
 | WhatsApp Graph 凭证 | 通过（2026-09-09）：系统用户令牌（`whatsapp_business_messaging` + `whatsapp_business_management`）后 Graph `/{phone-number-id}` HTTP 200，`code_verification_status=VERIFIED` |
-| WhatsApp 24h 真机往返 | **挂起，不标 COMPLETE**：Cloud API 号 `+86 138 0199 6162`（显示名 OryxOS）同时是提交者日常 WhatsApp。自己发给自己无效；朋友搜该号只会进已有私聊，消息不进 webhook。关手机 App 不能改路由。要另备专用号或 Meta API Setup 测试号（From / `+1`）再测 |
+| WhatsApp 24h 真机往返 | **挂起，不标 COMPLETE（2026-09-10 仍挂）**：早先 Cloud API 号与日常 WhatsApp 同号，私聊不进 webhook。后换号 / Graph 仍 `VERIFIED`，但 Developers 登录遇短信限额；`cloudflared` quick tunnel 域名每次重启会变，旧 Callback 失效。境外三家（WhatsApp / Teams / GChat）**暂停真机**，等 Meta 可登录且回调可固定后再测。不在本记录宣称 COMPLETE |
 | Mattermost 入站接线 | 本机 Docker `oryxos-mattermost`（`mattermost/mattermost-preview` `:8065`）。`.env` 已有 `MATTERMOST_*`（不入库）。`ops-mattermost` 绑 `demo-agent` 后 `GET /api/v1/channels/status` 为 `CONNECTED`。Outgoing Webhook 回调 `http://host.docker.internal:8080/api/v1/channels/inbound/ops-mattermost`；站点 `AllowedUntrustedInternalConnections` 含 `host.docker.internal`（否则静默 address forbidden）。`http.allowed_domains` 含 `127.0.0.1` / `localhost` |
 | Mattermost 房间 `@Bot` 往返 | 通过（2026-09-09）：Town Square `@oryxbot` → DeepSeek 推理 → `POST /api/v4/posts` 回帖（约 23 字）。入站 token 与发帖 PAT 分开（`app_secret` vs `extra.access_token`） |
 | Mattermost `notify` | 通过（2026-09-09）：Incoming Webhook 进 Town Square；管理台渠道 `ops-mm-notify`（`type: mattermost`）；`demo-agent` `notify` 工具推送后房间可见（marker 命中，约 48 字）。webhook URL 只在本机 `.env` `MATTERMOST_INCOMING_WEBHOOK_URL` |
@@ -43,6 +44,12 @@
 | Matrix 私聊 | 通过（2026-09-09）：邀请自动加入；`m.direct` 读顶层 account_data 并跨 sync 记住；`is_direct` 邀请记入私聊集合。私聊不要求 @，已有往返 |
 | Matrix 图 / PDF | 通过（2026-09-09）：`mxc://` 鉴权下载落盘（日志「媒体已落盘」）。与飞书相同 Vision / `read_file`。极小/残缺 PNG 会被 Vision 拒后降级纯文本（与 Mattermost 小图实测相同） |
 | Matrix `notify` | 通过（2026-09-09）：管理台渠道 `ops-mx-notify`（`type: matrix`，`homeserver` + `token` + `room_id`）。Client-Server 发信必须 **PUT**（POST 为 405）。`NotifyPoster` 对完整 URL 用 `URI.create`，避免房间 ID 二次编码（否则 403 not in room）。`demo-agent` `notify` 后房间可见 marker |
-| Teams / GChat | 无可用凭证，未宣称 COMPLETE |
+| Teams / GChat | 代码 + 契约单测已有；本机无 `TEAMS_*` / `GCHAT_*`。与 WhatsApp 一并**暂停真机**，未宣称 COMPLETE |
 
 管理台 Notify 已补齐 026 类型（原先 API 只允许飞书/企微/钉钉/webhook/email，适配器注册了也建不了渠道）。
+
+## 暂停说明（2026-09-10）
+
+- **继续**：国内飞书/企微/钉钉；已合入的 Slack/Discord/Telegram；Mattermost/Matrix 本机环境。  
+- **暂停**：WhatsApp / Teams / Google Chat 真平台，待 WhatsApp 回调与号路由问题解决后恢复。  
+- **国内后续**：QQ 不在 026 交付波次内；是否单开国内 PLAN 见 `plan.md`「国内后续候选」。
