@@ -52,4 +52,4 @@
 
 - **继续**：国内飞书/企微/钉钉；已合入的 Slack/Discord/Telegram；Mattermost/Matrix 本机环境。  
 - **暂停**：WhatsApp / Teams / Google Chat 真平台，待 WhatsApp 回调与号路由问题解决后恢复。  
-- **国内后续**：QQ 见 [029](../029-qq-im-channel/plan.md)，不在 026 海外真机队列内交付。
+- **国内后续**：QQ 见 [029](../029-qq-im-channel/plan.md)；经营私信（抖音等）见 [030](../030-cn-c-im-roadmap/plan.md)，不在 026 海外真机队列内交付。

@@ -16,6 +16,12 @@
 
 ## 国内 QQ（026 外 → 029）
 
-**现状**：已另开 [029](../029-qq-im-channel/plan.md) / [research](../029-qq-im-channel/research.md)。
+**现状**：已落地 [029](../029-qq-im-channel/plan.md) / [research](../029-qq-im-channel/research.md)（#434/#435）。
 
 **口径**：只做开放平台官方 Bot（Gateway + `api.bot.qq.com`）；不接个人号；群 `@Bot` + 单聊 MVP；频道二期。**不塞进 026 海外真机恢复队列**。
+
+## 国内经营私信（026 外 → 030）
+
+**现状**：总表 [030](../030-cn-c-im-roadmap/plan.md) / [research](../030-cn-c-im-roadmap/research.md)。
+
+**口径**：抖音 / 支付宝 / 快手 / B 站 / 小红书 = **官方成熟才直连**；下一实现抖音 031。不经第三方 IM 聚合替代直连；**不塞进 026 海外真机恢复队列**。

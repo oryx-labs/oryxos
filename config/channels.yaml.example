@@ -108,3 +108,15 @@ channels:
   #   app_secret: ${QQ_APP_SECRET}
   #   agent: demo-agent
   #   enabled: true
+
+  # 抖音经营私信 Webhook（见 docs/DouyinChannelSetup.md）
+  # 回调：POST /api/v1/channels/inbound/ops-douyin
+  # - name: ops-douyin
+  #   type: douyin
+  #   app_id: ${DOUYIN_CLIENT_KEY}
+  #   app_secret: ${DOUYIN_CLIENT_SECRET}
+  #   agent: demo-agent
+  #   extra:
+  #     open_id: ${DOUYIN_OPEN_ID}
+  #     access_token: ${DOUYIN_ACCESS_TOKEN}
+  #   enabled: true
