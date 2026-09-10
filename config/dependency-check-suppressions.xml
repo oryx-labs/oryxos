@@ -57,6 +57,18 @@
     </suppress>
     <suppress>
         <notes><![CDATA[
+        Spring Boot 3.5.16 pins Spring Framework 6.2.19. Dependency-Check reports
+        CVE-2026-47884 (CVSS >= 8) against spring-core 6.2.19; OSS remediation tracks
+        Spring Framework 7 / Boot 4 (6.2.20+ enterprise-only for this advisory line).
+        OryxOS uses conventional Spring MVC @RestController; no WebFlux functional
+        RouterFunction / SSE view-fragment surfaces implicated by the sibling 6.2.19
+        advisories already suppressed above. Remove when Boot pins a fixed Framework.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework/.*@6\.2\.19$</packageUrl>
+        <cve>CVE-2026-47884</cve>
+    </suppress>
+    <suppress>
+        <notes><![CDATA[
         CVE-2026-59270: Spring Security embedded UnboundID LDAP (UnboundIdContainer) binds
         admin DN on all interfaces. OryxOS does not use spring-ldap embedded / UnboundIdContainer
         (no matches in codebase). Dependency-Check flags spring-security-crypto via CPE.
