@@ -2,11 +2,8 @@ package io.oryxos.channel.qq;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.oryxos.core.channel.ChatKind;
-import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageServiceContractTestBase;
-import java.util.List;
 
 class QqChannelContractTest extends InboundMessageServiceContractTestBase {
 
@@ -37,17 +34,18 @@ class QqChannelContractTest extends InboundMessageServiceContractTestBase {
 
   @Override
   protected InboundMessage imageMessage(String messageId) {
-    return new InboundMessage(
-        "qq",
-        "contract-qq",
-        messageId,
-        ChatKind.P2P,
-        "u1",
-        QqChatTargets.user("u1"),
-        "",
-        false,
-        false,
-        List.of(InboundAttachment.imageReference("img-ref")));
+    ObjectNode data = mapper.createObjectNode();
+    data.put("id", messageId);
+    data.put("content", "");
+    data.putObject("author").put("user_openid", "u1");
+    data.putArray("attachments")
+        .addObject()
+        .put("url", "https://multimedia.nt.qq.com.cn/download?id=img")
+        .put("filename", "img.jpg")
+        .put("content_type", "image/jpeg")
+        .put("width", 100)
+        .put("height", 100);
+    return normalizer.normalize(QqEventNormalizer.EVENT_C2C, data).orElseThrow();
   }
 
   private ObjectNode c2c(String messageId, String content) {

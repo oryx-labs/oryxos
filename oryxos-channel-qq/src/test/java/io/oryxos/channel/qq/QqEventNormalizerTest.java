@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.oryxos.core.channel.ChatKind;
+import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -58,7 +59,7 @@ class QqEventNormalizerTest {
   }
 
   @Test
-  @DisplayName("单聊空内容 → 非文本占位")
+  @DisplayName("单聊空内容无附件 → 非文本占位")
   void c2cNonTextual() {
     ObjectNode data = MAPPER.createObjectNode();
     data.put("id", "msg-c2");
@@ -67,6 +68,107 @@ class QqEventNormalizerTest {
     Optional<InboundMessage> msg = normalizer.normalize(QqEventNormalizer.EVENT_C2C, data);
     assertTrue(msg.isPresent());
     assertFalse(msg.get().textual());
+    assertTrue(msg.get().attachments().isEmpty());
+  }
+
+  @Test
+  @DisplayName("单聊图片附件 → TYPE_IMAGE")
+  void c2cImageAttachment() {
+    ObjectNode data = MAPPER.createObjectNode();
+    data.put("id", "msg-img");
+    data.put("content", "");
+    data.putObject("author").put("user_openid", "u-open");
+    data.putArray("attachments")
+        .addObject()
+        .put("url", "https://multimedia.nt.qq.com.cn/download?x=1")
+        .put("filename", "photo.jpg")
+        .put("content_type", "image/jpeg")
+        .put("width", 800)
+        .put("height", 600);
+    Optional<InboundMessage> msg = normalizer.normalize(QqEventNormalizer.EVENT_C2C, data);
+    assertTrue(msg.isPresent());
+    assertEquals(1, msg.get().attachments().size());
+    assertEquals(InboundAttachment.TYPE_IMAGE, msg.get().attachments().get(0).type());
+    assertTrue(msg.get().attachments().get(0).url().contains("multimedia.nt.qq.com.cn"));
+  }
+
+  @Test
+  @DisplayName("单聊 PDF → TYPE_FILE")
+  void c2cPdfAttachment() {
+    ObjectNode data = MAPPER.createObjectNode();
+    data.put("id", "msg-pdf");
+    data.put("content", "看看文档");
+    data.putObject("author").put("user_openid", "u-open");
+    data.putArray("attachments")
+        .addObject()
+        .put("url", "https://multimedia.nt.qq.com.cn/download?f=pdf")
+        .put("filename", "report.pdf")
+        .put("content_type", "application/pdf");
+    Optional<InboundMessage> msg = normalizer.normalize(QqEventNormalizer.EVENT_C2C, data);
+    assertTrue(msg.isPresent());
+    assertEquals(InboundAttachment.TYPE_FILE, msg.get().attachments().get(0).type());
+    assertEquals("report.pdf", msg.get().attachments().get(0).fileName());
+  }
+
+  @Test
+  @DisplayName("群仅附件无正文 → 保留")
+  void groupAttachmentOnly() {
+    ObjectNode data = MAPPER.createObjectNode();
+    data.put("id", "msg-g-img");
+    data.put("group_openid", "g-open");
+    data.put("content", "<@!1>");
+    data.putObject("author").put("member_openid", "m-open");
+    data.putArray("attachments")
+        .addObject()
+        .put("url", "https://multimedia.nt.qq.com.cn/download?x=2")
+        .put("content_type", "image/png")
+        .put("filename", "a.png")
+        .put("width", 10)
+        .put("height", 10);
+    Optional<InboundMessage> msg = normalizer.normalize(QqEventNormalizer.EVENT_GROUP_AT, data);
+    assertTrue(msg.isPresent());
+    assertEquals(1, msg.get().attachments().size());
+  }
+
+  @Test
+  @DisplayName("单聊语音优先 voice_wav_url，并采用 asr_refer_text")
+  void c2cVoicePrefersWavAndAsr() {
+    ObjectNode data = MAPPER.createObjectNode();
+    data.put("id", "msg-voice");
+    data.put("content", "");
+    data.putObject("author").put("user_openid", "u-open");
+    data.putArray("attachments")
+        .addObject()
+        .put("url", "https://multimedia.nt.qq.com.cn/download?silk=1")
+        .put("voice_wav_url", "https://multimedia.nt.qq.com.cn/download?wav=1")
+        .put("asr_refer_text", "今天天气不错")
+        .put("filename", "voice.amr")
+        .put("content_type", "voice");
+    Optional<InboundMessage> msg = normalizer.normalize(QqEventNormalizer.EVENT_C2C, data);
+    assertTrue(msg.isPresent());
+    assertEquals("今天天气不错", msg.get().content());
+    assertEquals(1, msg.get().attachments().size());
+    InboundAttachment a = msg.get().attachments().get(0);
+    assertEquals(InboundAttachment.TYPE_AUDIO, a.type());
+    assertTrue(a.url().contains("wav=1"));
+    assertEquals("voice.wav", a.fileName());
+  }
+
+  @Test
+  @DisplayName("单聊 video/mp4 → TYPE_VIDEO")
+  void c2cVideoAttachment() {
+    ObjectNode data = MAPPER.createObjectNode();
+    data.put("id", "msg-vid");
+    data.put("content", "");
+    data.putObject("author").put("user_openid", "u-open");
+    data.putArray("attachments")
+        .addObject()
+        .put("url", "https://multimedia.nt.qq.com.cn/download?v=1")
+        .put("filename", "clip.mp4")
+        .put("content_type", "video/mp4");
+    Optional<InboundMessage> msg = normalizer.normalize(QqEventNormalizer.EVENT_C2C, data);
+    assertTrue(msg.isPresent());
+    assertEquals(InboundAttachment.TYPE_VIDEO, msg.get().attachments().get(0).type());
   }
 
   @Test
@@ -79,7 +181,7 @@ class QqEventNormalizerTest {
   }
 
   @Test
-  @DisplayName("群空内容 → 丢弃")
+  @DisplayName("群空内容无附件 → 丢弃")
   void groupBlankDropped() {
     ObjectNode data = MAPPER.createObjectNode();
     data.put("id", "msg-g2");
