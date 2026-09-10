@@ -2,7 +2,7 @@
 
 **Branch**: `026-im-channel-roadmap`（规划；落地按波次开独立分支）  
 **Date**: 2026-09-08  
-**Status**: PLAN（未宣称各渠道已实现）  
+**Status**: PLAN（代码波次大部分已合入；WhatsApp/Teams/GChat 真平台 2026-09-10 起暂停，见 acceptance）  
 **对照契约**: [017 入站契约](../017-feishu-im-channel/contracts/inbound-channel-contract.md)、[004 出站 Notify](../004-notify-outbound/plan.md)
 
 ## Summary
@@ -62,15 +62,22 @@ OryxOS 入站已有飞书 / 企微 / 钉钉 / Slack / Discord（+ CLI）。出�
 | Line / Kakao / 微信个人号 | 非本清单欧美+国内企业主路径；个微无合规 Bot |
 | IRC | 仅演示，不当产品渠道 |
 
+### D. 国内后续候选（不在 026 波次内）
+
+| 渠道 | 说明 | 建议 |
+|------|------|------|
+| QQ（开放平台 / 频道机器人等） | 026 主清单未排入；与飞书/企微/钉钉并列的国内 C 端触达面。个人 QQ 协议号不合规，口径同「微信个人号」 | **另开国内 PLAN** 再评估：官方 Bot 面是否够用、Webhook vs 长连接、是否值得新 `oryxos-channel-qq`；**本 PLAN 不实现** |
+
 ## 场景对照（刚需怎么覆盖）
 
 ```text
 国内员工 ────────── 飞书 / 企微 / 钉钉          ✅
-出海员工（科技）── Slack + Discord             入站✅ 出站⬜（P0）
-出海员工（传统）── Teams + Google Chat         ⬜ B3/B4
-出海对客 C 端 ──── WhatsApp + Telegram         ⬜ B2/B1
-私有化 / 不出域 ── Mattermost + Matrix         ⬜ B5/B6
-主动推送 ───────── 各渠道 notify + 已有 email  P0 起补齐
+出海员工（科技）── Slack + Discord             入站✅ notify✅（P0）
+出海员工（传统）── Teams + Google Chat         代码✅ 真平台⏸（无凭证 / 与 WA 一并暂停）
+出海对客 C 端 ──── WhatsApp + Telegram         TG✅；WA 真平台⏸
+私有化 / 不出域 ── Mattermost + Matrix         ✅（本机；#432）
+主动推送 ───────── 各渠道 notify + 已有 email  P0 + 各波次适配器
+国内后续候选 ───── QQ（官方 Bot 面）            ⬜ 见 §D，另开 PLAN
 ```
 
 同一 Agent 可绑多条 `channels.yaml` 条目（一应用一 Agent）。出海项目典型绑法：
@@ -167,22 +174,23 @@ website/zh/docs/tool.md / profile.md   # 渠道表同步
 
 ## 完成定义（整份清单，不是官方产品 COMPLETE）
 
-- [ ] P0：Webhook 接收面 + `extra` + Slack/Discord notify，测试绿  
-- [ ] B1 Telegram 入站 + notify + Setup  
-- [ ] B2 WhatsApp 入站 + notify + 会话窗错误 + Setup  
-- [ ] B3 Teams 入站 + notify + Setup  
-- [ ] B4 Google Chat 入站 + notify + Setup  
-- [x] B5 Mattermost 入站 + notify + Setup（本机 Docker 2026-09-09）  
-- [x] B6 Matrix 入站 + notify + Setup（本机 Synapse + Element 2026-09-09）  
+- [x] P0：Webhook 接收面 + `extra` + Slack/Discord notify，测试绿  
+- [x] B1 Telegram 入站 + notify + Setup  
+- [ ] B2 WhatsApp 入站 + notify + 会话窗错误 + Setup（**代码有；真平台 ⏸**）  
+- [ ] B3 Teams 入站 + notify + Setup（**代码有；真平台 ⏸**）  
+- [ ] B4 Google Chat 入站 + notify + Setup（**代码有；真平台 ⏸**）  
+- [x] B5 Mattermost 入站 + notify + Setup（本机 Docker 2026-09-09；媒体对齐 #432）  
+- [x] B6 Matrix 入站 + notify + Setup（本机 Synapse + Element；#432）  
 - [ ] 网站文档渠道表与 `channels.yaml.example` 与上表一致  
 - [ ] 不把「未过 Meta/Azure 审核的演示」写成生产就绪  
+- [ ] （非 026）国内 QQ 候选 → 另开 PLAN 评估后再排期  
 
 ## 建议开工顺序（刚需仍要排队）
 
-1. 开分支做 **P0**（平台 + 已有欧美渠道出站）。  
-2. **Telegram**（与 Discord 对称，最快可对外）。  
-3. **WhatsApp** 与 **Teams** 按客户哪边先签约并行准备审核，代码仍建议 WhatsApp 先于 Teams（Bot API 比 Azure 短）。  
-4. Google Chat。  
-5. Mattermost → Matrix。
+1. ~~开分支做 **P0**~~（已合入）。  
+2. ~~**Telegram**~~（已合入 + 真机）。  
+3. **WhatsApp** 真平台恢复后，再 Teams / Google Chat（当前暂停）。  
+4. ~~Mattermost → Matrix~~（本机真机 + #432）。  
+5. 若要补国内 C 端触达：按 §D **另开 QQ PLAN**，勿塞进 026 未完成的海外真机项。
 
-下一步若开工，先落 P0 的 `research.md`（Webhook 验签、`extra` 字段兼容、Slack Incoming Webhook vs `chat.postMessage` 二选一）。
+下一步若恢复海外真机：先解决 Meta Developers 登录与**固定**公网 Callback（避免 quick tunnel 每次换域）；Teams/GChat 补本机 `${ENV}` 后再测。
