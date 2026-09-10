@@ -1043,11 +1043,42 @@ public class OryxOsRuntime {
       ProfileRegistry profileRegistry,
       io.oryxos.core.channel.InboundMessageService inboundMessageService,
       io.oryxos.core.channel.OutboundGuard channelOutboundGuard) {
+    return new io.oryxos.core.channel.ChannelAdminService(
+        channelConfigLoader,
+        inboundChannelRegistry,
+        profileRegistry,
+        inboundChannelFactories(profileRegistry, inboundMessageService, channelOutboundGuard));
+  }
+
+  private static Map<
+          String,
+          java.util.function.Function<
+              io.oryxos.core.channel.ChannelConfig, io.oryxos.core.channel.InboundChannelAdapter>>
+      inboundChannelFactories(
+          ProfileRegistry profileRegistry,
+          io.oryxos.core.channel.InboundMessageService inboundMessageService,
+          io.oryxos.core.channel.OutboundGuard channelOutboundGuard) {
     Map<
             String,
             java.util.function.Function<
                 io.oryxos.core.channel.ChannelConfig, io.oryxos.core.channel.InboundChannelAdapter>>
         factories = new LinkedHashMap<>();
+    registerEnterpriseChannelFactories(
+        factories, profileRegistry, inboundMessageService, channelOutboundGuard);
+    registerConsumerChannelFactories(
+        factories, profileRegistry, inboundMessageService, channelOutboundGuard);
+    return factories;
+  }
+
+  private static void registerEnterpriseChannelFactories(
+      Map<
+              String,
+              java.util.function.Function<
+                  io.oryxos.core.channel.ChannelConfig, io.oryxos.core.channel.InboundChannelAdapter>>
+          factories,
+      ProfileRegistry profileRegistry,
+      io.oryxos.core.channel.InboundMessageService inboundMessageService,
+      io.oryxos.core.channel.OutboundGuard channelOutboundGuard) {
     factories.put(
         io.oryxos.channel.feishu.FeishuChannelAdapter.TYPE,
         resolved ->
@@ -1078,6 +1109,17 @@ public class OryxOsRuntime {
         resolved ->
             new io.oryxos.channel.telegram.TelegramChannelAdapter(
                 resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
+  }
+
+  private static void registerConsumerChannelFactories(
+      Map<
+              String,
+              java.util.function.Function<
+                  io.oryxos.core.channel.ChannelConfig, io.oryxos.core.channel.InboundChannelAdapter>>
+          factories,
+      ProfileRegistry profileRegistry,
+      io.oryxos.core.channel.InboundMessageService inboundMessageService,
+      io.oryxos.core.channel.OutboundGuard channelOutboundGuard) {
     factories.put(
         io.oryxos.channel.whatsapp.WhatsAppChannelAdapter.TYPE,
         resolved ->
@@ -1118,8 +1160,6 @@ public class OryxOsRuntime {
         resolved ->
             new io.oryxos.channel.weixin.WeixinChannelAdapter(
                 resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
-    return new io.oryxos.core.channel.ChannelAdminService(
-        channelConfigLoader, inboundChannelRegistry, profileRegistry, factories);
   }
 
   /**
