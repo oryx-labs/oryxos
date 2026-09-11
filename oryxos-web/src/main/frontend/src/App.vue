@@ -157,7 +157,7 @@ const overviewCards = computed(() => [
 const overview = {
   tagline: '装在你自己基础设施上的分布式 AI Agent 操作系统 —— 统一底座运行多个业务 Agent',
   status: '运行中',
-  version: 'v0.1.4 · RELEASE',
+  version: 'v0.1.5 · RELEASE',
   capabilities: [
     { name: '对接 LLM', desc: '显式 Provider 映射，多家协议统一' },
     { name: 'ReAct 循环', desc: '自实现推理–行动循环，完全可控' },

@@ -12,7 +12,7 @@ Get-Content $EnvFile -Encoding UTF8 | ForEach-Object {
   }
 }
 $java = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME "bin\java.exe" } else { "java" }
-$jar = Join-Path $Root "oryxos-boot\target\oryxos-boot-0.1.4-RELEASE.jar"
+$jar = Join-Path $Root "oryxos-boot\target\oryxos-boot-0.1.5-RELEASE.jar"
 if (-not (Test-Path $jar)) { throw "Missing jar: $jar — run mvn package first" }
 $port = if ($args.Count -ge 1) { $args[0] } else { "8081" }
 Set-Location $Root

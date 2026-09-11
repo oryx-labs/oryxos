@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.oryxos</groupId>
         <artifactId>oryxos</artifactId>
-        <version>0.1.4-RELEASE</version>
+        <version>0.1.5-RELEASE</version>
     </parent>
     <artifactId>oryxos-channel-mattermost</artifactId>
     <name>OryxOS Channel Mattermost</name>
