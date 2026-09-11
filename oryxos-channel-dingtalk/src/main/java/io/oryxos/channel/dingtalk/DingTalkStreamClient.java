@@ -244,7 +244,7 @@ final class DingTalkStreamClient implements WebSocket.Listener {
     body.put("clientId", clientId);
     body.put("clientSecret", clientSecret);
     body.set("subscriptions", subscriptions);
-    body.put("ua", "oryxos-channel-dingtalk/0.1.4-RELEASE");
+    body.put("ua", "oryxos-channel-dingtalk/0.1.5-RELEASE");
     HttpClient client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
     HttpRequest request =
         HttpRequest.newBuilder()

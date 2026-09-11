@@ -12,7 +12,7 @@ install.ps1 — Windows 下安装 OryxOS CLI（构建 jar + 注册 PowerShell �
 
 说明：
   • 幂等可重复运行：$PROFILE 中旧函数块（begin/end 标记之间）会被替换为最新版本。
-    • jar 文件名带版本号（如 oryxos-boot-0.1.4-RELEASE.jar），函数内用通配符动态
+    • jar 文件名带版本号（如 oryxos-boot-0.1.5-RELEASE.jar），函数内用通配符动态
     解析最新产物，且排除 spring-boot repackage 留下的 *.jar.original。
 #>
 

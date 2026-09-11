@@ -3,6 +3,41 @@
 本文件记录 OryxOS 的版本变更。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.5-RELEASE] - 2026-09-11
+
+### Added
+- 可插拔存储：Flyway 收编 schema 演进 + PostgreSQL 部署选项（025，#409）。
+- 容器沙箱：docker 档最小闭环（024，#406/#362/#383）。
+- Provider 失败按序切换备用 Provider，并导出业务指标（023，#377）。
+- 密钥加密存储：落库凭证 AES-GCM，`ORYXOS_MASTER_KEY` / `master.key`（022，#351）。
+- 审计 Trace：单轮处理串联 `trace_id`（021，#350）。
+- 人格库：7 字段人格 + agency-agents 导入 + CRUD（#378）。
+- Docker 镜像分发：Dockerfile / entrypoint / GHCR 多架构推送（#331）。
+- 全球 IM 渠道波次：Telegram / WhatsApp / Teams / Google Chat / Mattermost / Matrix 入站与 notify；Slack / Discord notify 补齐（026，#429/#430）。
+- Slack Socket Mode 入站 MVP 与图片/文件下载（#420/#421）。
+- Discord Gateway 文本与图片/语音/视频入站（#422–#427）。
+- 飞书 / 企微 / 钉钉：入站文件、音视频加深、进度流与交互体验（#414/#415/#411/#405 等）。
+- 入站图片以多模态 Media 交给 LLM（#385）；IM `/new`、群 `/stop`、进度卡片与 ASR/PDF 抽取（#391/#412/#414 等）。
+- QQ 官方 Bot 入站与 notify；入站图片/PDF/语音/视频（029，#434/#435）。
+- 抖音私信 webhook 入站 MVP（031，#436）。
+- 微信个人号 iLink 入站与多模态媒体（035，#437）。
+- 微信客服入站 MVP（033，#440）。
+- Agent 流式运行管理工作台（#219）；新建/编辑 Agent 时已安装 Skill 筛选（028）。
+- `web_search` DuckDuckGo HTML 回退；默认工具脚手架含 `web_search`（#419 相关）。
+
+### Fixed
+- 凭证掩码：MCP / notify-channel 视图不再回显明文（#358）。
+- Web/core 硬化余项：知识库命名空间、客户端错误映射、Skill 导入流式边界等（#360）。
+- 飞书 WS close 有界，停机不再卡约 32s（#417）；`WorkspaceWatcher` SIGTERM 优雅退出（#333）。
+- 企微启动失败关闭 WS（#349）；工具超时与边界（#356）；知识库索引生命周期（#357）。
+- Actuator 门禁与默认关闭 Swagger（#314）。
+- 入站媒体 SSRF / Whisper / TTL / 进度 UX 硬化与渠道对齐修复（#416/#413/#408 等）。
+- 依赖：PostgreSQL JDBC 42.7.12 修复 CVE-2026-54291；Spring 相关 CVE 门禁处理。
+
+### Docs
+- 026 IM 渠道路线与真机验收记录；Demo 默认模型示例更新为 `deepseek-v4-flash`（#336）。
+- README 版本徽章升级至 0.1.5。
+
 ## [0.1.4-RELEASE] - 2026-08-31
 
 ### Added
@@ -164,6 +199,7 @@
 - Web REST API（`/api/v1`）与 CLI 子命令（`init`/`chat`/`serve`/`gateway` 等）。
 - SQLite 持久化与 `tool_invocations` / `llm_calls` 审计表 Day-One 写入。
 
+[0.1.5-RELEASE]: https://github.com/oryx-labs/oryxos/compare/v0.1.4-RELEASE...v0.1.5-RELEASE
 [0.1.4-RELEASE]: https://github.com/oryx-labs/oryxos/compare/v0.1.3-RELEASE...v0.1.4-RELEASE
 [0.1.3-RELEASE]: https://github.com/oryx-labs/oryxos/compare/v0.1.2-RELEASE...v0.1.3-RELEASE
 [0.1.2-RELEASE]: https://github.com/oryx-labs/oryxos/compare/v0.1.1-RELEASE...v0.1.2-RELEASE

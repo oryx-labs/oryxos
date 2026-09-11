@@ -74,7 +74,7 @@ public SessionStats stats() {
 const overview = reactive({
   tagline: '装在你自己基础设施上的分布式 AI Agent 操作系统...',
   status: '运行中',
-  version: 'v0.1.4 · RELEASE',
+  version: 'v0.1.5 · RELEASE',
   stats: {
     agents: { value: null, loading: true, error: null },
     tools: { value: null, loading: true, error: null },
