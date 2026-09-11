@@ -16,7 +16,8 @@ public record Profile(
     List<NotifyChannel> notifyChannels,
     List<ScheduleConfig> schedules,
     List<String> bootstrap,
-    Settings settings) {
+    Settings settings,
+    Sandbox sandbox) {
 
   public Profile {
     tools = tools == null ? List.of() : List.copyOf(tools);
@@ -26,6 +27,39 @@ public record Profile(
     schedules = schedules == null ? List.of() : List.copyOf(schedules);
     bootstrap = bootstrap == null ? List.of() : List.copyOf(bootstrap);
     settings = settings == null ? Settings.defaults() : settings;
+  }
+
+  /**
+   * Compatibility constructor for callers that still pass pre-sandbox 12 args: sandbox stays null
+   * (= 继承全局执行后端).
+   */
+  public Profile(
+      String name,
+      String description,
+      Identity identity,
+      Persona persona,
+      ProviderRef provider,
+      List<String> tools,
+      List<String> mcpServers,
+      List<String> channels,
+      List<NotifyChannel> notifyChannels,
+      List<ScheduleConfig> schedules,
+      List<String> bootstrap,
+      Settings settings) {
+    this(
+        name,
+        description,
+        identity,
+        persona,
+        provider,
+        tools,
+        mcpServers,
+        channels,
+        notifyChannels,
+        schedules,
+        bootstrap,
+        settings,
+        null);
   }
 
   /**
@@ -133,4 +167,10 @@ public record Profile(
       return new Settings(DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_HISTORY_TURNS);
     }
   }
+
+  /**
+   * 执行环境声明（024）：frontmatter 可选段——backend 覆写全局执行后端档位，memory/cpus 覆写 docker 限额； 字段缺省 =
+   * 继承全局。段本身缺省（sandbox 为 null）= 完全继承（绝大多数 Agent 的形态）。
+   */
+  public record Sandbox(String backend, String memory, String cpus) {}
 }

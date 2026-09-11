@@ -30,6 +30,11 @@ public class ProfileLoader {
 
   private static final Logger LOG = LoggerFactory.getLogger(ProfileLoader.class);
 
+  /** sandbox.backend 合法档位（024，P3C：字面量提常量）。 */
+  private static final String LOCAL_BACKEND = "local";
+
+  private static final String DOCKER_BACKEND = "docker";
+
   private static final Pattern ENV_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
 
   private final Path profilesDir;
@@ -126,7 +131,8 @@ public class ProfileLoader {
             requireListOrNull(map.get("notify_channels"), "notify_channels", name), name),
         toSchedules(requireListOrNull(map.get("schedules"), "schedules", name), source),
         asStringList(map.get("bootstrap"), "bootstrap", name),
-        toSettings(asMap(map.get("settings")), name));
+        toSettings(asMap(map.get("settings")), name),
+        toSandbox(asMap(map.get("sandbox")), name));
   }
 
   private Profile.ProviderRef toProviderRef(Map<String, Object> map, String profileName) {
@@ -307,6 +313,25 @@ public class ProfileLoader {
       throw new ProfileValidationException(
           "Profile 定时配置 " + key + " 的 cron 无效: " + source + " (" + e.getMessage() + ")");
     }
+  }
+
+  /**
+   * 024：frontmatter 可选 sandbox 段。段缺省 → null（完全继承全局）；backend 仅认 local/docker， 非法值 WARN
+   * 并回落继承（EC-4：告警不阻断该 Agent 与其它 Agent 加载）；memory/cpus 原样透传（docker 侧校验）。
+   */
+  private static Profile.Sandbox toSandbox(Map<String, Object> map, String profileName) {
+    if (map == null) {
+      return null;
+    }
+    String backend = asString(map.get("backend"));
+    if (backend != null && !backend.equals(LOCAL_BACKEND) && !backend.equals(DOCKER_BACKEND)) {
+      LOG.warn(
+          "Profile {} 的 sandbox.backend 非法值 '{}'（仅认 local/docker）——按继承全局档处理",
+          sanitize(profileName),
+          sanitize(backend));
+      backend = null;
+    }
+    return new Profile.Sandbox(backend, asString(map.get("memory")), asString(map.get("cpus")));
   }
 
   private static Profile.Settings toSettings(Map<String, Object> map, String profileName) {

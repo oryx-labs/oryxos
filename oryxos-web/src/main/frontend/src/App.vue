@@ -69,6 +69,7 @@ const RUNTIME_NAV = [
   { key: 'notify-channels', label: 'Notify 渠道' },
   { key: 'whitelist', label: 'SandBox 列表' },
   { key: 'tool-policy', label: '工具策略' },
+  { key: 'exec-backend', label: '执行后端' },
 ]
 
 const NAV = [...TOP_NAV, ...RUNTIME_NAV]
@@ -225,6 +226,7 @@ function refresh() {
   if (key === 'notify-channels') { loadNotifyChannels(); return }
   if (key === 'providers') { loadProviders(); return }
   if (key === 'whitelist') { loadWhitelist(); return }
+  if (key === 'exec-backend') { loadExecBackend(); return }
   if (key === 'mcp') { loadMcp(); return }
   if (key === 'skills') { loadSkills(); return }
   if (key === 'knowledge') { kbDetail.value ? refreshKbDetail(kbDetail.value.name) : loadKnowledge(); return }
@@ -1404,6 +1406,20 @@ async function submitEnable() {
     if (body.code !== 0) throw new Error(body.message || '启用失败')
     cancelEnable(); await loadMcp()
   } catch (e) { mcpEnable.error = e.message } finally { mcpEnable.busy = false }
+}
+
+// —— 执行后端状态（024 US3，只读 /api/v1/sandbox/execution/status）：档位 / daemon 探测 / 限额 / 覆写一览 ——
+const exec = ref({ loading: false, error: null, data: null })
+async function loadExecBackend() {
+  exec.value = { loading: true, error: null, data: null }
+  try {
+    const res = await fetch('/api/v1/sandbox/execution/status')
+    const body = await res.json()
+    if (body.code !== 0) throw new Error(body.message || '加载失败')
+    exec.value = { loading: false, error: null, data: body.data }
+  } catch (e) {
+    exec.value = { loading: false, error: e.message, data: null }
+  }
 }
 
 // —— Sandbox 白名单管理（CRUD /api/v1/sandbox/whitelist）：四类 file/shell/http/smtp 的白名单条目 ——
@@ -2659,6 +2675,43 @@ const outputRows = computed(() =>
                     <td class="mono">{{ d.profileName || '-' }}</td>
                     <td class="mono">{{ d.toolName }}</td>
                     <td class="mono">{{ d.createdAt ? String(d.createdAt).slice(0, 19) : '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </template>
+          </div>
+
+          <div v-else-if="active === 'exec-backend'">
+            <div class="toolbar">
+              <button class="btn" @click="loadExecBackend()">刷新（重新探测 daemon）</button>
+            </div>
+            <p v-if="exec.loading" class="empty">加载中…</p>
+            <p v-else-if="exec.error" class="error">出错：{{ exec.error }}</p>
+            <template v-else-if="exec.data">
+              <h3 class="sec" style="margin-top:20px">全局档位</h3>
+              <table>
+                <tbody>
+                  <tr><td>档位</td><td class="mono">{{ exec.data.backend }}</td></tr>
+                  <tr><td>执行镜像</td><td class="mono">{{ exec.data.image || '（local 档未配置）' }}</td></tr>
+                  <tr><td>镜像 digest</td><td class="mono">{{ exec.data.imageDigest || '-' }}</td></tr>
+                  <tr><td>默认限额</td><td class="mono">{{ exec.data.memory }} / {{ exec.data.cpus }} CPU</td></tr>
+                  <tr><td>网络</td><td class="mono">{{ exec.data.network }}</td></tr>
+                  <tr><td>执行用户</td><td class="mono">{{ exec.data.user }}</td></tr>
+                </tbody>
+              </table>
+              <h3 class="sec" style="margin-top:20px">docker 可用性</h3>
+              <p v-if="exec.data.docker.reachable" class="mono">✅ 可达 —— {{ exec.data.docker.version }}</p>
+              <p v-else class="error">⛔ {{ exec.data.docker.error }}（shell 调用将按 FR-011 fail loud 报错）</p>
+              <h3 class="sec" style="margin-top:20px">Agent 覆写一览（frontmatter sandbox 段）</h3>
+              <table>
+                <thead><tr><th>Agent</th><th>backend 覆写</th><th>memory 覆写</th><th>cpus 覆写</th></tr></thead>
+                <tbody>
+                  <tr v-if="!exec.data.agentOverrides.length"><td colspan="4" class="empty">（无 Agent 声明覆写——全部继承全局档）</td></tr>
+                  <tr v-for="o in exec.data.agentOverrides" :key="o.agent">
+                    <td class="mono">{{ o.agent }}</td>
+                    <td class="mono">{{ o.backend || '（继承）' }}</td>
+                    <td class="mono">{{ o.memory || '（继承）' }}</td>
+                    <td class="mono">{{ o.cpus || '（继承）' }}</td>
                   </tr>
                 </tbody>
               </table>

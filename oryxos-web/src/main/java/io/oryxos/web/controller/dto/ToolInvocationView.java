@@ -10,6 +10,8 @@ public record ToolInvocationView(
     String toolName,
     boolean success,
     String blockedBy,
+    String executionBackend,
+    String containerId,
     long durationMs,
     Instant createdAt,
     String traceId) {
@@ -21,6 +23,8 @@ public record ToolInvocationView(
         t.getToolName(),
         t.isSuccess(),
         t.getBlockedBy(),
+        t.getExecutionBackend(),
+        t.getContainerId(),
         t.getDurationMs(),
         t.getCreatedAt(),
         t.getTraceId());

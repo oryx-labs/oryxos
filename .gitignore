@@ -68,3 +68,13 @@ logs/
 # local secrets
 .env
 
+.claude/skills/git-fork-sync/SKILL.md
+docs/ToolIdempotentCache.md
+docs/KnowledgeSeparation.md
+docs/ImplementationRoadmap.md
+docs/HuaqingAgentOsResearch.md
+docs/GitHubActionsWorkflowReview.md
+docs/CostAccounting.md
+docs/AuditTraceLink.md
+oryxos.db-shm
+oryxos.db-wal
