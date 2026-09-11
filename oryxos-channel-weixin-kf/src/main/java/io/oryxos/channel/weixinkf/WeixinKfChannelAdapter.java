@@ -388,7 +388,7 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
         return "";
       }
       String raw = java.nio.file.Files.readString(file).strip();
-      return raw == null ? "" : raw;
+      return raw;
     } catch (Exception e) {
       log.warn("读取微信客服 sync cursor 失败: {}", sanitize(e.getMessage()));
       return "";
@@ -401,7 +401,10 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
     }
     try {
       Path file = syncCursorFile();
-      java.nio.file.Files.createDirectories(file.getParent());
+      Path parent = file.getParent();
+      if (parent != null) {
+        java.nio.file.Files.createDirectories(parent);
+      }
       java.nio.file.Files.writeString(file, cursor);
     } catch (Exception e) {
       log.warn("保存微信客服 sync cursor 失败: {}", sanitize(e.getMessage()));

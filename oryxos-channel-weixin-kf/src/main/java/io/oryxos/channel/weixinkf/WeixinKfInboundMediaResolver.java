@@ -195,6 +195,9 @@ final class WeixinKfInboundMediaResolver {
     return target;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification = "仅对 ASCII MIME 子串做 Locale.ROOT 小写匹配以选扩展名，不参与安全/身份比较")
   private static String defaultExtForType(String type, String contentType) {
     if (contentType != null) {
       String ct = contentType.toLowerCase(Locale.ROOT);
@@ -237,6 +240,9 @@ final class WeixinKfInboundMediaResolver {
     return DEFAULT_EXTENSION;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification = "仅对 ASCII 扩展名做 Locale.ROOT 小写与正则匹配")
   private static String extensionOf(String fileName) {
     if (fileName == null || fileName.isBlank()) {
       return DEFAULT_EXTENSION;

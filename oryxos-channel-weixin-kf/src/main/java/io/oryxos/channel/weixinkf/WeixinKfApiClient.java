@@ -199,6 +199,9 @@ final class WeixinKfApiClient implements WeixinKfClient {
     return new String(body, StandardCharsets.UTF_8);
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification = "仅对 ASCII Content-Disposition 关键字 filename=/filename*= 做 Locale.ROOT 小写匹配")
   private static String fileNameFromDisposition(java.util.Optional<String> header) {
     if (header == null || header.isEmpty()) {
       return null;
