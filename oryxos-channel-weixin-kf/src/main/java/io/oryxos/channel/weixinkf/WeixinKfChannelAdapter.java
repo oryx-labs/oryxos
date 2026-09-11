@@ -41,6 +41,7 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
   private static final int HTTP_OK = 200;
   private static final int HTTP_BAD_REQUEST = 400;
   private static final int HTTP_UNAUTHORIZED = 401;
+  private static final int MAX_SYNC_PAGES = 20;
   private final ChannelConfig config;
   private final ProfileRegistry profileRegistry;
   private final InboundMessageService inboundMessageService;
@@ -237,7 +238,7 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
       String cursor = syncCursor;
       boolean more = true;
       int pages = 0;
-      while (more && pages < 20) {
+      while (more && pages < MAX_SYNC_PAGES) {
         pages++;
         WeixinKfClient.SyncResult page = client.syncMsg(openKfid, callbackToken, cursor);
         for (JsonNode item : page.messages()) {

@@ -13,7 +13,11 @@ final class WeixinKfMsgCrypt {
 
   private static final int AES_BLOCK = 16;
   private static final int RANDOM_LEN = 16;
+  private static final int AES_KEY_LEN = 32;
+  private static final int BASE64_PAD_MOD = 4;
+  private static final int LENGTH_HEADER_BYTES = 4;
   private static final String TRANSFORMATION = "AES/CBC/NoPadding";
+  private static final char BASE64_PAD = '=';
 
   private final byte[] aesKey;
   private final String token;
@@ -29,12 +33,9 @@ final class WeixinKfMsgCrypt {
     if (receiveId == null || receiveId.isBlank()) {
       throw new IllegalArgumentException("corpid/receiveId 为空");
     }
-    String keyB64 = encodingAesKey.strip();
-    while (keyB64.length() % 4 != 0) {
-      keyB64 = keyB64 + "=";
-    }
+    String keyB64 = padBase64(encodingAesKey.strip());
     byte[] key = java.util.Base64.getDecoder().decode(keyB64);
-    if (key.length != 32) {
+    if (key.length != AES_KEY_LEN) {
       throw new IllegalArgumentException("encoding_aes_key 解码后须为 32 字节");
     }
     this.aesKey = key;
@@ -64,15 +65,20 @@ final class WeixinKfMsgCrypt {
     new java.security.SecureRandom().nextBytes(random);
     byte[] xmlBytes = plainXml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     byte[] receiveBytes = receiveId.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-    byte[] raw = new byte[RANDOM_LEN + 4 + xmlBytes.length + receiveBytes.length];
+    byte[] raw = new byte[RANDOM_LEN + LENGTH_HEADER_BYTES + xmlBytes.length + receiveBytes.length];
     System.arraycopy(random, 0, raw, 0, RANDOM_LEN);
     int xmlLen = xmlBytes.length;
     raw[RANDOM_LEN] = (byte) ((xmlLen >> 24) & 0xff);
     raw[RANDOM_LEN + 1] = (byte) ((xmlLen >> 16) & 0xff);
     raw[RANDOM_LEN + 2] = (byte) ((xmlLen >> 8) & 0xff);
     raw[RANDOM_LEN + 3] = (byte) (xmlLen & 0xff);
-    System.arraycopy(xmlBytes, 0, raw, RANDOM_LEN + 4, xmlBytes.length);
-    System.arraycopy(receiveBytes, 0, raw, RANDOM_LEN + 4 + xmlBytes.length, receiveBytes.length);
+    System.arraycopy(xmlBytes, 0, raw, RANDOM_LEN + LENGTH_HEADER_BYTES, xmlBytes.length);
+    System.arraycopy(
+        receiveBytes,
+        0,
+        raw,
+        RANDOM_LEN + LENGTH_HEADER_BYTES + xmlBytes.length,
+        receiveBytes.length);
     byte[] padded = pkcs7Pad(raw);
     javax.crypto.Cipher cipherInst = javax.crypto.Cipher.getInstance(TRANSFORMATION);
     javax.crypto.spec.SecretKeySpec keySpec = new javax.crypto.spec.SecretKeySpec(aesKey, "AES");
@@ -94,7 +100,7 @@ final class WeixinKfMsgCrypt {
         new javax.crypto.spec.IvParameterSpec(aesKey, 0, AES_BLOCK);
     cipherInst.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec, iv);
     byte[] original = pkcs7Unpad(cipherInst.doFinal(cipher));
-    if (original.length < RANDOM_LEN + 4) {
+    if (original.length < RANDOM_LEN + LENGTH_HEADER_BYTES) {
       throw new IllegalStateException("解密报文过短");
     }
     int xmlLen =
@@ -102,7 +108,7 @@ final class WeixinKfMsgCrypt {
             | ((original[RANDOM_LEN + 1] & 0xff) << 16)
             | ((original[RANDOM_LEN + 2] & 0xff) << 8)
             | (original[RANDOM_LEN + 3] & 0xff);
-    int xmlStart = RANDOM_LEN + 4;
+    int xmlStart = RANDOM_LEN + LENGTH_HEADER_BYTES;
     int xmlEnd = xmlStart + xmlLen;
     if (xmlLen < 0 || xmlEnd > original.length) {
       throw new IllegalStateException("解密报文长度非法");
@@ -126,6 +132,18 @@ final class WeixinKfMsgCrypt {
     StringBuilder sb = new StringBuilder(digest.length * 2);
     for (byte b : digest) {
       sb.append(String.format("%02x", b));
+    }
+    return sb.toString();
+  }
+
+  private static String padBase64(String keyB64) {
+    int rem = keyB64.length() % BASE64_PAD_MOD;
+    if (rem == 0) {
+      return keyB64;
+    }
+    StringBuilder sb = new StringBuilder(keyB64);
+    for (int i = 0; i < BASE64_PAD_MOD - rem; i++) {
+      sb.append(BASE64_PAD);
     }
     return sb.toString();
   }
