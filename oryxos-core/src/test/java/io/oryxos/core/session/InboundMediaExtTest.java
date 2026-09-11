@@ -46,6 +46,19 @@ class InboundMediaExtTest {
   }
 
   @Test
+  @DisplayName("腾讯前缀 0x02 + #!SILK_V3 识别为 Silk，并纠正误标 .amr")
+  void detectsTxPrefixedSilkAndFixesAmrExt() throws IOException {
+    Path silk = dir.resolve("voice.amr");
+    byte[] body = new byte[1 + "#!SILK_V3....".length()];
+    body[0] = 0x02;
+    System.arraycopy(
+        "#!SILK_V3....".getBytes(StandardCharsets.US_ASCII), 0, body, 1, body.length - 1);
+    Files.write(silk, body);
+    assertTrue(InboundMediaExt.isSilkMagic(silk));
+    assertEquals(InboundMediaExt.EXT_SILK, InboundMediaExt.betterFileExtension(silk, ".amr"));
+  }
+
+  @Test
   @DisplayName("AMR 魔数识别为 .amr")
   void detectsAmrMagic() throws IOException {
     Path amr = dir.resolve("voice.bin");

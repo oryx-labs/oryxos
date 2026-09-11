@@ -35,8 +35,10 @@
 
 | 步骤 | 说明 |
 |------|------|
-| 入站 | 回调 `kf_msg_or_event`（加密，不带正文）→ `kf/sync_msg` 拉文本 |
-| 会话态 | 尽量转到「智能助手接待」后再编排/发信 |
+| 入站 | 回调 `kf_msg_or_event` → `kf/sync_msg` 拉消息（文本 + 图/文件/语音/视频）；语音 `voice_format=0`（AMR，便于本机 ffmpeg→Whisper） |
+| 媒体 | `media_id` → `GET /cgi-bin/media/get` 落盘；先回「处理中」，再编排（Vision / `read_file` / Whisper） |
+| 会话 | 私聊连续记忆（与其它 IM 一致）；`/new` 仅可选手动清空 |
+| 会话态 | 尽量转到「智能助手接待」后再编排/发信；`service_state` 无权限（48002）时跳过仍尝试 `send_msg` |
 | 出站 | `kf/send_msg` 文本；**48h / 每回合最多 5 条**，窗外硬拒绝 |
 | chatId | `kf:{open_kfid}:user:{external_userid}` |
 
@@ -50,4 +52,4 @@
 
 ## MVP 非目标
 
-媒体入站、多 `open_kfid` 路由、人工排班 UI、服务号/小程序客服。
+出站发图/文件；多 `open_kfid` 路由；人工排班 UI；服务号/小程序客服。

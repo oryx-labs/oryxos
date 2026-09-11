@@ -35,6 +35,22 @@ class WeixinKfMsgCryptTest {
   }
 
   @Test
+  @DisplayName("长明文（PKCS7 填充>16）仍能回环")
+  void longPlaintextRoundTrip() throws Exception {
+    WeixinKfMsgCrypt crypt = new WeixinKfMsgCrypt(TOKEN, AES_KEY, CORP_ID);
+    StringBuilder sb =
+        new StringBuilder("<xml><Event><![CDATA[kf_msg_or_event]]></Event><Token><![CDATA[");
+    for (int i = 0; i < 200; i++) {
+      sb.append('A');
+    }
+    sb.append("]]></Token><OpenKfId><![CDATA[wkOPEN]]></OpenKfId></xml>");
+    String xml = sb.toString();
+    String cipher = crypt.encrypt(xml);
+    String plain = crypt.decryptMsg(crypt.signature("1", "2", cipher), "1", "2", cipher);
+    assertEquals(xml, plain);
+  }
+
+  @Test
   @DisplayName("签名错误拒绝")
   void badSignature() throws Exception {
     WeixinKfMsgCrypt crypt = new WeixinKfMsgCrypt(TOKEN, AES_KEY, CORP_ID);

@@ -40,7 +40,18 @@ class WeixinKfChannelContractTest extends InboundMessageServiceContractTestBase 
 
   @Override
   protected InboundMessage nonTextualMessage(String messageId) {
-    return normalizer.normalize(payload(messageId, "image", null)).orElseThrow();
+    // 无附件的非文本：契约 B7 能力说明（正常路径下缺 media_id 的 image 会被 normalizer 丢弃）
+    return new InboundMessage(
+        channelType(),
+        "contract-kf",
+        messageId,
+        ChatKind.P2P,
+        "wu1",
+        WeixinKfChatTargets.chatId("wk1", "wu1"),
+        "",
+        false,
+        false,
+        List.of());
   }
 
   @Override

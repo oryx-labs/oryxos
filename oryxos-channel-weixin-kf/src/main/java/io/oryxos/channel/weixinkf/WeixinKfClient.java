@@ -8,4 +8,7 @@ interface WeixinKfClient {
   void sendText(String openKfid, String externalUserId, String text);
 
   void ensureAiReception(String openKfid, String externalUserId);
+
+  /** {@code GET /cgi-bin/media/get} 临时素材。 */
+  WeixinKfMediaBlob downloadMedia(String mediaId);
 }

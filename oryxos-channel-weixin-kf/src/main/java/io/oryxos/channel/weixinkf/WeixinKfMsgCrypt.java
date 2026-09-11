@@ -13,6 +13,10 @@ package io.oryxos.channel.weixinkf;
 final class WeixinKfMsgCrypt {
 
   private static final int AES_BLOCK = 16;
+
+  /** 企微官方 WXBizMsgCrypt PKCS#7 块长为 32（非 AES 16）。 */
+  private static final int PKCS7_BLOCK = 32;
+
   private static final int RANDOM_LEN = 16;
   private static final int AES_KEY_LEN = 32;
   private static final int BASE64_PAD_MOD = 4;
@@ -120,7 +124,8 @@ final class WeixinKfMsgCrypt {
         new String(
             original, xmlEnd, original.length - xmlEnd, java.nio.charset.StandardCharsets.UTF_8);
     if (!receiveId.equals(fromReceiveId)) {
-      throw new IllegalStateException("receiveId 不匹配");
+      throw new IllegalStateException(
+          "receiveId 不匹配（期望=" + receiveId + " 实际=" + fromReceiveId + "）");
     }
     return xml;
   }
@@ -151,9 +156,9 @@ final class WeixinKfMsgCrypt {
   }
 
   private static byte[] pkcs7Pad(byte[] data) {
-    int pad = AES_BLOCK - (data.length % AES_BLOCK);
+    int pad = PKCS7_BLOCK - (data.length % PKCS7_BLOCK);
     if (pad == 0) {
-      pad = AES_BLOCK;
+      pad = PKCS7_BLOCK;
     }
     byte[] out = new byte[data.length + pad];
     System.arraycopy(data, 0, out, 0, data.length);
@@ -164,13 +169,16 @@ final class WeixinKfMsgCrypt {
   }
 
   private static byte[] pkcs7Unpad(byte[] decrypted) {
+    if (decrypted.length == 0) {
+      throw new IllegalStateException("解密报文为空");
+    }
     int pad = decrypted[decrypted.length - 1] & 0xff;
-    if (pad < 1 || pad > AES_BLOCK) {
-      return decrypted;
+    if (pad < 1 || pad > PKCS7_BLOCK || pad > decrypted.length) {
+      throw new IllegalStateException("PKCS7 填充非法: " + pad);
     }
     for (int i = 1; i <= pad; i++) {
       if ((decrypted[decrypted.length - i] & 0xff) != pad) {
-        return decrypted;
+        throw new IllegalStateException("PKCS7 填充校验失败");
       }
     }
     byte[] out = new byte[decrypted.length - pad];
