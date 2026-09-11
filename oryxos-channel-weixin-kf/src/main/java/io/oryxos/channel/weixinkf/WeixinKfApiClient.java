@@ -46,7 +46,7 @@ final class WeixinKfApiClient implements WeixinKfClient {
   }
 
   @Override
-  public SyncResult syncMsg(String openKfid, String callbackToken, String cursor) {
+  public WeixinKfSyncResult syncMsg(String openKfid, String callbackToken, String cursor) {
     ObjectNode body = MAPPER.createObjectNode();
     body.put("open_kfid", openKfid);
     if (callbackToken != null && !callbackToken.isBlank()) {
@@ -64,7 +64,7 @@ final class WeixinKfApiClient implements WeixinKfClient {
     if (list.isArray()) {
       list.forEach(messages::add);
     }
-    return new SyncResult(List.copyOf(messages), nextCursor, hasMore == 1);
+    return new WeixinKfSyncResult(messages, nextCursor, hasMore == 1);
   }
 
   @Override

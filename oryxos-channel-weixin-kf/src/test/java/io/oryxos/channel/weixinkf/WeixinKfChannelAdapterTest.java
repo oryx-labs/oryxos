@@ -165,8 +165,8 @@ class WeixinKfChannelAdapterTest {
     final AtomicInteger sendCalls = new AtomicInteger();
 
     @Override
-    public SyncResult syncMsg(String openKfid, String callbackToken, String cursor) {
-      return new SyncResult(new ArrayList<>(messages), "next", false);
+    public WeixinKfSyncResult syncMsg(String openKfid, String callbackToken, String cursor) {
+      return new WeixinKfSyncResult(new ArrayList<>(messages), "next", false);
     }
 
     @Override

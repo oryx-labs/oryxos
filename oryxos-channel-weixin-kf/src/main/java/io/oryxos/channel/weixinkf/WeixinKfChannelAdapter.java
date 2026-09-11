@@ -185,7 +185,7 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
               request.query(QUERY_ECHOSTR));
       return WebhookResponse.text(HTTP_OK, plain);
     } catch (Exception e) {
-      log.warn("微信客服 URL 校验失败: {}", e.getMessage());
+      log.warn("微信客服 URL 校验失败: {}", sanitize(e.getMessage()));
       return WebhookResponse.text(HTTP_UNAUTHORIZED, "verify failed");
     }
   }
@@ -224,7 +224,7 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
       pullAndDispatch(client, activeNormalizer, openKfid, callbackToken);
       return WebhookResponse.text(HTTP_OK, "success");
     } catch (Exception e) {
-      log.warn("微信客服回调处理失败: {}", e.getMessage());
+      log.warn("微信客服回调处理失败: {}", sanitize(e.getMessage()));
       return WebhookResponse.text(HTTP_UNAUTHORIZED, "callback failed");
     }
   }
@@ -240,7 +240,7 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
       int pages = 0;
       while (more && pages < MAX_SYNC_PAGES) {
         pages++;
-        WeixinKfClient.SyncResult page = client.syncMsg(openKfid, callbackToken, cursor);
+        WeixinKfSyncResult page = client.syncMsg(openKfid, callbackToken, cursor);
         for (JsonNode item : page.messages()) {
           Optional<InboundMessage> message = activeNormalizer.normalize(item);
           if (message.isEmpty()) {
@@ -254,7 +254,7 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
           try {
             client.ensureAiReception(WeixinKfChatTargets.parse(m.chatId()).openKfid(), m.userId());
           } catch (RuntimeException e) {
-            log.warn("微信客服确保智能助手接待失败: {}", e.getMessage());
+            log.warn("微信客服确保智能助手接待失败: {}", sanitize(e.getMessage()));
           }
           inboundMessageService.onMessage(m, this);
         }
@@ -286,5 +286,13 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
       }
     }
     return new String(chars);
+  }
+
+  private static String sanitize(String value) {
+    if (value == null) {
+      return "";
+    }
+    String trimmed = value.length() > 200 ? value.substring(0, 200) : value;
+    return trimmed.replace('\r', '_').replace('\n', '_');
   }
 }

@@ -6,9 +6,10 @@ package io.oryxos.channel.weixinkf;
  * <p>协议固定 AES-256-CBC；与媒体临时文件解密不同。
  */
 @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
-    value = "CIPHER_INTEGRITY",
+    value = {"CIPHER_INTEGRITY", "WEAK_MESSAGE_DIGEST_SHA1"},
     justification =
-        "企微/微信客服回调协议固定 AES-256-CBC（官方 WXBizMsgCrypt），无法改用 AEAD；" + "完整性依赖 msg_signature（SHA1）校验。")
+        "企微/微信客服回调协议固定 AES-256-CBC + msg_signature=SHA1（官方 WXBizMsgCrypt），"
+            + "无法改用 AEAD/SHA-256；完整性依赖平台侧签名字段。")
 final class WeixinKfMsgCrypt {
 
   private static final int AES_BLOCK = 16;
@@ -18,6 +19,7 @@ final class WeixinKfMsgCrypt {
   private static final int LENGTH_HEADER_BYTES = 4;
   private static final String TRANSFORMATION = "AES/CBC/NoPadding";
   private static final char BASE64_PAD = '=';
+  private static final java.security.SecureRandom SECURE_RANDOM = new java.security.SecureRandom();
 
   private final byte[] aesKey;
   private final String token;
@@ -62,7 +64,7 @@ final class WeixinKfMsgCrypt {
   /** 单测 / 回环：加密明文 XML。 */
   String encrypt(String plainXml) throws Exception {
     byte[] random = new byte[RANDOM_LEN];
-    new java.security.SecureRandom().nextBytes(random);
+    SECURE_RANDOM.nextBytes(random);
     byte[] xmlBytes = plainXml.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     byte[] receiveBytes = receiveId.getBytes(java.nio.charset.StandardCharsets.UTF_8);
     byte[] raw = new byte[RANDOM_LEN + LENGTH_HEADER_BYTES + xmlBytes.length + receiveBytes.length];
