@@ -27,6 +27,24 @@ final class WeixinKfInboundMediaResolver {
   private static final Logger LOG = LoggerFactory.getLogger(WeixinKfInboundMediaResolver.class);
 
   private static final String DEFAULT_EXTENSION = ".bin";
+  private static final String EXT_JPG = ".jpg";
+  private static final String EXT_PNG = ".png";
+  private static final String EXT_GIF = ".gif";
+  private static final String EXT_WEBP = ".webp";
+  private static final String EXT_PDF = ".pdf";
+  private static final String EXT_MP4 = ".mp4";
+  private static final String EXT_SILK = ".silk";
+  private static final String EXT_AMR = ".amr";
+  private static final String CT_JPEG = "jpeg";
+  private static final String CT_JPG = "jpg";
+  private static final String CT_PNG = "png";
+  private static final String CT_GIF = "gif";
+  private static final String CT_WEBP = "webp";
+  private static final String CT_PDF = "pdf";
+  private static final String CT_MP4 = "mp4";
+  private static final String CT_SILK = "silk";
+  private static final String CT_OCTET = "octet-stream";
+  private static final String CT_AMR = "amr";
   private static final String SAFE_EXTENSION_PATTERN = "\\.[a-z0-9]{1,8}";
   private static final int DOWNLOAD_ATTEMPTS = 2;
 
@@ -180,41 +198,41 @@ final class WeixinKfInboundMediaResolver {
   private static String defaultExtForType(String type, String contentType) {
     if (contentType != null) {
       String ct = contentType.toLowerCase(Locale.ROOT);
-      if (ct.contains("jpeg") || ct.contains("jpg")) {
-        return ".jpg";
+      if (ct.contains(CT_JPEG) || ct.contains(CT_JPG)) {
+        return EXT_JPG;
       }
-      if (ct.contains("png")) {
-        return ".png";
+      if (ct.contains(CT_PNG)) {
+        return EXT_PNG;
       }
-      if (ct.contains("gif")) {
-        return ".gif";
+      if (ct.contains(CT_GIF)) {
+        return EXT_GIF;
       }
-      if (ct.contains("webp")) {
-        return ".webp";
+      if (ct.contains(CT_WEBP)) {
+        return EXT_WEBP;
       }
-      if (ct.contains("pdf")) {
-        return ".pdf";
+      if (ct.contains(CT_PDF)) {
+        return EXT_PDF;
       }
-      if (ct.contains("mp4")) {
-        return ".mp4";
+      if (ct.contains(CT_MP4)) {
+        return EXT_MP4;
       }
-      if (ct.contains("silk") || ct.contains("octet-stream")) {
+      if (ct.contains(CT_SILK) || ct.contains(CT_OCTET)) {
         if (InboundAttachment.TYPE_AUDIO.equals(type)) {
-          return ".silk";
+          return EXT_SILK;
         }
       }
-      if (ct.contains("amr")) {
-        return ".amr";
+      if (ct.contains(CT_AMR)) {
+        return EXT_AMR;
       }
     }
     if (InboundAttachment.TYPE_IMAGE.equals(type)) {
       return DEFAULT_EXTENSION;
     }
     if (InboundAttachment.TYPE_AUDIO.equals(type)) {
-      return ".silk";
+      return EXT_SILK;
     }
     if (InboundAttachment.TYPE_VIDEO.equals(type)) {
-      return ".mp4";
+      return EXT_MP4;
     }
     return DEFAULT_EXTENSION;
   }

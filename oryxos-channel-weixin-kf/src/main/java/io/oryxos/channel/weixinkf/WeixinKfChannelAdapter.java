@@ -49,6 +49,11 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
   private static final int MAX_SYNC_PAGES = 20;
   private static final String MEDIA_DIR_PREFIX = "weixin-kf";
 
+  /** 同批合并媒体的 messageId 连接符（与 {@link #coalesceSameChatMedia} 一致）。 */
+  private static final String MERGED_MSG_ID_JOIN = "+";
+
+  private static final String MERGED_MSG_ID_SPLIT = "\\+";
+
   private final ChannelConfig config;
   private final ProfileRegistry profileRegistry;
   private final InboundMessageService inboundMessageService;
@@ -331,7 +336,7 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
     return new InboundMessage(
         a.channelType(),
         a.channelName(),
-        a.messageId() + "+" + b.messageId(),
+        a.messageId() + MERGED_MSG_ID_JOIN + b.messageId(),
         a.chatKind(),
         a.userId(),
         a.chatId(),
@@ -412,8 +417,8 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
         return;
       }
       // 合并消息 id 也分别占用，避免拆条重放
-      if (m.messageId().contains("+")) {
-        for (String part : m.messageId().split("\\+")) {
+      if (m.messageId().contains(MERGED_MSG_ID_JOIN)) {
+        for (String part : m.messageId().split(MERGED_MSG_ID_SPLIT)) {
           if (!part.isBlank()) {
             inboundMessageService.tryClaim(m.channelName(), part);
           }

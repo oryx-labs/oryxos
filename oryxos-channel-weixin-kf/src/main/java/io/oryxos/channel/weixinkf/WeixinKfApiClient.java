@@ -31,6 +31,14 @@ final class WeixinKfApiClient implements WeixinKfClient {
   private static final int HTTP_OK_MIN = 200;
   private static final int HTTP_OK_MAX = 300;
 
+  /** 企微：无权限调用会话状态相关接口。 */
+  private static final String ERRCODE_NO_PRIVILEGE = "errcode=48002";
+
+  private static final String CONTENT_TYPE_JSON = "json";
+
+  /** sync_msg：0=AMR（本机 ffmpeg 可解）。 */
+  private static final int VOICE_FORMAT_AMR = 0;
+
   private final HttpClient http;
   private final OutboundGuard guard;
   private final Supplier<String> accessToken;
@@ -56,8 +64,8 @@ final class WeixinKfApiClient implements WeixinKfClient {
       body.put("cursor", cursor);
     }
     body.put("limit", 1000);
-    // 0=AMR：本机 ffmpeg（Gyan full 等）可解 AMR-NB/WB；1=Silk 时官方 ffmpeg 无解码器，ASR 必失败。
-    body.put("voice_format", 0);
+    // AMR：本机 ffmpeg（Gyan full 等）可解；Silk 时官方 ffmpeg 无解码器，ASR 必失败。
+    body.put("voice_format", VOICE_FORMAT_AMR);
     JsonNode root = postJson("/cgi-bin/kf/sync_msg", body);
     String nextCursor = root.path("next_cursor").asText("");
     int hasMore = root.path("has_more").asInt(0);
@@ -94,7 +102,7 @@ final class WeixinKfApiClient implements WeixinKfClient {
       state = getServiceState(openKfid, externalUserId);
     } catch (IllegalStateException e) {
       // 48002：企业未开通/无权限调用会话状态 API；仍尝试 send_msg（入站已能 sync）。
-      if (e.getMessage() != null && e.getMessage().contains("errcode=48002")) {
+      if (e.getMessage() != null && e.getMessage().contains(ERRCODE_NO_PRIVILEGE)) {
         return;
       }
       throw e;
@@ -172,7 +180,8 @@ final class WeixinKfApiClient implements WeixinKfClient {
     if (body == null || body.length == 0) {
       return false;
     }
-    if (contentType != null && contentType.toLowerCase(java.util.Locale.ROOT).contains("json")) {
+    if (contentType != null
+        && contentType.toLowerCase(java.util.Locale.ROOT).contains(CONTENT_TYPE_JSON)) {
       return true;
     }
     // 部分错误响应仍是 application/octet-stream，以 JSON 开头
