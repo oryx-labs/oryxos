@@ -292,9 +292,14 @@ class TraceE2ETest {
           rest.getForEntity("/api/v1/agents/agent-a/executions", String.class);
       assertEquals(HttpStatus.OK, response.getStatusCode());
       for (JsonNode row : readJson(response.getBody()).get("data")) {
-        if (row.get("id").asLong() == executionId
-            && !"RUNNING".equals(row.get("status").asText())) {
-          assertEquals("SUCCESS", row.get("status").asText());
+        if (row.get("id").asLong() != executionId) {
+          continue;
+        }
+        // QUEUED / RUNNING / CANCELLING 都是进行中——不能把非 RUNNING 当成终态
+        // （否则 trigger 刚落库为 QUEUED 时会立刻 assert SUCCESS 失败）
+        String status = row.get("status").asText();
+        if ("SUCCESS".equals(status) || "FAILED".equals(status) || "CANCELLED".equals(status)) {
+          assertEquals("SUCCESS", status);
           return row;
         }
       }
