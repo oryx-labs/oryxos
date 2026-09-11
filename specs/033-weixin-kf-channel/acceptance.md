@@ -12,4 +12,6 @@
 
 - [x] 模块 `oryxos-channel-weixin-kf` + 单测（验签加解密、sync 归一化、窗外/超 5 条、契约档）  
 - [x] Setup + `channels.yaml.example` + Runtime `type: weixin_kf`  
-- [ ] 真机（有企微+微信客服资质时）  
+- [x] 媒体：`media/get` 落盘 + Vision / `read_file` / Whisper；`voice_format=0`（AMR）；sync cursor 排空；同会话连续媒体合并  
+- [x] 真机：文本 / 图 / PDF / 视频音轨 / 语音（AMR）往返 OK（PKCS#7=32、`service_state` 48002 软跳过）  
+

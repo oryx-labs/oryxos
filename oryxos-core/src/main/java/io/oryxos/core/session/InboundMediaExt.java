@@ -38,6 +38,9 @@ public final class InboundMediaExt {
   /** 腾讯/飞书常见 Silk：{@code #!SILK_V3}。 */
   private static final byte[] SILK_MAGIC = "#!SILK_V3".getBytes(StandardCharsets.US_ASCII);
 
+  /** 微信客服等偶发：首字节 {@code 0x02} 后再跟 {@code #!SILK_V3}。 */
+  private static final int SILK_TX_PREFIX = 0x02;
+
   /** AMR-NB：{@code #!AMR\n}；AMR-WB：{@code #!AMR-WB\n}。 */
   private static final byte[] AMR_MAGIC = "#!AMR".getBytes(StandardCharsets.US_ASCII);
 
@@ -75,12 +78,18 @@ public final class InboundMediaExt {
 
   /** 本地文件头是否为 Silk。 */
   public static boolean isSilkMagic(Path file) {
-    return magicMatches(file, SILK_MAGIC.length, InboundMediaExt::isSilkMagic);
+    return magicMatches(file, SILK_MAGIC.length + 1, InboundMediaExt::isSilkMagic);
   }
 
-  /** 字节头是否为 Silk（{@code #!SILK_V3}）。 */
+  /** 字节头是否为 Silk（{@code #!SILK_V3}，或腾讯前缀 {@code 0x02#!SILK_V3}）。 */
   public static boolean isSilkMagic(byte[] header) {
-    return startsWith(header, SILK_MAGIC);
+    if (startsWith(header, SILK_MAGIC)) {
+      return true;
+    }
+    return header != null
+        && header.length >= SILK_MAGIC.length + 1
+        && (header[0] & 0xFF) == SILK_TX_PREFIX
+        && startsWithOffset(header, 1, SILK_MAGIC);
   }
 
   /** 本地文件头是否为 AMR。 */
@@ -128,11 +137,22 @@ public final class InboundMediaExt {
     return name.toString().toLowerCase(Locale.ROOT).endsWith(EXT_PDF);
   }
 
-  /** 入站落盘后：若当前扩展名为占位（{@code .bin}/{@code .file} 或空白）且内容可识别，返回更好扩展名；否则 {@code null}。 */
+  /**
+   * 入站落盘后：若当前扩展名为占位（{@code .bin}/{@code .file} 或空白），或语音扩展名与魔数矛盾（如误标 {@code .amr} 实为
+   * Silk），返回更好扩展名；否则 {@code null}。
+   */
   public static String betterFileExtension(Path file, String currentExt) {
-    if (!isPlaceholderExt(currentExt)) {
+    String detected = detectExtensionFromMagic(file);
+    if (detected == null) {
       return null;
     }
+    if (isPlaceholderExt(currentExt) || audioExtContradicts(currentExt, detected)) {
+      return sameExt(currentExt, detected) ? null : detected;
+    }
+    return null;
+  }
+
+  private static String detectExtensionFromMagic(Path file) {
     if (isPdfMagic(file)) {
       return EXT_PDF;
     }
@@ -151,12 +171,39 @@ public final class InboundMediaExt {
     return null;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification = "仅对 ASCII 音频扩展名做 Locale.ROOT 小写匹配")
+  private static boolean audioExtContradicts(String currentExt, String detected) {
+    if (currentExt == null || currentExt.isBlank() || detected == null) {
+      return false;
+    }
+    String cur = currentExt.toLowerCase(Locale.ROOT);
+    if (!EXT_SILK.equals(cur) && !EXT_AMR.equals(cur)) {
+      return false;
+    }
+    return (EXT_SILK.equals(detected) || EXT_AMR.equals(detected)) && !cur.equals(detected);
+  }
+
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "IMPROPER_UNICODE",
+      justification = "仅对 ASCII 扩展名做 Locale.ROOT 小写比较")
+  private static boolean sameExt(String currentExt, String detected) {
+    return currentExt != null
+        && detected != null
+        && currentExt.toLowerCase(Locale.ROOT).equals(detected.toLowerCase(Locale.ROOT));
+  }
+
   private static boolean startsWith(byte[] header, byte[] magic) {
-    if (header == null || header.length < magic.length) {
+    return startsWithOffset(header, 0, magic);
+  }
+
+  private static boolean startsWithOffset(byte[] header, int offset, byte[] magic) {
+    if (header == null || magic == null || offset < 0 || header.length < offset + magic.length) {
       return false;
     }
     for (int i = 0; i < magic.length; i++) {
-      if (header[i] != magic[i]) {
+      if (header[offset + i] != magic[i]) {
         return false;
       }
     }

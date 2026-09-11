@@ -47,16 +47,31 @@ class WeixinKfEventNormalizerTest {
   }
 
   @Test
-  @DisplayName("非文本 → textual=false")
-  void nonText() {
+  @DisplayName("图片 → attachment reference=media_id")
+  void imageMedia() {
     ObjectNode item = mapper.createObjectNode();
     item.put("msgid", "m3");
     item.put("open_kfid", "wk1");
     item.put("external_userid", "wu1");
     item.put("origin", 3);
     item.put("msgtype", "image");
+    item.putObject("image").put("media_id", "MEDIAIMG");
     Optional<InboundMessage> msg = normalizer.normalize(item);
     assertTrue(msg.isPresent());
     assertFalse(msg.get().textual());
+    assertEquals(1, msg.get().attachments().size());
+    assertEquals("MEDIAIMG", msg.get().attachments().get(0).reference());
+  }
+
+  @Test
+  @DisplayName("图片缺 media_id → 丢弃")
+  void imageWithoutMediaId() {
+    ObjectNode item = mapper.createObjectNode();
+    item.put("msgid", "m4");
+    item.put("open_kfid", "wk1");
+    item.put("external_userid", "wu1");
+    item.put("origin", 3);
+    item.put("msgtype", "image");
+    assertTrue(normalizer.normalize(item).isEmpty());
   }
 }

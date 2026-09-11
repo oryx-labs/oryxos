@@ -98,7 +98,7 @@ class WeixinKfChannelAdapterTest {
   }
 
   @Test
-  @DisplayName("POST kf_msg_or_event → sync → onMessage")
+  @DisplayName("POST kf_msg_or_event → sync → onClaimedMessage")
   void callbackSync() throws Exception {
     ObjectNode item = MAPPER.createObjectNode();
     item.put("msgid", "msg-1");
@@ -125,6 +125,7 @@ class WeixinKfChannelAdapterTest {
     String nonce = "1372623149";
     String sig = crypt.signature(ts, nonce, cipher);
     String body = "<xml><Encrypt><![CDATA[" + cipher + "]]></Encrypt></xml>";
+    when(inbound.tryClaim(any(), any())).thenReturn(true);
     WebhookResponse response =
         adapter.onWebhook(
             new WebhookRequest(
@@ -137,7 +138,7 @@ class WeixinKfChannelAdapterTest {
                 body));
     assertEquals(200, response.status());
     assertEquals("success", response.body());
-    verify(inbound).onMessage(any(InboundMessage.class), any());
+    verify(inbound).onClaimedMessage(any(InboundMessage.class), any());
     assertEquals(1, client.ensureCalls.get());
   }
 
@@ -159,6 +160,40 @@ class WeixinKfChannelAdapterTest {
     assertEquals(1, client.sendCalls.get());
   }
 
+  @Test
+  @DisplayName("同会话连续媒体合并为一条")
+  void coalesceMedia() {
+    InboundMessage a =
+        new InboundMessage(
+            "weixin_kf",
+            "ops-kf",
+            "m1",
+            io.oryxos.core.channel.ChatKind.P2P,
+            "u1",
+            "kf:wk:user:u1",
+            "",
+            false,
+            false,
+            List.of(io.oryxos.core.channel.InboundAttachment.imageReference("A")));
+    InboundMessage b =
+        new InboundMessage(
+            "weixin_kf",
+            "ops-kf",
+            "m2",
+            io.oryxos.core.channel.ChatKind.P2P,
+            "u1",
+            "kf:wk:user:u1",
+            "",
+            false,
+            false,
+            List.of(io.oryxos.core.channel.InboundAttachment.imageReference("B")));
+    List<InboundMessage> out = WeixinKfChannelAdapter.coalesceSameChatMedia(List.of(a, b));
+    assertEquals(1, out.size());
+    assertEquals(2, out.get(0).attachments().size());
+    assertTrue(out.get(0).messageId().contains("m1"));
+    assertTrue(out.get(0).messageId().contains("m2"));
+  }
+
   private static final class FakeClient implements WeixinKfClient {
     List<com.fasterxml.jackson.databind.JsonNode> messages = List.of();
     final AtomicInteger ensureCalls = new AtomicInteger();
@@ -177,6 +212,11 @@ class WeixinKfChannelAdapterTest {
     @Override
     public void ensureAiReception(String openKfid, String externalUserId) {
       ensureCalls.incrementAndGet();
+    }
+
+    @Override
+    public WeixinKfMediaBlob downloadMedia(String mediaId) {
+      return new WeixinKfMediaBlob(new byte[] {1, 2, 3}, "image/jpeg", "a.jpg");
     }
   }
 }
