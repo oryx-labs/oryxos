@@ -6,10 +6,10 @@
 
 - [x] 与 `wecom` 应用机器人区分写清  
 - [x] 入站/出站 API 与 48h/5 条钉死  
-- [ ] 产品确认可 BUILD  
+- [x] 产品确认可 BUILD  
 
-## BUILD（未开始）
+## BUILD
 
-- [ ] 模块 + 单测  
-- [ ] Setup + example  
-- [ ] 真机（有资质）  
+- [x] 模块 `oryxos-channel-weixin-kf` + 单测（验签加解密、sync 归一化、窗外/超 5 条、契约档）  
+- [x] Setup + `channels.yaml.example` + Runtime `type: weixin_kf`  
+- [ ] 真机（有企微+微信客服资质时）  

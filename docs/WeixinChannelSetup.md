@@ -56,6 +56,6 @@ WEIXIN_TOKEN=...
 |------|------|
 | `weixin`（本渠道） | 个人 Harness |
 | `wecom` | 企微员工协作 |
-| `weixin_kf`（033，未 BUILD） | 企业对客微信客服 |
+| `weixin_kf`（见 [WeixinKfChannelSetup](./WeixinKfChannelSetup.md)） | 企业对客微信客服 |
 
 详见 `specs/035-weixin-ilink-channel/`。
