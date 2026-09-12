@@ -18,8 +18,8 @@ OryxOS 已覆盖的与本表边界：
 | 出海 2B / 私有化 / 对客 | ✅ 或代码已有（真机部分暂停） | 026 |
 | 国内 C 官方 Bot | ✅ QQ | 029 |
 | 国内经营私信（内容） | ✅ 抖音 031 MVP；其余调研 | 031 + 本表 |
-| 电商 / 本地生活店铺客服 | 🔶 淘宝路径已钉死（缺入驻） | 本表 §B / [034](../034-taobao-im-channel/research.md) |
-| 微信体系对客（非企微应用） | ✅ 033/035/036；W3 research 齐（037）；小店未开 | 本表 §C |
+| 微信体系对客（非企微应用） | ✅ 033/035/036/037；小店未开 | 本表 §C |
+| 电商 / 本地生活店铺客服 | 🔶 淘宝路径钉死；拼多多 research 中（038） | 本表 §B / 034 / 038 |
 
 ## 原则
 
@@ -73,7 +73,7 @@ OryxOS 已覆盖的与本表边界：
 【经营触达 · 电商店铺客服】  ← 企业刚需
   淘宝 / 天猫（奇门客服语料 + chatrobot.async）      🔶 路径钉死；BUILD 等 cloudAppId
   京东咚咚                                         🔍 宙斯权限申请制
-  拼多多商家客服                                   🔶 开放平台回调常见；须官方文档钉死
+  拼多多商家客服                                   🔍→🔶 [038](../038-pdd-im-channel/research.md)；官方 API 名待控制台钉死
   抖音电商客服                                     🔶 可与抖音 IM / 小程序客服合流评估
 
 【本地生活 / 外卖】
@@ -101,7 +101,7 @@ OryxOS 已覆盖的与本表边界：
 |----|------|------------|--------|------|----------|
 | E1 | 淘宝/天猫 | 奇门 `qimen…chatrobot.sync` + TOP `taobao.message.chatrobot.async` | 🔶 | 假路径已排除；真路径见 [034](../034-taobao-im-channel/research.md) | **等入驻/`cloudAppId`；不授权则不 BUILD** |
 | E2 | 京东 | 宙斯 / 咚咚相关开放权限 | 🔍 | 权限申请制，文档分散 | research |
-| E3 | 拼多多 | 商家开放平台消息回调 + 发信 API（社区方案多） | 🔶 | 必须以**官方文档**钉死接口名；禁止 Cookie/爬虫方案 | research → 实现 PLAN |
+| E3 | 拼多多 | 开放平台回调 + 发信 API（**官方名待钉**） | 🔍→🔶 | 文档登录墙；禁 Playwright；见 [038](../038-pdd-im-channel/research.md) | **控制台核验 API 后再 PLAN/BUILD** |
 | E4 | 抖音电商 | 与 C1 / 小程序「消息推送客服」可能重叠 | 🔶 | 先画清与 `douyin` 是否同一适配器 | 并入 031/032 族 research |
 | E5 | 其他（得物等） | — | Later | 有稳定双向再开 | 观察 |
 
@@ -115,7 +115,7 @@ OryxOS 已覆盖的与本表边界：
 |----|--------|--------------------------|--------|------|
 | W1 | **微信客服**（`kf.weixin.qq.com` / 企微 `kf/*`） | 用户在**微信**里咨询企业；企业用 API 收发 | ✅ | 与现有 `wecom` 应用会话**不是同一产品**。已合入：文本 MVP + 多模态媒体（#440/#442/#443）→ [033](../033-weixin-kf-channel/acceptance.md) |
 | W2 | 服务号客服消息 | 用户互动后 48h `message/custom/send`（用户消息触发：5 条/48h） | ✅ | 已合入：[036](../036-weixin-mp-channel/acceptance.md)（#446） |
-| W3 | 小程序客服消息 | 消息推送 URL + `message/custom/send`（用户发消息：5 条/48h） | ✅ | BUILD 已开工：[037](../037-weixin-mini-channel/acceptance.md)（`weixin_mini`）；勿与 `weixin_mp` 混 type |
+| W3 | 小程序客服消息 | 消息推送 URL + `message/custom/send`（用户发消息：5 条/48h） | ✅ | 已合入：[037](../037-weixin-mini-channel/acceptance.md)（#449）；勿与 `weixin_mp` 混 type |
 | W4 | 微信小店自研客服 | 回调 + `commkf/sendmsg`；48h/5 条 | 🔶 | **仅商家自研**，第三方 ISV 受限 → OS 多租户要慎 |
 
 **个人微信 / 个微协议**：❌ Won’t（逆向/协议号）。  
@@ -194,6 +194,7 @@ OryxOS 已覆盖的与本表边界：
 - [x] 026 §D 回链  
 - [x] W2 服务号 research + PLAN + BUILD（036，#446）  
 - [x] C2 支付宝 research 收口（032；默认不 BUILD）  
-- [x] W3 小程序 research + PLAN（037）  
-- [ ] 确认是否授权 **037 BUILD**（或 034 入驻后 BUILD）  
-- [ ] E3 拼多多 research（可选）  
+- [x] W3 小程序 research + PLAN + BUILD（037，#449）  
+- [x] E3 拼多多 research 起稿（038；API 名待控制台）  
+- [ ] 034 / 038 有资质后确认 BUILD；或开 E2/W4 research  
+- [ ] E3 官方接口名抄录回填 038  
