@@ -1177,6 +1177,11 @@ public class OryxOsRuntime {
         resolved ->
             new io.oryxos.channel.weixinmini.WeixinMiniChannelAdapter(
                 resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
+    factories.put(
+        io.oryxos.channel.alipay.AlipayChannelAdapter.TYPE,
+        resolved ->
+            new io.oryxos.channel.alipay.AlipayChannelAdapter(
+                resolved, profileRegistry, inboundMessageService, channelOutboundGuard));
   }
 
   /**

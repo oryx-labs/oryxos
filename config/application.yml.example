@@ -117,6 +117,7 @@ http:
     - ilinkai.weixin.qq.com     # 个人微信 iLink Bot（getupdates / sendmessage）
     - novac2c.cdn.weixin.qq.com # 个人微信 iLink 入站媒体 CDN
     - "*.weixin.qq.com"         # 微信 CDN / 头像等子域
+    - openapi.alipay.com        # 支付宝生活号 custom.send / OpenAPI
     - api.open-meteo.com        # 天气 Agent 免 key 天气源（31 节 Demo 一）
     - hn.algolia.com            # 科技日报 Agent 新闻源（31 节 Demo 二）
     - api.github.com            # GitHub 日报脚本子进程网络（31 节 Demo 三）
