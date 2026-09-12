@@ -257,6 +257,8 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
       WeixinKfEventNormalizer activeNormalizer,
       String openKfid,
       String callbackToken) {
+    // 锁内只做 sync + cursor + 去重；media/get 与编排放锁外，避免大文件拖住其它回调。
+    List<InboundMessage> toDispatch;
     synchronized (syncLock) {
       String cursor = syncCursor;
       boolean more = true;
@@ -283,15 +285,16 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
         more = page.hasMore();
       }
       saveSyncCursor(syncCursor);
-      for (InboundMessage m : coalesceSameChatMedia(batch)) {
-        sessions.rememberInbound(m.chatId(), clock.millis());
-        try {
-          client.ensureAiReception(WeixinKfChatTargets.parse(m.chatId()).openKfid(), m.userId());
-        } catch (RuntimeException e) {
-          log.warn("微信客服确保智能助手接待失败: {}", sanitize(e.getMessage()));
-        }
-        dispatchOne(m);
+      toDispatch = coalesceSameChatMedia(batch);
+    }
+    for (InboundMessage m : toDispatch) {
+      sessions.rememberInbound(m.chatId(), clock.millis());
+      try {
+        client.ensureAiReception(WeixinKfChatTargets.parse(m.chatId()).openKfid(), m.userId());
+      } catch (RuntimeException e) {
+        log.warn("微信客服确保智能助手接待失败: {}", sanitize(e.getMessage()));
       }
+      dispatchOne(m);
     }
   }
 
@@ -372,7 +375,9 @@ public class WeixinKfChannelAdapter implements InboundChannelAdapter, InboundWeb
       saveSyncCursor(syncCursor);
       if (discarded > 0) {
         log.info(
-            "微信客服渠道 {} 启动排空 sync 积压 {} 条（cursor 已推进，避免历史回放）", sanitize(config.name()), discarded);
+            "微信客服渠道 {} 启动排空 sync 积压 {} 条（cursor 已推进；宕机期间未处理消息将丢弃，避免历史回放刷屏并撞 5 条上限）",
+            sanitize(config.name()),
+            discarded);
       }
     }
   }

@@ -33,7 +33,6 @@ final class WeixinKfInboundMediaResolver {
   private static final String EXT_WEBP = ".webp";
   private static final String EXT_PDF = ".pdf";
   private static final String EXT_MP4 = ".mp4";
-  private static final String EXT_SILK = ".silk";
   private static final String EXT_AMR = ".amr";
   private static final String CT_JPEG = "jpeg";
   private static final String CT_JPG = "jpg";
@@ -221,7 +220,8 @@ final class WeixinKfInboundMediaResolver {
       }
       if (ct.contains(CT_SILK) || ct.contains(CT_OCTET)) {
         if (InboundAttachment.TYPE_AUDIO.equals(type)) {
-          return EXT_SILK;
+          // sync_msg 默认 voice_format=AMR；octet-stream 优先按 AMR，魔数可再纠正为 Silk
+          return EXT_AMR;
         }
       }
       if (ct.contains(CT_AMR)) {
@@ -232,7 +232,7 @@ final class WeixinKfInboundMediaResolver {
       return DEFAULT_EXTENSION;
     }
     if (InboundAttachment.TYPE_AUDIO.equals(type)) {
-      return EXT_SILK;
+      return EXT_AMR;
     }
     if (InboundAttachment.TYPE_VIDEO.equals(type)) {
       return EXT_MP4;
