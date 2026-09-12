@@ -28,6 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class AlipayGatewayCompatController {
 
   private static final String CHANNEL = "ops-alipay";
+  private static final String GBK_NAME = "GBK";
+  private static final String BIZ_CONTENT_HINT = "biz_content=";
+  private static final String ALIPAY_SERVICE_HINT = "alipay.service";
+  private static final int PROBE_BYTES = 800;
 
   private final InboundChannelRegistry registry;
 
@@ -47,7 +51,8 @@ public class AlipayGatewayCompatController {
       return ResponseEntity.status(503).body("ops-alipay offline");
     }
     Map<String, String> params =
-        ChannelInboundWebhookController.parseFormUrlEncodedForCompat(raw, Charset.forName("GBK"));
+        ChannelInboundWebhookController.parseFormUrlEncodedForCompat(
+            raw, Charset.forName(GBK_NAME));
     WebhookRequest webhookRequest =
         new WebhookRequest(request.getMethod(), params, headerMap(request), "");
     WebhookResponse response = handler.onWebhook(webhookRequest);
@@ -59,9 +64,10 @@ public class AlipayGatewayCompatController {
     if (raw.length == 0) {
       return false;
     }
-    String probe = new String(raw, 0, Math.min(raw.length, 800), StandardCharsets.ISO_8859_1);
+    String probe =
+        new String(raw, 0, Math.min(raw.length, PROBE_BYTES), StandardCharsets.ISO_8859_1);
     String lower = probe.toLowerCase(Locale.ROOT);
-    return lower.contains("alipay.service") || lower.contains("biz_content=");
+    return lower.contains(ALIPAY_SERVICE_HINT) || lower.contains(BIZ_CONTENT_HINT);
   }
 
   private static Map<String, String> headerMap(HttpServletRequest request) {

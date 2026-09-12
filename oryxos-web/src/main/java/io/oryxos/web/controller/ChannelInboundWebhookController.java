@@ -36,6 +36,16 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/channels/inbound")
 public class ChannelInboundWebhookController {
 
+  private static final String CHARSET_ATTR = "charset=";
+  private static final String CHARSET_GBK_HINT = "charset=gbk";
+  private static final String BIZ_CONTENT_HINT = "biz_content=";
+  private static final String ALIPAY_SERVICE_HINT = "alipay.service";
+  private static final String GBK_NAME = "GBK";
+  private static final String FORM_PAIR_SEP = "&";
+  private static final char QUOTE = '"';
+  private static final int FORM_CHARSET_PROBE_BYTES = 512;
+  private static final int QUOTED_CHARSET_MIN_LEN = 2;
+
   private final InboundChannelRegistry registry;
 
   public ChannelInboundWebhookController(InboundChannelRegistry registry) {
@@ -108,12 +118,14 @@ public class ChannelInboundWebhookController {
     if (fromHeader != null) {
       return fromHeader;
     }
-    String probe = new String(raw, 0, Math.min(raw.length, 512), StandardCharsets.ISO_8859_1);
+    String probe =
+        new String(
+            raw, 0, Math.min(raw.length, FORM_CHARSET_PROBE_BYTES), StandardCharsets.ISO_8859_1);
     String lower = probe.toLowerCase(Locale.ROOT);
-    if (lower.contains("charset=gbk")
-        || lower.contains("biz_content=")
-        || lower.contains("alipay.service")) {
-      return Charset.forName("GBK");
+    if (lower.contains(CHARSET_GBK_HINT)
+        || lower.contains(BIZ_CONTENT_HINT)
+        || lower.contains(ALIPAY_SERVICE_HINT)) {
+      return Charset.forName(GBK_NAME);
     }
     return StandardCharsets.UTF_8;
   }
@@ -123,16 +135,18 @@ public class ChannelInboundWebhookController {
       return null;
     }
     String lower = contentType.toLowerCase(Locale.ROOT);
-    int idx = lower.indexOf("charset=");
+    int idx = lower.indexOf(CHARSET_ATTR);
     if (idx < 0) {
       return null;
     }
-    String value = contentType.substring(idx + "charset=".length()).trim();
+    String value = contentType.substring(idx + CHARSET_ATTR.length()).trim();
     int semi = value.indexOf(';');
     if (semi >= 0) {
       value = value.substring(0, semi).trim();
     }
-    if (value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2) {
+    if (value.length() >= QUOTED_CHARSET_MIN_LEN
+        && value.charAt(0) == QUOTE
+        && value.charAt(value.length() - 1) == QUOTE) {
       value = value.substring(1, value.length() - 1);
     }
     if (value.isEmpty()) {
@@ -156,7 +170,7 @@ public class ChannelInboundWebhookController {
     if (text.isEmpty()) {
       return out;
     }
-    for (String pair : text.split("&")) {
+    for (String pair : text.split(FORM_PAIR_SEP)) {
       if (pair.isEmpty()) {
         continue;
       }
