@@ -177,7 +177,7 @@ website/zh/docs/tool.md / profile.md   # 渠道表同步
 
 - [x] P0：Webhook 接收面 + `extra` + Slack/Discord notify，测试绿  
 - [x] B1 Telegram 入站 + notify + Setup  
-- [ ] B2 WhatsApp 入站 + notify + 会话窗错误 + Setup（**代码有；真平台 ⏸**）  
+- [x] B2 WhatsApp 入站 + notify + 会话窗错误 + Setup（**代码有；Dashboard 入站 2026-09-12 通过；真机需商业注册认证账号，⏸**）  
 - [ ] B3 Teams 入站 + notify + Setup（**代码有；真平台 ⏸**）  
 - [ ] B4 Google Chat 入站 + notify + Setup（**代码有；真平台 ⏸**）  
 - [x] B5 Mattermost 入站 + notify + Setup（本机 Docker 2026-09-09；媒体对齐 #432）  
@@ -191,8 +191,8 @@ website/zh/docs/tool.md / profile.md   # 渠道表同步
 
 1. ~~开分支做 **P0**~~（已合入）。  
 2. ~~**Telegram**~~（已合入 + 真机）。  
-3. **WhatsApp** 真平台恢复后，再 Teams / Google Chat（当前暂停）。  
+3. **WhatsApp** 真机：待 **商业注册认证** 的 WABA + 号 `CONNECTED` 后再测；随后 Teams / Google Chat。  
 4. ~~Mattermost → Matrix~~（本机真机 + #432）。  
 5. 国内 C 端：QQ → **029**；经营私信（抖音等）→ **[030](../030-cn-c-im-roadmap/plan.md)**，勿塞进 026 未完成的海外真机项。
 
-下一步若恢复海外真机：先解决 Meta Developers 登录与**固定**公网 Callback（避免 quick tunnel 每次换域）；Teams/GChat 补本机 `${ENV}` 后再测。
+下一步若恢复 WhatsApp 真机：WABA 企业验证通过且 Graph `status=CONNECTED`；公网 Callback 尽量固定（避免 quick tunnel 每次换域）。Teams/GChat 补本机 `${ENV}` 后再测。
