@@ -48,9 +48,10 @@
 | type | 场景 |
 |------|------|
 | `weixin_kf`（本渠道） | 企业对客微信客服 |
+| `weixin_mp` | 认证服务号粉丝会话（见 `WeixinMpChannelSetup.md`） |
 | `wecom` | 企微应用内机器人 |
 | `weixin` | 个人微信 iLink Bot |
 
 ## MVP 非目标
 
-出站发图/文件；多 `open_kfid` 路由；人工排班 UI；服务号/小程序客服。
+出站发图/文件；多 `open_kfid` 路由；人工排班 UI。

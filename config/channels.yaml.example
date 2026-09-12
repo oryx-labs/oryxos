@@ -141,3 +141,15 @@ channels:
   #     encoding_aes_key: ${WEIXIN_KF_AES_KEY}
   #     open_kfid: ${WEIXIN_KF_OPEN_KFID}
   #   enabled: true
+
+  # 微信服务号（认证服务号客服消息，见 docs/WeixinMpChannelSetup.md）
+  # 回调：GET/POST /api/v1/channels/inbound/ops-weixin-mp
+  # - name: ops-weixin-mp
+  #   type: weixin_mp
+  #   app_id: ${WEIXIN_MP_APP_ID}
+  #   app_secret: ${WEIXIN_MP_APP_SECRET}
+  #   agent: demo-agent
+  #   extra:
+  #     token: ${WEIXIN_MP_TOKEN}
+  #     encoding_aes_key: ${WEIXIN_MP_AES_KEY}
+  #   enabled: true
