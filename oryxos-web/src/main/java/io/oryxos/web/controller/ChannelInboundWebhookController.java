@@ -13,7 +13,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -108,7 +107,7 @@ public class ChannelInboundWebhookController {
     if (contentType == null || contentType.isBlank()) {
       return false;
     }
-    String lower = contentType.toLowerCase(Locale.ROOT);
+    String lower = asciiLower(contentType);
     return lower.startsWith(MediaType.APPLICATION_FORM_URLENCODED_VALUE);
   }
 
@@ -121,7 +120,7 @@ public class ChannelInboundWebhookController {
     String probe =
         new String(
             raw, 0, Math.min(raw.length, FORM_CHARSET_PROBE_BYTES), StandardCharsets.ISO_8859_1);
-    String lower = probe.toLowerCase(Locale.ROOT);
+    String lower = asciiLower(probe);
     if (lower.contains(CHARSET_GBK_HINT)
         || lower.contains(BIZ_CONTENT_HINT)
         || lower.contains(ALIPAY_SERVICE_HINT)) {
@@ -134,7 +133,7 @@ public class ChannelInboundWebhookController {
     if (contentType == null) {
       return null;
     }
-    String lower = contentType.toLowerCase(Locale.ROOT);
+    String lower = asciiLower(contentType);
     int idx = lower.indexOf(CHARSET_ATTR);
     if (idx < 0) {
       return null;
@@ -225,7 +224,7 @@ public class ChannelInboundWebhookController {
   }
 
   /** 只折 A–Z，避免 Locale 大小写映射触发 SpotBugs IMPROPER_UNICODE。 */
-  private static String asciiLower(String value) {
+  static String asciiLower(String value) {
     if (value == null || value.isEmpty()) {
       return value;
     }

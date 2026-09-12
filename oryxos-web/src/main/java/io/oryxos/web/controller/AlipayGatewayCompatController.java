@@ -11,7 +11,6 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.http.MediaType;
@@ -66,7 +65,7 @@ public class AlipayGatewayCompatController {
     }
     String probe =
         new String(raw, 0, Math.min(raw.length, PROBE_BYTES), StandardCharsets.ISO_8859_1);
-    String lower = probe.toLowerCase(Locale.ROOT);
+    String lower = ChannelInboundWebhookController.asciiLower(probe);
     return lower.contains(ALIPAY_SERVICE_HINT) || lower.contains(BIZ_CONTENT_HINT);
   }
 
@@ -79,7 +78,7 @@ public class AlipayGatewayCompatController {
     while (names.hasMoreElements()) {
       String name = names.nextElement();
       if (name != null) {
-        headers.put(name.toLowerCase(Locale.ROOT), request.getHeader(name));
+        headers.put(ChannelInboundWebhookController.asciiLower(name), request.getHeader(name));
       }
     }
     return headers;
