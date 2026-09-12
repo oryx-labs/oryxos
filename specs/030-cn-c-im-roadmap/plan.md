@@ -19,7 +19,7 @@ OryxOS 已覆盖的与本表边界：
 | 国内 C 官方 Bot | ✅ QQ | 029 |
 | 国内经营私信（内容） | ✅ 抖音 031 MVP；其余调研 | 031 + 本表 |
 | 电商 / 本地生活店铺客服 | 🔶 淘宝路径已钉死（缺入驻） | 本表 §B / [034](../034-taobao-im-channel/research.md) |
-| 微信体系对客（非企微应用） | ✅ 微信客服 033；个微 iLink 035；W2/W3 未开 | 本表 §C |
+| 微信体系对客（非企微应用） | ✅ 033/035；W2 服务号 research 齐（036）；W3 未开 | 本表 §C |
 
 ## 原则
 
@@ -66,8 +66,8 @@ OryxOS 已覆盖的与本表边界：
 
 【经营触达 · 微信生态对客】  ← 国内 C 端极刚需，026 未排
   微信客服（企微体系，用户在微信里聊）               ✅ 033 已合入（含媒体）
-  服务号 / 订阅号客服消息                          🔶 48h 客服消息成熟
-  小程序客服消息                                   🔶 推送 URL + 客服发送成熟
+  服务号 / 订阅号客服消息                          🔶→✅ research：[036](../036-weixin-mp-channel/research.md)；BUILD 待确认
+  小程序客服消息                                   🔶 推送 URL + 客服发送成熟（W3 另开）
   微信小店自研客服                                 🔶 商家自研；ISV 受限
 
 【经营触达 · 电商店铺客服】  ← 企业刚需
@@ -114,7 +114,7 @@ OryxOS 已覆盖的与本表边界：
 | ID | 产品面 | 与「企微应用机器人」关系 | 成熟度 | 备注 |
 |----|--------|--------------------------|--------|------|
 | W1 | **微信客服**（`kf.weixin.qq.com` / 企微 `kf/*`） | 用户在**微信**里咨询企业；企业用 API 收发 | ✅ | 与现有 `wecom` 应用会话**不是同一产品**。已合入：文本 MVP + 多模态媒体（#440/#442/#443）→ [033](../033-weixin-kf-channel/acceptance.md) |
-| W2 | 服务号客服消息 | 用户互动后 48h `message/custom/send` | 🔶 | 经典、文档成熟；资质：认证服务号 |
+| W2 | 服务号客服消息 | 用户互动后 48h `message/custom/send`（用户消息触发：5 条/48h） | ✅ Ready | Research + PLAN：[036](../036-weixin-mp-channel/research.md)；**BUILD 待确认** |
 | W3 | 小程序客服消息 | 推送 URL + 客服发送 | 🔶 | 与小程序绑定；可人工工作台或自研 |
 | W4 | 微信小店自研客服 | 回调 + `commkf/sendmsg`；48h/5 条 | 🔶 | **仅商家自研**，第三方 ISV 受限 → OS 多租户要慎 |
 
@@ -156,7 +156,8 @@ OryxOS 已覆盖的与本表边界：
 | P1 | **个人微信 iLink** | ✅ [035](../035-weixin-ilink-channel/plan.md) 已合入 |
 | P1 | **W1 微信客服** | ✅ [033](../033-weixin-kf-channel/acceptance.md) 已合入（含媒体 follow-up） |
 | P1 | **E1 淘宝/天猫** | 🔶 [034 research](../034-taobao-im-channel/research.md) **路径已钉死**；BUILD 等 `cloudAppId`/入驻 |
-| P2 | W2/W3 服务号/小程序客服 | 未开（无淘宝资质时可先 research） |
+| P2 | W2 服务号客服 | ✅ research + PLAN：[036](../036-weixin-mp-channel/plan.md) — BUILD 另确认 |
+| P2 | W3 小程序客服 | 未开（勿与 036 混 type） |
 | P2 | C2 支付宝 | 草稿 [032](../032-alipay-im-channel/research.md) |
 | P3 | 拼多多 / 京东 / 快手 | 未开 |
 | P4 | 外卖订单 vs 客服 IM | 边界已写；不排渠道 BUILD |
@@ -191,5 +192,7 @@ OryxOS 已覆盖的与本表边界：
 - [x] W1 微信客服 research + PLAN + BUILD（033，含媒体）  
 - [x] E1 假路径排除 + 034 **真路径钉死**（仍缺入驻）  
 - [x] 026 §D 回链  
-- [ ] 有资质则确认 **034 BUILD**；否则下一刀 **W2** 或 **032** research  
+- [x] W2 服务号 research + PLAN（036）  
+- [ ] 确认是否授权 **036 BUILD**（或 034 入驻后 BUILD）  
 - [ ] C2 支付宝 research 收口  
+- [ ] W3 小程序客服 research  
