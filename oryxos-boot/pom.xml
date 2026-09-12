@@ -110,6 +110,10 @@
         </dependency>
         <dependency>
             <groupId>io.oryxos</groupId>
+            <artifactId>oryxos-channel-weixin-mini</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.oryxos</groupId>
             <artifactId>oryxos-web</artifactId>
         </dependency>
         <dependency>
