@@ -169,8 +169,8 @@ public class AlipayChannelAdapter implements InboundChannelAdapter, InboundWebho
     if (!active.verify(params, charset)) {
       log.warn(
           "支付宝网关验签失败（keys={} charset={} service={}）",
-          params.keySet(),
-          charset.name(),
+          sanitize(String.join(",", params.keySet())),
+          sanitize(charset.name()),
           sanitize(params.get("service")));
       return WebhookResponse.text(HTTP_UNAUTHORIZED, "verify failed");
     }
@@ -185,8 +185,7 @@ public class AlipayChannelAdapter implements InboundChannelAdapter, InboundWebho
     String service = params.get("service");
     String msgType = asciiLower(AlipayCallbackXml.cdataOrText(bizContent, "MsgType"));
     String eventType = asciiLower(AlipayCallbackXml.cdataOrText(bizContent, "EventType"));
-    if (SERVICE_CHECK.equals(service)
-        || (MSG_EVENT.equals(msgType) && EVENT_VERIFYGW.equals(eventType))) {
+    if (isVerifygw(service, msgType, eventType)) {
       return verifygwResponse(active, charset, true);
     }
     try {
@@ -253,6 +252,13 @@ public class AlipayChannelAdapter implements InboundChannelAdapter, InboundWebho
     } catch (RuntimeException e) {
       return GATEWAY_CHARSET;
     }
+  }
+
+  private static boolean isVerifygw(String service, String msgType, String eventType) {
+    if (SERVICE_CHECK.equals(service)) {
+      return true;
+    }
+    return MSG_EVENT.equals(msgType) && EVENT_VERIFYGW.equals(eventType);
   }
 
   private static String asciiLower(String value) {

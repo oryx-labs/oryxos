@@ -2,6 +2,7 @@ package io.oryxos.channel.alipay;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.regex.Pattern;
 
 /**
  * 支付宝生活号网关 / OpenAPI：RSA2（SHA256withRSA）签名与验签。
@@ -24,6 +26,14 @@ final class AlipayRsa2 {
 
   static final String SIGN_TYPE = "RSA2";
   private static final String ALGORITHM = "SHA256withRSA";
+
+  /** DER short-form length threshold（单字节长度 &lt; 0x80）。 */
+  private static final int DER_SHORT_LEN_MAX = 0x7f;
+
+  private static final int DER_BYTE_MASK = 0xff;
+  private static final byte DER_LEN_LONG_1 = (byte) 0x81;
+  private static final byte DER_LEN_LONG_2 = (byte) 0x82;
+  private static final Pattern ANY_LINE_BREAK = Pattern.compile("\\R");
 
   private final PrivateKey privateKey;
   private final PublicKey alipayPublicKey;
@@ -91,7 +101,7 @@ final class AlipayRsa2 {
       signature.initVerify(alipayPublicKey);
       signature.update(content.getBytes(charset));
       return signature.verify(Base64.getDecoder().decode(signBase64));
-    } catch (Exception e) {
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
       return false;
     }
   }
@@ -102,7 +112,7 @@ final class AlipayRsa2 {
       signature.initSign(privateKey);
       signature.update(content.getBytes(charset));
       return Base64.getEncoder().encodeToString(signature.sign());
-    } catch (Exception e) {
+    } catch (GeneralSecurityException e) {
       throw new IllegalStateException("支付宝 RSA2 签名失败: " + e.getMessage(), e);
     }
   }
@@ -139,11 +149,11 @@ final class AlipayRsa2 {
     byte[] der = Base64.getDecoder().decode(stripKeyMaterial(material));
     try {
       return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der));
-    } catch (Exception pkcs8Fail) {
+    } catch (GeneralSecurityException pkcs8Fail) {
       try {
         return KeyFactory.getInstance("RSA")
             .generatePrivate(new PKCS8EncodedKeySpec(wrapPkcs1ToPkcs8(der)));
-      } catch (Exception pkcs1Fail) {
+      } catch (GeneralSecurityException pkcs1Fail) {
         throw new IllegalArgumentException(
             "无法解析支付宝应用私钥（需 PKCS#8 或 PKCS#1 Base64/PEM）: " + pkcs8Fail.getMessage(), pkcs8Fail);
       }
@@ -182,12 +192,15 @@ final class AlipayRsa2 {
   private static byte[] encodeTlv(int tag, byte[] value) {
     int len = value.length;
     byte[] lenBytes;
-    if (len < 0x80) {
+    if (len <= DER_SHORT_LEN_MAX) {
       lenBytes = new byte[] {(byte) len};
-    } else if (len <= 0xff) {
-      lenBytes = new byte[] {(byte) 0x81, (byte) len};
+    } else if (len <= DER_BYTE_MASK) {
+      lenBytes = new byte[] {DER_LEN_LONG_1, (byte) len};
     } else {
-      lenBytes = new byte[] {(byte) 0x82, (byte) ((len >> 8) & 0xff), (byte) (len & 0xff)};
+      lenBytes =
+          new byte[] {
+            DER_LEN_LONG_2, (byte) ((len >> 8) & DER_BYTE_MASK), (byte) (len & DER_BYTE_MASK)
+          };
     }
     byte[] out = new byte[1 + lenBytes.length + value.length];
     out[0] = (byte) tag;
@@ -200,7 +213,7 @@ final class AlipayRsa2 {
     try {
       byte[] der = Base64.getDecoder().decode(stripKeyMaterial(material));
       return KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(der));
-    } catch (Exception e) {
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
       throw new IllegalArgumentException("无法解析支付宝公钥（需 X.509 Base64/PEM）: " + e.getMessage(), e);
     }
   }
@@ -208,7 +221,7 @@ final class AlipayRsa2 {
   static String stripKeyMaterial(String material) {
     String raw = material.strip();
     StringBuilder sb = new StringBuilder(raw.length());
-    for (String line : raw.split("\\R")) {
+    for (String line : ANY_LINE_BREAK.split(raw)) {
       String t = line.strip();
       if (t.isEmpty()) {
         continue;

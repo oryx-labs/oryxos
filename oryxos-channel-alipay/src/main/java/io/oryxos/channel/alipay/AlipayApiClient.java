@@ -28,6 +28,10 @@ final class AlipayApiClient implements AlipayClient {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final int HTTP_OK_MIN = 200;
   private static final int HTTP_OK_MAX = 300;
+
+  /** 支付宝 OpenAPI 业务成功码。 */
+  private static final String SUCCESS_CODE = "10000";
+
   private static final Charset CHARSET = StandardCharsets.UTF_8;
   private static final DateTimeFormatter TS =
       DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.ofHours(8));
@@ -106,7 +110,7 @@ final class AlipayApiClient implements AlipayClient {
               ? root.get("alipay_open_public_message_custom_send_response")
               : root;
       String code = resp.path("code").asText("");
-      if (!code.isEmpty() && !"10000".equals(code)) {
+      if (!code.isEmpty() && !SUCCESS_CODE.equals(code)) {
         throw new IllegalStateException(
             "支付宝 custom.send code="
                 + code
