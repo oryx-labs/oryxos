@@ -12,7 +12,8 @@
 - [x] E1 淘宝真路径钉死（034 research）；入驻前不 BUILD  
 - [x] W2 服务号 → 036 BUILD 完成（#446）  
 - [x] C2 支付宝 → 032 research 收口；默认不 BUILD  
-- [ ] 下一刀产品确认：034 入驻 / W3 / E3  
+- [x] W3 小程序 → [037](../037-weixin-mini-channel/plan.md) research/PLAN  
+- [ ] 下一刀产品确认：037 BUILD / 034 入驻 / E3  
 
 ## BUILD 阶段（按渠道另计）
 
@@ -22,6 +23,7 @@
 | 033 微信客服 | ✅ 文本 + 媒体 |
 | 035 个微 iLink | ✅ |
 | 036 服务号 | ✅ 文本 MVP |
+| 037 小程序 | ⏸ PLAN 齐，等 BUILD 授权 |
 | 034 淘宝 | ⏸ 等入驻 |
 | 032 支付宝 | ⏸ 默认不 BUILD |
 
