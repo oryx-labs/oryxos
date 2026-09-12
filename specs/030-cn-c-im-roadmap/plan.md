@@ -197,4 +197,3 @@ OryxOS 已覆盖的与本表边界：
 - [x] W3 小程序 research + PLAN（037）  
 - [ ] 确认是否授权 **037 BUILD**（或 034 入驻后 BUILD）  
 - [ ] E3 拼多多 research（可选）  
-- [ ] W3 小程序客服 research  
