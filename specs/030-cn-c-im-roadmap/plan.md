@@ -157,9 +157,10 @@ OryxOS 已覆盖的与本表边界：
 | P1 | **W1 微信客服** | ✅ [033](../033-weixin-kf-channel/acceptance.md) 已合入（含媒体 follow-up） |
 | P1 | **E1 淘宝/天猫** | 🔶 [034 research](../034-taobao-im-channel/research.md) **路径已钉死**；BUILD 等 `cloudAppId`/入驻 |
 | P2 | W2 服务号客服 | ✅ [036](../036-weixin-mp-channel/acceptance.md) 已合入 |
-| P2 | W3 小程序客服 | ✅ BUILD 已开工：[037](../037-weixin-mini-channel/acceptance.md)（`oryxos-channel-weixin-mini`） |
+| P2 | W3 小程序客服 | ✅ [037](../037-weixin-mini-channel/acceptance.md) 已合入（#449） |
 | P2 | C2 支付宝 | 🔶/⏸ [032 research](../032-alipay-im-channel/research.md) 已收口；默认不 BUILD |
-| P3 | 拼多多 / 京东 / 快手 | 未开 |
+| P3 | E3 拼多多 | 🔍→🔶 [038 research](../038-pdd-im-channel/research.md) — 等控制台钉 API |
+| P3 | 京东 / 快手 | 未开 |
 | P4 | 外卖订单 vs 客服 IM | 边界已写；不排渠道 BUILD |
 
 ---
