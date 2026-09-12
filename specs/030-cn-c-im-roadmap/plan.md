@@ -71,7 +71,7 @@ OryxOS 已覆盖的与本表边界：
   微信小店自研客服                                 🔶 商家自研；ISV 受限
 
 【经营触达 · 电商店铺客服】  ← 企业刚需
-  淘宝 / 天猫（奇门客服语料 + chatroobot.async）     🔶 路径钉死；BUILD 等 cloudAppId
+  淘宝 / 天猫（奇门客服语料 + chatrobot.async）      🔶 路径钉死；BUILD 等 cloudAppId
   京东咚咚                                         🔍 宙斯权限申请制
   拼多多商家客服                                   🔶 开放平台回调常见；须官方文档钉死
   抖音电商客服                                     🔶 可与抖音 IM / 小程序客服合流评估
