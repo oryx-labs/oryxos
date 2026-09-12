@@ -88,7 +88,7 @@ OryxOS 已覆盖的与本表边界：
 |----|------|------------|--------|------|----------|
 | C0 | QQ | Bot Gateway | ✅ | 已实现 | 维护 |
 | C1 | 抖音 | Webhook + `/im/send/msg/` | ✅/⏸ | 代码有；企业号资质 | 真机清单 |
-| C2 | 支付宝 | 生活号网关 + `alipay.open.public.message.custom.send`（48h） | 🔶/⏸ | 路径钉死见 [032](../032-alipay-im-channel/research.md)；生活号+ 新号消息能力受限 | **默认不 BUILD**；有旧号/现网能力再授权 |
+| C2 | 支付宝 | 生活号网关 + `alipay.open.public.message.custom.send`（48h） | 🔨 | 见 [032](../032-alipay-im-channel/research.md)；真机依赖账号消息能力 | **BUILD 中**；备齐密钥即可挂网关实测 |
 | C3 | 快手 | 小程序客服工作台 + 部分消息推送 | 🔍 | 订阅消息 ≠ IM；自研收发 API 未钉死 | research |
 | C4 | B 站 | 开放能力偏内容 | 🔍 | 私信 Bot 面不明 | research → 可能 Later |
 | C5 | 小红书 | 第三方 Bot 历史上最紧 | 🔍/❌ | 写不出稳定官方面则 Won’t | research |

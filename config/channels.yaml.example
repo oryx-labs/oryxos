@@ -165,3 +165,15 @@ channels:
   #     token: ${WEIXIN_MINI_TOKEN}
   #     encoding_aes_key: ${WEIXIN_MINI_AES_KEY}
   #   enabled: true
+
+  # 支付宝生活号客服（应用网关 + custom.send，见 docs/AlipayChannelSetup.md）
+  # 回调：POST /api/v1/channels/inbound/ops-alipay
+  # - name: ops-alipay
+  #   type: alipay
+  #   app_id: ${ALIPAY_APP_ID}
+  #   app_secret: ${ALIPAY_APP_PRIVATE_KEY}   # PKCS#8 应用私钥
+  #   agent: demo-agent
+  #   extra:
+  #     alipay_public_key: ${ALIPAY_PUBLIC_KEY}
+  #     app_public_key: ${ALIPAY_APP_PUBLIC_KEY}  # verifygw 回执
+  #   enabled: true

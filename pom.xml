@@ -87,6 +87,7 @@
         <module>oryxos-channel-weixin-kf</module>
         <module>oryxos-channel-weixin-mp</module>
         <module>oryxos-channel-weixin-mini</module>
+        <module>oryxos-channel-alipay</module>
         <module>oryxos-web</module>
         <module>oryxos-storage</module>
         <module>oryxos-cli</module>
@@ -223,6 +224,11 @@
             <dependency>
                 <groupId>io.oryxos</groupId>
                 <artifactId>oryxos-channel-weixin-mini</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.oryxos</groupId>
+                <artifactId>oryxos-channel-alipay</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
