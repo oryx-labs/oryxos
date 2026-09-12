@@ -153,3 +153,15 @@ channels:
   #     token: ${WEIXIN_MP_TOKEN}
   #     encoding_aes_key: ${WEIXIN_MP_AES_KEY}
   #   enabled: true
+
+  # 微信小程序客服（消息推送 + custom/send，见 docs/WeixinMiniChannelSetup.md）
+  # 回调：GET/POST /api/v1/channels/inbound/ops-weixin-mini
+  # - name: ops-weixin-mini
+  #   type: weixin_mini
+  #   app_id: ${WEIXIN_MINI_APP_ID}
+  #   app_secret: ${WEIXIN_MINI_APP_SECRET}
+  #   agent: demo-agent
+  #   extra:
+  #     token: ${WEIXIN_MINI_TOKEN}
+  #     encoding_aes_key: ${WEIXIN_MINI_AES_KEY}
+  #   enabled: true

@@ -2,7 +2,7 @@
 
 **Branch（BUILD 时）**: `feat/037-weixin-mini-channel`  
 **Date**: 2026-09-12  
-**Status**: RESEARCH/PLAN — **BUILD 待确认**  
+**Status**: BUILD 已开工（模块/单测/Setup/Runtime 已落；真机待验）  
 **对照**: [research](./research.md)、[030](../030-cn-c-im-roadmap/plan.md)、[036](../036-weixin-mp-channel/plan.md)、[017 契约](../017-feishu-im-channel/contracts/inbound-channel-contract.md)
 
 ## Summary
@@ -37,6 +37,6 @@
 
 ## 验收（BUILD 后）
 
-- [ ] 单测绿  
-- [ ] Setup 可跟做  
+- [x] 单测绿  
+- [x] Setup 可跟做  
 - [ ] 真机：小程序客服会话发文本 ↔ Agent 回复  

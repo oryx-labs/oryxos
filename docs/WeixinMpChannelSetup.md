@@ -46,10 +46,11 @@
 | type | 场景 |
 |------|------|
 | `weixin_mp`（本渠道） | 认证服务号粉丝会话 |
+| `weixin_mini` | 小程序内客服会话（见 `WeixinMiniChannelSetup.md`） |
 | `weixin_kf` | 企业对客微信客服（企微 `kf/*`） |
 | `wecom` | 企微应用内机器人 |
 | `weixin` | 个人微信 iLink Bot |
 
 ## MVP 非目标
 
-小程序客服（W3）、媒体消息、模板/群发、多客服人工台。
+媒体消息、模板/群发、多客服人工台。

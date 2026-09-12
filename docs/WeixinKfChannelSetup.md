@@ -49,6 +49,7 @@
 |------|------|
 | `weixin_kf`（本渠道） | 企业对客微信客服 |
 | `weixin_mp` | 认证服务号粉丝会话（见 `WeixinMpChannelSetup.md`） |
+| `weixin_mini` | 小程序内客服会话（见 `WeixinMiniChannelSetup.md`） |
 | `wecom` | 企微应用内机器人 |
 | `weixin` | 个人微信 iLink Bot |
 
