@@ -2,7 +2,7 @@
 
 **Branch（BUILD 时）**: `feat/036-weixin-mp-channel`  
 **Date**: 2026-09-12  
-**Status**: RESEARCH/PLAN — **BUILD 待确认**  
+**Status**: BUILD（文本 MVP 已合入；真机待认证服务号）  
 **对照**: [research](./research.md)、[030](../030-cn-c-im-roadmap/plan.md)、[017 契约](../017-feishu-im-channel/contracts/inbound-channel-contract.md)
 
 ## Summary

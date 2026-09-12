@@ -1,7 +1,7 @@
 # Research: 036 微信服务号客服消息（W2）
 
 **Date**: 2026-09-12  
-**Status**: READY（路径已钉死；**BUILD 待你确认**）  
+**Status**: BUILD（036 文本 MVP 编码中/已合入）  
 **对照**: [plan](./plan.md)、[030](../030-cn-c-im-roadmap/plan.md)、[033 微信客服](../033-weixin-kf-channel/research.md)、[035 iLink](../035-weixin-ilink-channel/plan.md)
 
 ## 产品面澄清（禁止混接）
@@ -119,7 +119,7 @@ extra:
 - [x] 出站：`message/custom/send` + 额度表  
 - [x] 与 033/035/wecom 边界写清  
 - [x] 资质：认证服务号（企业主体）  
-- [ ] 你确认可以 BUILD  
+- [x] 你确认可以 BUILD  
 - [ ] 有测试号或认证号可真机（可后置）
 
 ## 当前结论

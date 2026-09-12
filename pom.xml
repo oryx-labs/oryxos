@@ -85,6 +85,7 @@
         <module>oryxos-channel-douyin</module>
         <module>oryxos-channel-weixin</module>
         <module>oryxos-channel-weixin-kf</module>
+        <module>oryxos-channel-weixin-mp</module>
         <module>oryxos-web</module>
         <module>oryxos-storage</module>
         <module>oryxos-cli</module>
@@ -211,6 +212,11 @@
             <dependency>
                 <groupId>io.oryxos</groupId>
                 <artifactId>oryxos-channel-weixin-kf</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.oryxos</groupId>
+                <artifactId>oryxos-channel-weixin-mp</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
