@@ -194,10 +194,60 @@ class WeixinKfChannelAdapterTest {
     assertTrue(out.get(0).messageId().contains("m2"));
   }
 
+  @Test
+  @DisplayName("图片回调：beginSlowWork + 下载后 onClaimedMessage(latch)")
+  void imageCallbackUsesSlowWork() throws Exception {
+    ObjectNode item = MAPPER.createObjectNode();
+    item.put("msgid", "img-1");
+    item.put("open_kfid", OPEN_KFID);
+    item.put("external_userid", "wu1");
+    item.put("origin", 3);
+    item.put("msgtype", "image");
+    item.putObject("image").put("media_id", "MEDIA_IMG");
+    client.messages = List.of(item);
+
+    String eventXml =
+        "<xml><ToUserName><![CDATA["
+            + CORP_ID
+            + "]]></ToUserName>"
+            + "<CreateTime>1348831860</CreateTime>"
+            + "<MsgType><![CDATA[event]]></MsgType>"
+            + "<Event><![CDATA[kf_msg_or_event]]></Event>"
+            + "<Token><![CDATA[ENC_TOKEN]]></Token>"
+            + "<OpenKfId><![CDATA["
+            + OPEN_KFID
+            + "]]></OpenKfId></xml>";
+    String cipher = crypt.encrypt(eventXml);
+    String ts = "1409659813";
+    String nonce = "1372623149";
+    String sig = crypt.signature(ts, nonce, cipher);
+    String body = "<xml><Encrypt><![CDATA[" + cipher + "]]></Encrypt></xml>";
+    when(inbound.tryClaim(any(), any())).thenReturn(true);
+    when(inbound.beginSlowWork(any(), any(), any()))
+        .thenReturn(new java.util.concurrent.CountDownLatch(1));
+    WebhookResponse response =
+        adapter.onWebhook(
+            new WebhookRequest(
+                "POST",
+                Map.of(
+                    "msg_signature", sig,
+                    "timestamp", ts,
+                    "nonce", nonce),
+                Map.of(),
+                body));
+    assertEquals(200, response.status());
+    verify(inbound).beginSlowWork(any(), any(), any());
+    verify(inbound)
+        .onClaimedMessage(
+            any(InboundMessage.class), any(), any(java.util.concurrent.CountDownLatch.class));
+    assertEquals(1, client.downloadCalls.get());
+  }
+
   private static final class FakeClient implements WeixinKfClient {
     List<com.fasterxml.jackson.databind.JsonNode> messages = List.of();
     final AtomicInteger ensureCalls = new AtomicInteger();
     final AtomicInteger sendCalls = new AtomicInteger();
+    final AtomicInteger downloadCalls = new AtomicInteger();
 
     @Override
     public WeixinKfSyncResult syncMsg(String openKfid, String callbackToken, String cursor) {
@@ -216,7 +266,9 @@ class WeixinKfChannelAdapterTest {
 
     @Override
     public WeixinKfMediaBlob downloadMedia(String mediaId) {
-      return new WeixinKfMediaBlob(new byte[] {1, 2, 3}, "image/jpeg", "a.jpg");
+      downloadCalls.incrementAndGet();
+      return new WeixinKfMediaBlob(
+          new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF}, "image/jpeg", "a.jpg");
     }
   }
 }

@@ -36,7 +36,8 @@
 | 步骤 | 说明 |
 |------|------|
 | 入站 | 回调 `kf_msg_or_event` → `kf/sync_msg` 拉消息（文本 + 图/文件/语音/视频）；语音 `voice_format=0`（AMR，便于本机 ffmpeg→Whisper） |
-| 媒体 | `media_id` → `GET /cgi-bin/media/get` 落盘；先回「处理中」，再编排（Vision / `read_file` / Whisper） |
+| sync 游标 | 持久化 `.oryxos/weixin-kf-sync-cursor-{name}.txt`。**启动时排空积压**（推进 cursor、不进 Agent）。进程宕机期间到达的消息会因此丢弃——刻意取舍，防止历史 HI/图回放刷屏并撞每回合 5 条上限 |
+| 媒体 | `media_id` → `GET /cgi-bin/media/get` 落盘；先回「处理中」，再编排（Vision / `read_file` / Whisper）。sync 拉批与 cursor 更新在锁内，下载/编排放锁外，避免大文件拖住其它回调 |
 | 会话 | 私聊连续记忆（与其它 IM 一致）；`/new` 仅可选手动清空 |
 | 会话态 | 尽量转到「智能助手接待」后再编排/发信；`service_state` 无权限（48002）时跳过仍尝试 `send_msg` |
 | 出站 | `kf/send_msg` 文本；**48h / 每回合最多 5 条**，窗外硬拒绝 |
