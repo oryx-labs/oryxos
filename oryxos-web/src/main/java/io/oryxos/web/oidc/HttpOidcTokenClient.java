@@ -37,6 +37,7 @@ public class HttpOidcTokenClient implements OidcTokenClient {
 
   /** Inclusive lower bound for successful HTTP status codes (2xx). */
   private static final int HTTP_OK_MIN = 200;
+
   /** Exclusive upper bound for successful HTTP status codes (2xx). */
   private static final int HTTP_OK_MAX_EXCLUSIVE = 300;
 
