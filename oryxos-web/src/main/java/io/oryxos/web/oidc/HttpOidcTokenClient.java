@@ -35,6 +35,11 @@ public class HttpOidcTokenClient implements OidcTokenClient {
 
   private static final Logger LOG = LoggerFactory.getLogger(HttpOidcTokenClient.class);
 
+  /** Inclusive lower bound for successful HTTP status codes (2xx). */
+  private static final int HTTP_OK_MIN = 200;
+  /** Exclusive upper bound for successful HTTP status codes (2xx). */
+  private static final int HTTP_OK_MAX_EXCLUSIVE = 300;
+
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
 
@@ -109,7 +114,7 @@ public class HttpOidcTokenClient implements OidcTokenClient {
             .header("Accept", "application/json")
             .build();
     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+    if (response.statusCode() < HTTP_OK_MIN || response.statusCode() >= HTTP_OK_MAX_EXCLUSIVE) {
       throw new OidcTokenException("OIDC discovery HTTP " + response.statusCode());
     }
     JsonNode root = objectMapper.readTree(response.body());
@@ -143,7 +148,7 @@ public class HttpOidcTokenClient implements OidcTokenClient {
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
     HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-    if (response.statusCode() < 200 || response.statusCode() >= 300) {
+    if (response.statusCode() < HTTP_OK_MIN || response.statusCode() >= HTTP_OK_MAX_EXCLUSIVE) {
       throw new OidcTokenException("OIDC token endpoint HTTP " + response.statusCode());
     }
     JsonNode root = objectMapper.readTree(response.body());
