@@ -184,14 +184,15 @@ oryxos:
   # VIEWER（读工作区/审计），按 VIEWER ⊂ EDITOR ⊂ ADMIN 三档逐级放行。
   # 注意三开关的关系：认证门（auth / apikey）不开时没有任何主体产出，授权会被短路为「放行但无主体」
   # ——授权要有对象，先开认证。另：API Key 主体即使给 ADMIN 也不得管理成员与治理策略（保守上限）。
-  # roles 两个默认值是「角色落库尚未启用」阶段的过渡入口；
-  # default-user-roles 默认 ADMIN 是防单机部署自锁，多人企业部署请显式调低为 VIEWER 或 EDITOR。
+  # roles 默认档：角色已落库后 default-user-roles / default-api-key-roles 均默认空（无角色即拒绝）。
+  # 启用 rbac 时 RbacStartupCheck 会 fail-closed：必须开 apikey，且库中至少一个 ADMIN
+  # （oryxos user role <name> ADMIN）；auth 关仅 WARN。勿依赖空默认档「偷偷」给权限。
   # web:
   #   rbac:
   #     enabled: true
   #     deny-anonymous: true
   #     roles:
-  #       default-user-roles: [ADMIN]      # 可选 VIEWER / EDITOR / ADMIN
+  #       default-user-roles: []           # 空=拒绝；可选显式 [VIEWER]/[EDITOR]/[ADMIN]
   #       default-api-key-roles: []        # 默认空 = 机器凭证不默认授权
   # SSE 流式响应（019-sse-streaming）。消息端点带 Accept: text/event-stream 即流式返回，
   # 无需开关；heartbeat-seconds 为静默期心跳间隔（SSE 注释行，防代理空闲断连），默认 15。

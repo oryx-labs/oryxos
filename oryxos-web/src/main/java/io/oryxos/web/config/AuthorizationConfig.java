@@ -18,9 +18,9 @@ import org.springframework.context.annotation.Configuration;
  * <p>为什么默认必须是 {@link AuthorizationService#ALLOW_ALL}：未启用授权时行为要与引入本层之前逐字节一致 （018 SC-001）。把它做成 Bean
  * 而不是在各调用点判 flag，是为了让「有没有授权层」只有一个事实来源—— 调用点只调 {@code decide}，不需要知道开关状态，也就不可能某个调用点漏判。
  *
- * <p>关于「本切还没有角色存储」：{@link io.oryxos.core.auth.Principal} 可以自带角色，但 039 第一刀不含角色落库 （那是
- * register/成员管理的一部分）。因此启用授权时，未自带角色的主体回落到这里的配置默认值：管理台账号默认 {@code
- * oryxos.web.rbac.default-user-roles}，API Key 默认<b>空</b>（即拒绝）——机器凭证不给默认权限， 需要时显式授予。
+ * <p>启用授权时，未自带角色的主体回落到 {@link RoleMappingProperties} 配置默认值：管理台账号与 API Key 的 {@code default-*-roles}
+ * 均默认<b>空</b>（无角色即拒绝）。角色已落库后靠账号自身 roles + {@link io.oryxos.web.security.RbacStartupCheck} 保证至少一个
+ * ADMIN，避免治理面锁死。
  */
 @Configuration
 @EnableConfigurationProperties({WebRbacProperties.class, RoleMappingProperties.class})

@@ -30,7 +30,7 @@
 
 - `VIEWER ⊆ EDITOR ⊆ ADMIN` 逐级包含；实现用 `EnumSet` 叠加，避免「给 EDITOR 加了能力却忘给 ADMIN」的矩阵漂移。
 - **API Key 主体能力上限**：即使被授予 `ADMIN`，`MANAGE_MEMBERS` 与 `MANAGE_POLICIES` 也不放行——不让一把可复制的长期机器凭证去改治理规则本身（含「给攻击者自己发权限」这条路径）。
-- 主体未携带角色时按配置默认档兜底：`oryxos.web.rbac.roles.default-user-roles` 默认 `ADMIN`（**过渡值**：角色尚未落库时防单机部署自锁；落库后应收紧为空），`oryxos.web.rbac.roles.default-api-key-roles` 默认**空**（机器凭证不默认授权）。
+- 主体未携带角色时按配置默认档兜底：`oryxos.web.rbac.roles.default-user-roles` 默认 `[]`（**phase3 tighten**：角色已落库后空默认档，无角色即拒绝；靠 `RbacStartupCheck` 防无 ADMIN 锁死），`oryxos.web.rbac.roles.default-api-key-roles` 默认**空**（机器凭证不默认授权）。
 
 ## 3. 配置契约
 
@@ -41,7 +41,7 @@ oryxos:
       enabled: false                   # 默认关：零行为变化（FR-005，宪法级约束）
       deny-anonymous: true             # 授权启用时匿名主体默认拒绝
       roles:                           # 独立前缀：与 rbac.* 同前缀会在启动时绑定冲突
-        default-user-roles: [ADMIN]    # 过渡入口（角色未落库）；落库后应收紧为空
+        default-user-roles: []         # phase3：空默认档（无角色即拒绝）；防锁死靠 RbacStartupCheck
         default-api-key-roles: []      # 默认空 = 机器凭证不默认授权（放行需显式授予，如 [EDITOR]）
 ```
 
