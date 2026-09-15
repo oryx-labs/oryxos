@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-15
 
-**Status**: Draft（3 项待澄清，等维护者拍板）
+**Status**: Ready for planning（3 项澄清已拍板：C1-A / C2-A / C3-C，见 Clarifications）
 
 **Input**: Issue #461（epic #454「企业控制面」子项）：支持标准 OIDC 登录，建立外部 subject 到 OryxOS 用户、团队的映射。验收：授权码 + PKCE；未授权身份不能访问受保护 API/管理台；登录、登出、身份映射留审计记录。
 
@@ -38,14 +38,14 @@ IdP 认证通过后，OryxOS 依据 ID Token 的 subject（及可配置的 claim
 
 **Why this priority**: 没有映射，登录只是「进了门却没有身份」；这是与 #462 骨架的衔接点，与 US1 同为 P1。
 
-**Independent Test**: 配置 claim→role 映射后，不同 IdP 用户登录分别获得对应角色；越权访问被 RBAC 拒绝并落 authz 审计；映射规则改动后按 [C3 待澄清的角色权威口径] 生效。
+**Independent Test**: 配置 claim→role 映射后，不同 IdP 用户登录分别获得对应角色；越权访问被 RBAC 拒绝并落 authz 审计；映射规则改动后按条件权威口径（配置了映射规则→每登刷新；未配置→本地权威）生效。
 
 **Acceptance Scenarios**:
 
 1. **Given** IdP 用户携带映射规则命中的 claim，**When** 登录成功，**Then** 会话主体的角色为映射结果，受保护操作按 #462 矩阵放行/拒绝
 2. **Given** 同一 IdP subject 第 N 次登录，**When** 映射执行，**Then** 恒定对应同一 OryxOS 用户标识（审计可跨登录关联）
-3. **Given** [C1 待澄清] IdP 认证通过但 OryxOS 侧无对应用户，**When** 回调处理，**Then** 按拍板结果执行（自动供给 / 拒绝并指引）
-4. **Given** claim 不命中任何映射规则，**When** 登录，**Then** 按最小权限兜底（获得配置的默认角色或被拒，随 C1/C3 拍板联动）
+3. **Given** IdP 认证通过但 OryxOS 侧无对应用户，**When** 回调处理，**Then** 自动供给（JIT）：以 `iss+sub` 为锚建立用户，角色取 claim 映射命中结果，未命中给配置的默认供给角色（缺省 VIEWER），并落 mapping 审计事件
+4. **Given** claim 不命中任何映射规则，**When** 登录，**Then** 按最小权限兜底：首登获得默认供给角色；已有用户保留本地角色（条件权威，见 Clarifications C3）
 
 ---
 
@@ -67,13 +67,13 @@ IdP 认证通过后，OryxOS 依据 ID Token 的 subject（及可配置的 claim
 
 ### Edge Cases
 
-- **IdP 不可达/宕机**：登录入口给出可读错误；已建会话不受影响；[C2 拍板的兜底通道] 保证管理员不被锁死
+- **IdP 不可达/宕机**：登录入口给出可读错误；已建会话不受影响；本地账密登录并存（C2-A）保证管理员不被锁死
 - **回调重放**：授权码一次性 + state 单次消费，重放拒绝并审计
 - **时钟偏移**：ID Token 时间类校验允许小偏移窗口（配置化，默认 60s）
 - **会话时长**：OryxOS 会话时长独立配置（默认沿既有会话口径），不追随 IdP token 过期时间逐秒同步；IdP 侧撤权在会话到期后生效（本刀不做 back-channel logout / 会话即时吊销，见「不做」）
 - **多副本**：登录回调可落任一副本——state/nonce 与会话的存储必须多副本可用（026/027 共享事实源纪律）；单机档零配置不变
 - **HTTPS**：回调地址生产环境要求 https（反向代理终止 TLS 的 forward-headers 既有机制适用）；本地开发允许 http 回环
-- **邮箱/subject 变更**：映射锚点用 IdP `sub`（稳定标识），不用 email（可变）；email 仅作展示与辅助匹配 [与 C1 联动]
+- **邮箱/subject 变更**：映射锚点用 IdP `sub`（稳定标识），不用 email（可变）；email 仅作展示与辅助匹配，不参与 JIT 供给的身份判定
 - **开启 OIDC 但配置残缺**：启动即拒并点名缺失项（沿 ProviderStartupCheck/RbacStartupCheck 惯例）
 
 ## Requirements *(mandatory)*
@@ -83,13 +83,14 @@ IdP 认证通过后，OryxOS 依据 ID Token 的 subject（及可配置的 claim
 - **FR-001**: 系统 MUST 支持标准 OIDC 授权码 + PKCE 流程（S256）：经 Discovery（`/.well-known/openid-configuration`）获取端点，state + nonce 双校验，ID Token 签名经 IdP JWKS 验证；不实现隐式流/密码流
 - **FR-002**: OIDC MUST 为可选配置（默认关=现状零变化）；开启时配置残缺启动即拒并指明缺失项
 - **FR-003**: 登录成功 MUST 产出与本地登录同构的管理台会话（复用既有落库会话形态）；会话主体为 #462 的 `Principal`，且系统 MUST 能区分该身份来自 OIDC（区分形态——扩展 kind 或来源标记——留 plan）；后续授权判定与本地账号无差别路径
-- **FR-004**: 身份映射 MUST 以 IdP `sub` 为稳定锚点（同 subject 恒映射同一 OryxOS 用户）；MUST 支持「claim 值 → OryxOS 角色」映射规则配置；无命中时按最小权限兜底 [细则随 C1/C3 拍板]
+- **FR-004**: 身份映射 MUST 以 IdP `iss+sub` 为稳定锚点（同 subject 恒映射同一 OryxOS 用户）；MUST 支持「claim 值 → OryxOS 角色」映射规则配置；角色权威为**条件权威**（C3-C）——配置了映射规则时每次登录按 claim 结果刷新角色（IdP 权威），未配置映射规则时保留本地角色（本地权威，`oryxos user role` 等本地赋权继续有效）
+- **FR-012**: OIDC 认证通过但无对应用户时 MUST 自动供给（JIT，C1-A）：首登以 `iss+sub` 建立用户，角色取 claim 映射命中结果，未命中给可配置的默认供给角色（缺省 VIEWER）；供给事件落审计。OIDC 开启而 RBAC 关闭的组合 MUST 在启动时 WARN 点名「任何 IdP 用户登录后即获全功能」
 - **FR-005**: 未认证或映射失败的身份 MUST NOT 获得任何受保护面访问；错误提示 MUST NOT 泄露 IdP 交互细节与令牌内容
 - **FR-006**: 登出 MUST 即刻失效 OryxOS 会话；IdP 端 RP-Initiated Logout 为可选配置
 - **FR-007**: 登录成功/失败/登出/映射变化 MUST 落审计事件（含外部 subject、映射用户、角色、来源、失败分类），写入失败不阻断主链路
 - **FR-008**: state/nonce 及回调所需临时状态 MUST 多副本可用（任一副本可处理回调）；单机档零新增运维件
 - **FR-009**: ID Token / access token MUST NOT 落日志与审计明文；JWKS 缓存 MUST 有刷新与 kid 轮换容错
-- **FR-010**: 与既有认证的共存关系按 [C2 拍板] 执行；API Key 面（REST 机器调用）不受本刀影响
+- **FR-010**: OIDC 与本地账密 Basic Auth MUST 并存（C2-A）：OIDC 开启不禁用、不隐藏本地登录，登录页同时提供两个入口，两类会话同构不可区分地接受授权判定；API Key 面（REST 机器调用）不受本刀影响
 - **FR-011**: 管理台前端 MUST 提供企业登录入口（IdP 配置存在时显示），登录/登出交互与既有页面体系一致
 
 ### Key Entities *(include if feature involves data)*
@@ -120,10 +121,10 @@ IdP 认证通过后，OryxOS 依据 ID Token 的 subject（及可配置的 claim
 - **不引入 Spring Security / spring-boot-starter-oauth2-client**：沿两扇自研 Filter 体系与宪法边界；OIDC 协议实现按 plan 阶段选型（标准 JOSE 库做签名验证是允许的管道复用）
 - **不做**：SAML、SCIM 用户同步、back-channel logout/会话即时吊销、多 IdP 并存（首刀单 IdP）、IdP 发起的登录（IdP-initiated）、记住我/长会话
 
-## 待澄清（3 项，等维护者拍板后进 plan）
+## Clarifications
 
-> 集中列在此处；每项的候选与影响见交付说明。拍板后本节内容并入 FR/Assumptions 并删除本节。
+### Session 2026-09-15（维护者拍板）
 
-- **C1 未映射用户的处置**（关联 US2 场景 3/4、FR-004）
-- **C2 与 Basic Auth 的共存关系**（关联 FR-010、Edge「IdP 宕机锁死」）
-- **C3 角色的权威来源**（关联 US2、FR-004、#462 衔接语义）
+- **C1 未映射用户的处置** → **A：JIT 自动供给**。首登以 `iss+sub` 锚点自动建用户，角色取 claim 映射命中结果，未命中给可配置默认供给角色（缺省 VIEWER）；风险缓释=默认最低角色 + 「OIDC 开 + RBAC 关」启动 WARN；可选 claim 准入过滤留 plan 裁量。（并入 FR-012、US2 场景 3）
+- **C2 与 Basic Auth 的共存关系** → **A：并存**。本地账密与企业登录同页双入口，两类会话同构；决定性理由是 IdP 宕机/配置损坏时管理员不被锁死，且与 RbacStartupCheck「须有本地 ADMIN」零冲突；break-glass 收紧开关留后续按需叠加。（并入 FR-010）
+- **C3 角色的权威来源** → **C：条件权威**。配置了 claim 映射规则→每次登录刷新（IdP 权威，撤组即撤权）；未配置→保留本地角色（本地权威，与 #462 机制零摩擦）。语义以文档行为表显式说明。（并入 FR-004、US2 场景 4）

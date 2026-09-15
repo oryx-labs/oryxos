@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain（**3 项集中待拍板：C1 未映射用户处置 / C2 与 Basic Auth 共存 / C3 角色权威来源**）
+- [x] No [NEEDS CLARIFICATION] markers remain（3 项已拍板：C1-A JIT 供给 / C2-A 并存 / C3-C 条件权威，2026-09-15，见 spec Clarifications）
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
