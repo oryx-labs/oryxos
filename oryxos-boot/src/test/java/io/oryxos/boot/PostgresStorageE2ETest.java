@@ -188,9 +188,8 @@ class PostgresStorageE2ETest {
   }
 
   /**
-   * postgresql 目录现为 V1 基线 + V6 Run 工作台 + V7 协调面（026）+ V8 文件面（027）+ V9 Web 用户角色（039）
-   * + V10 OIDC identity（040）；空库无 baseline
-   * 行——恰 6 条成功记录。
+   * postgresql 目录现为 V1 基线 + V6 Run 工作台 + V7 协调面（026）+ V8 文件面（027）+ V9 Web 用户角色（039）+ V10 OIDC
+   * identity（040）；空库无 baseline 行——恰 6 条成功记录。
    */
   private static void assertFlywayHistoryHealthy() throws Exception {
     try (Connection connection = postgres.getPostgresDatabase().getConnection();
