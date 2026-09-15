@@ -109,7 +109,7 @@ public class OidcAuthService {
     try {
       claims = tokenClient.exchangeAndValidate(code, pending.get().codeVerifier(), properties);
     } catch (RuntimeException ex) {
-      LOG.warn("OIDC token 路径失败：{}", ex.toString());
+      LOG.warn("OIDC token 路径失败：{}", ex.toString().replace('\r', '_').replace('\n', '_'));
       fail("token_exchange_or_validation_failed", null);
       return OidcLoginResult.failure("OIDC token exchange or validation failed");
     }
@@ -128,7 +128,7 @@ public class OidcAuthService {
       authEventRecorder.recordOrThrow(
           AuthEventType.LOGIN_SUCCESS, username, "oidc issuer=" + claims.issuer());
     } catch (RuntimeException ex) {
-      LOG.error("LOGIN_SUCCESS 审计失败，拒绝建 session：{}", ex.toString());
+      LOG.error("LOGIN_SUCCESS 审计失败，拒绝建 session：{}", ex.toString().replace('\r', '_').replace('\n', '_'));
       return OidcLoginResult.failure("auth audit failed");
     }
     WebSession session = sessionService.create(username);
@@ -185,6 +185,9 @@ public class OidcAuthService {
       return success;
     }
 
+    @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+        value = "EI_EXPOSE_REP",
+        justification = "Intentional handoff of newly created WebSession to Controller for cookie write.")
     public WebSession getSession() {
       return session;
     }
