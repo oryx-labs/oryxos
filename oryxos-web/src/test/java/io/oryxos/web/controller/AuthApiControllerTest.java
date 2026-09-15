@@ -12,12 +12,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.oryxos.storage.AuthEventRecorder;
+import io.oryxos.storage.OidcIdentityRepository;
 import io.oryxos.storage.WebSession;
 import io.oryxos.storage.WebSessionService;
 import io.oryxos.storage.WebUserService;
 import io.oryxos.web.GlobalExceptionHandler;
 import io.oryxos.web.config.WebAuthProperties;
+import io.oryxos.web.config.WebOidcProperties;
 import io.oryxos.web.security.LoginAttemptService;
+import io.oryxos.web.security.oidc.OidcClient;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,11 +49,22 @@ class AuthApiControllerTest {
     properties = new WebAuthProperties();
     properties.setEnabled(true);
     mvc =
-        MockMvcBuilders.standaloneSetup(
-                new AuthApiController(
-                    userService, sessionService, properties, new LoginAttemptService()))
+        MockMvcBuilders.standaloneSetup(newController(new LoginAttemptService()))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
+  }
+
+  /** 040 后构造参数增多：OIDC 相关协作对象在本 harness 全部走关闭档/mock（默认关零行为变化）。 */
+  private AuthApiController newController(LoginAttemptService attempts) {
+    return new AuthApiController(
+        userService,
+        sessionService,
+        properties,
+        attempts,
+        new WebOidcProperties(),
+        mock(OidcClient.class),
+        mock(OidcIdentityRepository.class),
+        mock(AuthEventRecorder.class));
   }
 
   @Test
@@ -140,9 +155,7 @@ class AuthApiControllerTest {
     when(sessionService.create("admin")).thenReturn(newSession("admin", "sid-123"));
     // 镜像 server.forward-headers-strategy=framework 的装配：该策略就是注册 ForwardedHeaderFilter
     MockMvc proxiedMvc =
-        MockMvcBuilders.standaloneSetup(
-                new AuthApiController(
-                    userService, sessionService, properties, new LoginAttemptService()))
+        MockMvcBuilders.standaloneSetup(newController(new LoginAttemptService()))
             .addFilters(new org.springframework.web.filter.ForwardedHeaderFilter())
             .build();
 
@@ -241,8 +254,7 @@ class AuthApiControllerTest {
     when(userService.verify("admin", "wrong")).thenReturn(false);
     LoginAttemptService attempts = new LoginAttemptService();
     MockMvc proxiedMvc =
-        MockMvcBuilders.standaloneSetup(
-                new AuthApiController(userService, sessionService, properties, attempts))
+        MockMvcBuilders.standaloneSetup(newController(attempts))
             .addFilters(new org.springframework.web.filter.ForwardedHeaderFilter())
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();

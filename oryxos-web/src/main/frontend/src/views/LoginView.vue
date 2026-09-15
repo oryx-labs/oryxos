@@ -9,6 +9,19 @@ const busy = ref(false)
 const error = ref(null)
 const showPassword = ref(false)
 const userInput = ref(null)
+const oidcEnabled = ref(false)
+
+// OIDC 回调失败分类 → 可读提示（分类枚举是对外错误的全部信息量，见 040 contracts）
+const OIDC_ERROR_MESSAGES = {
+  idp_unreachable: '无法连接企业身份服务，请稍后重试或使用本地账号登录',
+  idp_error: '企业身份服务返回错误，登录未完成',
+  invalid_state: '登录请求已失效，请重新发起企业登录',
+  token_exchange_failed: '与企业身份服务交换凭证失败，请重试',
+  invalid_signature: '身份令牌校验失败，请联系管理员检查 IdP 配置',
+  invalid_claims: '身份令牌校验失败，请联系管理员检查 IdP 配置',
+  expired_token: '身份令牌已过期，请重新登录',
+  provisioning_failed: '账号映射失败，请联系管理员',
+}
 
 const features = [
   {
@@ -62,9 +75,28 @@ function clearError() {
   if (error.value) error.value = null
 }
 
-// 首屏自动聚焦用户名输入框
-onMounted(() => {
+// 企业账号登录：整页跳转发起授权码 + PKCE 流程（cookie 同源，回调后自动回管理台）
+function ssoLogin() {
+  window.location.href = '/api/v1/auth/oidc/login'
+}
+
+// 首屏：聚焦输入框 + 读取 OIDC 回调错误 + 探测企业登录是否可用
+onMounted(async () => {
   userInput.value?.focus()
+  const params = new URLSearchParams(window.location.search)
+  const oidcError = params.get('error')
+  if (oidcError) {
+    error.value = OIDC_ERROR_MESSAGES[oidcError] || '企业登录失败，请重试'
+    // 清掉查询参数，避免刷新重现旧错误
+    window.history.replaceState({}, '', window.location.pathname)
+  }
+  try {
+    const res = await fetch('/api/v1/auth/login-options')
+    const body = await res.json()
+    oidcEnabled.value = !!(body && body.data && body.data.oidcEnabled)
+  } catch {
+    oidcEnabled.value = false
+  }
 })
 </script>
 
@@ -219,6 +251,23 @@ onMounted(() => {
             <span v-if="busy" class="spinner" aria-hidden="true" />
             {{ busy ? '登录中…' : '登录' }}
           </button>
+
+          <template v-if="oidcEnabled">
+            <div class="divider" aria-hidden="true"><span>或</span></div>
+            <button class="btn-sso" type="button" :disabled="busy" @click="ssoLogin">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 12h.01M9 15h.01M14 9h.01M14 12h.01M14 15h.01"
+                />
+              </svg>
+              企业账号登录
+            </button>
+          </template>
         </form>
       </div>
     </main>
@@ -611,6 +660,48 @@ onMounted(() => {
   border-top-color: #000;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
+}
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-3);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.btn-sso {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 0;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.btn-sso:hover:not(:disabled) {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+}
+.btn-sso:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.btn-sso:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 @keyframes spin {
   to {

@@ -105,8 +105,32 @@ curl -H "Authorization: Bearer oryx_..." http://localhost:8080/api/v1/profiles
 curl http://localhost:8080/api/v1/health
 ```
 
+## Enterprise OIDC/SSO login
+
+The admin console supports standard **OIDC authorization code + PKCE** login (040-oidc-sso) — accounts from your existing IdP (Keycloak / Azure AD / Authing / anything with OIDC Discovery) sign in directly, and the external identity is mapped to an OryxOS user and roles:
+
+```yaml
+oryxos:
+  web:
+    oidc:
+      enabled: true                              # default false — zero change when off
+      issuer: https://idp.example.com/realms/main
+      client-id: oryxos-admin
+      client-secret: ${OIDC_CLIENT_SECRET}       # inject via env var, never plaintext
+      redirect-base-url: https://oryxos.example.com
+      roles-claim: groups                        # optional: claim → role mapping
+      role-mappings:
+        "/oryxos-admins": ADMIN
+```
+
+- **Local password login always coexists**: the login page shows both entries, so an IdP outage never locks out admins; enabling OIDC requires `auth.enabled: true`.
+- **Identity mapping**: anchored on `iss+sub` (renames and email changes don't affect it); unknown users are provisioned just-in-time on first login with the lowest default role (VIEWER).
+- **Conditional role authority**: with `role-mappings` configured and a claim hit, roles refresh on every login (removing a group demotes immediately); with no mapping or no hit, local roles are kept (`oryxos user role` stays effective).
+- **Audit**: login success/failure (categorized), logout, mapping creation, and role changes all land in the `auth_events` table; token contents never touch the database or logs.
+- Register the IdP callback as `{redirect-base-url}/api/v1/auth/oidc/callback`. Full details in `docs/OidcSsoGuide.md`.
+
 ## Design notes
 
-- **No Spring Security full stack**: only `spring-security-crypto` (the password-hashing jar) is used — no filter chain, no autoconfig, no RBAC. The `BasicAuthFilter` is a plain `OncePerRequestFilter` registered via a `FilterRegistrationBean` scoped to `/admin/**`.
-- **What this is not**: this is not SSO, RBAC, multi-tenancy, or session-based login with logout. Those are extension-phase capabilities. Password hashing with a delegating encoder leaves an upgrade path to Argon2 without migration.
+- **No Spring Security full stack**: only `spring-security-crypto` (the password-hashing jar) and `nimbus-jose-jwt` (the ID Token verification jar) are used — no filter chain, no autoconfig. The `BasicAuthFilter` is a plain `OncePerRequestFilter` registered via a `FilterRegistrationBean` scoped to `/admin/**`; the OIDC flow lives in the same self-implemented filter/controller stack.
+- **What this is not**: no multi-tenancy, no SCIM user sync, no back-channel logout, no multiple IdPs. SSO (040) and RBAC (039) are now built in; password hashing with a delegating encoder leaves an upgrade path to Argon2 without migration.
 - **HTTP Basic has no logout** — clearing credentials is browser-controlled. For richer session semantics, a future feature can add a login page backed by the same `web_users` table.

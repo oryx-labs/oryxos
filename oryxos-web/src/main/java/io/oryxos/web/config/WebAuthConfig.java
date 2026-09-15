@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties({
   WebAuthProperties.class,
   WebApiKeyProperties.class,
-  WebSseProperties.class
+  WebSseProperties.class,
+  WebOidcProperties.class
 })
 public class WebAuthConfig {}

@@ -199,3 +199,24 @@ oryxos:
   # web:
   #   sse:
   #     heartbeat-seconds: 15
+  # 企业 OIDC/SSO 登录（040-oidc-sso）。默认关=现状零变化。开启后登录页出现「企业账号登录」，
+  # 走标准授权码 + PKCE；本地账密始终并存（IdP 宕机不锁死）。任何支持 OIDC Discovery 的
+  # IdP（Keycloak / Azure AD / Authing 等）即插即用。开启要求 auth.enabled=true（先建本地账号），
+  # 四个必填项缺一启动即拒；rbac 关闭时启动 WARN（任何 IdP 用户登录即获全功能）。
+  # 角色口径（条件权威）：配置了 role-mappings 且 claim 命中 → 每次登录按命中集刷新（撤组即降权）；
+  # 未配置或未命中 → 保留本地角色（oryxos user role 有效）。首登自动供给（JIT），
+  # 默认角色 provision-default-roles（缺省 VIEWER）。详见 docs/OidcSsoGuide.md。
+  # web:
+  #   oidc:
+  #     enabled: true
+  #     issuer: https://idp.example.com/realms/main   # OIDC Discovery 基址（必填）
+  #     client-id: oryxos-admin                       # 必填
+  #     client-secret: ${OIDC_CLIENT_SECRET}          # 必填；走环境变量，勿明文
+  #     redirect-base-url: https://oryxos.example.com # 必填；回调=+/api/v1/auth/oidc/callback
+  #     # scopes: [openid, profile, email]
+  #     # roles-claim: groups                         # 承载角色的 claim；空=不启用映射
+  #     # role-mappings:
+  #     #   "/oryxos-admins": ADMIN                   # claim 值 → VIEWER/EDITOR/ADMIN
+  #     # provision-default-roles: [VIEWER]           # JIT 首登无命中时的默认角色
+  #     # clock-skew: 60s
+  #     # rp-initiated-logout: false                  # 登出联动 IdP 端

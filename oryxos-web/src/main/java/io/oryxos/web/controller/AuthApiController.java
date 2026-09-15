@@ -1,14 +1,20 @@
 package io.oryxos.web.controller;
 
+import io.oryxos.storage.AuthEventRecorder;
+import io.oryxos.storage.OidcIdentityRepository;
 import io.oryxos.storage.WebSession;
 import io.oryxos.storage.WebSessionService;
 import io.oryxos.storage.WebUserService;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.config.WebAuthProperties;
+import io.oryxos.web.config.WebOidcProperties;
 import io.oryxos.web.controller.dto.AuthMeView;
+import io.oryxos.web.controller.dto.LoginOptionsView;
 import io.oryxos.web.controller.dto.LoginRequest;
+import io.oryxos.web.controller.dto.LogoutView;
 import io.oryxos.web.security.ClientIp;
 import io.oryxos.web.security.LoginAttemptService;
+import io.oryxos.web.security.oidc.OidcClient;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -53,16 +59,28 @@ public class AuthApiController {
   private final WebSessionService sessionService;
   private final WebAuthProperties properties;
   private final LoginAttemptService loginAttemptService;
+  private final WebOidcProperties oidcProperties;
+  private final OidcClient oidcClient;
+  private final OidcIdentityRepository oidcIdentityRepository;
+  private final AuthEventRecorder authEventRecorder;
 
   public AuthApiController(
       WebUserService userService,
       WebSessionService sessionService,
       WebAuthProperties properties,
-      LoginAttemptService loginAttemptService) {
+      LoginAttemptService loginAttemptService,
+      WebOidcProperties oidcProperties,
+      OidcClient oidcClient,
+      OidcIdentityRepository oidcIdentityRepository,
+      AuthEventRecorder authEventRecorder) {
     this.userService = userService;
     this.sessionService = sessionService;
     this.properties = properties;
     this.loginAttemptService = loginAttemptService;
+    this.oidcProperties = oidcProperties;
+    this.oidcClient = oidcClient;
+    this.oidcIdentityRepository = oidcIdentityRepository;
+    this.authEventRecorder = authEventRecorder;
   }
 
   /**
@@ -88,8 +106,19 @@ public class AuthApiController {
       response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
       return ApiResponse.error(HttpStatus.TOO_MANY_REQUESTS.value(), TOO_MANY_ATTEMPTS_MESSAGE);
     }
+    String sourceIp = ClientIp.peerAddress(request);
     if (!userService.verify(loginRequest.username(), loginRequest.password())) {
       loginAttemptService.onFailure(attemptKey);
+      authEventRecorder.record(
+          new AuthEventRecorder.AuthEventData(
+              AuthEventRecorder.LOGIN_FAILURE,
+              AuthEventRecorder.METHOD_LOCAL,
+              loginRequest.username(),
+              null,
+              null,
+              null,
+              "invalid_credentials",
+              sourceIp));
       response.setStatus(HttpStatus.UNAUTHORIZED.value());
       return ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Invalid username or password");
     }
@@ -99,15 +128,79 @@ public class AuthApiController {
     WebSession session = sessionService.create(loginRequest.username());
     response.addHeader(
         HttpHeaders.SET_COOKIE, buildCookie(session.getSessionId(), -1, request.isSecure()));
+    authEventRecorder.record(
+        new AuthEventRecorder.AuthEventData(
+            AuthEventRecorder.LOGIN_SUCCESS,
+            AuthEventRecorder.METHOD_LOCAL,
+            loginRequest.username(),
+            null,
+            null,
+            null,
+            null,
+            sourceIp));
     return ApiResponse.ok(new AuthMeView(properties.isEnabled(), loginRequest.username()));
   }
 
-  /** 登出：清当前 session + 清 cookie。幂等（无 session 也成功）。 */
+  /**
+   * 登出：清当前 session + 清 cookie。幂等（无 session 也成功）。040：落 logout 审计； rp-initiated-logout 开启且当前会话属 OIDC
+   * 用户时，data 附 IdP 端登出地址（默认关 = data 恒 null， 响应与既有逐字节一致）。
+   */
   @PostMapping("/logout")
-  public ApiResponse<Void> logout(HttpServletRequest request, HttpServletResponse response) {
-    findSessionId(request).ifPresent(sessionService::delete);
+  public ApiResponse<LogoutView> logout(HttpServletRequest request, HttpServletResponse response) {
+    Optional<String> sessionId = findSessionId(request);
+    String username =
+        sessionId.flatMap(sessionService::findValid).map(WebSession::getUsername).orElse(null);
+    sessionId.ifPresent(sessionService::delete);
     response.addHeader(HttpHeaders.SET_COOKIE, buildCookie("", 0, request.isSecure()));
+    if (username == null) {
+      return ApiResponse.ok(null);
+    }
+    boolean oidcUser =
+        oidcProperties.isEnabled() && oidcIdentityRepository.existsByUsername(username);
+    authEventRecorder.record(
+        new AuthEventRecorder.AuthEventData(
+            AuthEventRecorder.LOGOUT,
+            oidcUser ? AuthEventRecorder.METHOD_OIDC : AuthEventRecorder.METHOD_LOCAL,
+            username,
+            null,
+            null,
+            null,
+            null,
+            ClientIp.peerAddress(request)));
+    if (oidcUser && oidcProperties.isRpInitiatedLogout()) {
+      String idpLogoutUrl = idpLogoutUrl();
+      if (idpLogoutUrl != null) {
+        return ApiResponse.ok(new LogoutView(idpLogoutUrl));
+      }
+    }
     return ApiResponse.ok(null);
+  }
+
+  /** 登录页可用方式：匿名可访问（豁免子树），前端据此显隐「企业账号登录」入口。 */
+  @GetMapping("/login-options")
+  public ApiResponse<LoginOptionsView> loginOptions() {
+    return ApiResponse.ok(new LoginOptionsView(oidcProperties.isEnabled()));
+  }
+
+  /** RP-Initiated Logout 地址；discovery 失败/无 end_session_endpoint 时静默返 null（登出本身已完成）。 */
+  private String idpLogoutUrl() {
+    try {
+      String endSession = oidcClient.discovery().endSessionEndpoint();
+      if (endSession == null || endSession.isBlank()) {
+        return null;
+      }
+      String base = oidcClient.redirectUri();
+      String postLogout =
+          base.substring(0, base.length() - OidcClient.CALLBACK_PATH.length()) + "/admin/";
+      return org.springframework.web.util.UriComponentsBuilder.fromUriString(endSession)
+          .queryParam("client_id", oidcProperties.getClientId())
+          .queryParam("post_logout_redirect_uri", postLogout)
+          .encode()
+          .build()
+          .toUriString();
+    } catch (RuntimeException ex) {
+      return null;
+    }
   }
 
   /** 查当前登录用户。认证关闭时 200 返开关状态；认证开启时，已登录返用户名、未登录 401。 */

@@ -1166,6 +1166,30 @@ public class OryxOsRuntime {
     return new ApiKeyService(repository);
   }
 
+  /** 040-oidc-sso：授权流程临时状态（state/nonce/PKCE，CAS 单次消费，多副本共享事实源）。 */
+  @Bean
+  io.oryxos.storage.OidcAuthRequestStore oidcAuthRequestStore(
+      io.oryxos.storage.OidcAuthRequestRepository repository) {
+    return new io.oryxos.storage.OidcAuthRequestStore(repository);
+  }
+
+  /** 040-oidc-sso：外部身份映射 + JIT 供给（C1-A）+ 条件权威角色刷新（C3-C）。 */
+  @Bean
+  io.oryxos.storage.OidcIdentityService oidcIdentityService(
+      io.oryxos.storage.OidcIdentityRepository identityRepository,
+      WebUserRepository userRepository,
+      WebUserService userService) {
+    return new io.oryxos.storage.OidcIdentityService(
+        identityRepository, userRepository, userService);
+  }
+
+  /** 040-oidc-sso：认证事件审计落库（写失败不抛，不阻断登录主链路）。 */
+  @Bean
+  io.oryxos.storage.AuthEventRecorder authEventRecorder(
+      io.oryxos.storage.AuthEventRepository repository) {
+    return new io.oryxos.storage.AuthEventRecorder(repository);
+  }
+
   @Bean
   NotifyChannelRegistry notifyChannelRegistry(
       NotifyChannelRepository repository,

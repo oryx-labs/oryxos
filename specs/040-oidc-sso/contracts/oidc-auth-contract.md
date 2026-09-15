@@ -26,7 +26,7 @@
 4. ID Token JWS 验签（JWKS，kid 轮换限速强刷；失败 → `invalid_signature`）
 5. Claims 校验：`iss` 精确匹配、`aud` 含 client_id、`exp`/`iat`（±clock-skew）、`nonce` 匹配 → `invalid_claims` / `expired_token`
 6. 映射/JIT 供给（R5/R14；建用户失败 → `provisioning_failed`）
-7. `WebSessionService.create(username)` + `Set-Cookie: oryxos_session=...`（HttpOnly/SameSite=Strict/Secure-when-https）→ `302 /admin/`
+7. `WebSessionService.create(username)` + `Set-Cookie: oryxos_session=...`（HttpOnly/SameSite=Strict/Secure-when-https）→ **200 站内中转页**（`location.replace('/admin/')`）——回调处于 IdP 发起的跨站重定向链上，`SameSite=Strict` cookie 不随跨站链后续跳转发送（302 直跳会「看似未登录」）；中转页把下一跳变为同站导航，不降级 cookie 策略
 
 ### 错误分类枚举（`?error=` 与 `auth_events.failure_reason` 共用）
 

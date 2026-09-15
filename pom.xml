@@ -28,6 +28,9 @@
         <postgresql.version>42.7.12</postgresql.version>
         <pdfbox.version>3.0.8</pdfbox.version>
         <oapi-sdk.version>2.8.5</oapi-sdk.version>
+        <!-- 040：OIDC ID Token 验签（JWS/JWKS）。10.3 已实证 Central 构件齐全，
+             BouncyCastle/tink 传递依赖全 optional——RS256/ES256 走 JDK JCA，零强制传递依赖 -->
+        <nimbus-jose-jwt.version>10.3</nimbus-jose-jwt.version>
 
         <!-- Infrastructure libraries -->
         <jackson-bom.version>2.21.5</jackson-bom.version>
@@ -327,6 +330,13 @@
                 <groupId>org.webjars</groupId>
                 <artifactId>swagger-ui</artifactId>
                 <version>${swagger-ui.version}</version>
+            </dependency>
+
+            <!-- 040-oidc-sso：ID Token JWS 验签 + JWKS 解析（不引 Spring Security / oauth2-client） -->
+            <dependency>
+                <groupId>com.nimbusds</groupId>
+                <artifactId>nimbus-jose-jwt</artifactId>
+                <version>${nimbus-jose-jwt.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

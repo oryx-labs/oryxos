@@ -416,6 +416,8 @@ ci helm job 的 kind 安装冒烟；mock provider 可 `-Doryxos.mock.latency-ms`
 
 落库凭证（providers.api_key、notify_channels.config 敏感项）经主密钥 AES-GCM 加密存储（022，`enc:v1:` 前缀）：`ORYXOS_MASTER_KEY` 环境变量优先，缺省 `.oryxos/master.key` 首启自动生成；密钥不匹配启动即拒并指路恢复。
 
+企业 SSO（040）：管理台可选标准 OIDC 授权码 + PKCE 登录（`oryxos.web.oidc.*`，默认关零变化；引 `nimbus-jose-jwt` 单 jar 验签，不引 Spring Security）。本地账密恒并存（IdP 宕机不锁死）；身份锚 `iss+sub` 落 `oidc_identities`，未映射用户 JIT 供给（默认 VIEWER）；角色条件权威——配置了 claim 映射且命中则每登刷新，否则本地权威（`oryxos user role` 有效）；认证事件（本地+OIDC 登录/登出/映射/角色变化）落 `auth_events`（V10），令牌内容零落库零日志；state/nonce/PKCE 走 `oidc_auth_requests` CAS 单次消费（多副本可用）。行为表详见 `docs/OidcSsoGuide.md`。
+
 ---
 
 ## 五大核心能力与验收 Demo

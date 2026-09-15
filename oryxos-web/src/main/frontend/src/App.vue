@@ -38,7 +38,13 @@ function onLogined(username) {
 
 async function logout() {
   try {
-    await fetch('/api/v1/auth/logout', { method: 'POST' })
+    const res = await fetch('/api/v1/auth/logout', { method: 'POST' })
+    const body = await res.json()
+    // 040：rp-initiated-logout 开启时联动 IdP 端登出（默认关，data 恒为 null）
+    if (body && body.data && body.data.idpLogoutUrl) {
+      window.location.href = body.data.idpLogoutUrl
+      return
+    }
   } catch (e) {
     /* 忽略，仍跳登录页 */
   }

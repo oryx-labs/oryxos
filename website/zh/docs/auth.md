@@ -105,8 +105,32 @@ curl -H "Authorization: Bearer oryx_..." http://localhost:8080/api/v1/profiles
 curl http://localhost:8080/api/v1/health
 ```
 
+## 企业 OIDC/SSO 登录
+
+管理台支持标准 **OIDC 授权码 + PKCE** 登录（040-oidc-sso）——企业已有 IdP（Keycloak / Azure AD / Authing 等,支持 OIDC Discovery 即可）的账号直接登录,外部身份自动映射为 OryxOS 用户与角色:
+
+```yaml
+oryxos:
+  web:
+    oidc:
+      enabled: true                              # 默认 false——现状零变化
+      issuer: https://idp.example.com/realms/main
+      client-id: oryxos-admin
+      client-secret: ${OIDC_CLIENT_SECRET}       # 环境变量注入,勿明文
+      redirect-base-url: https://oryxos.example.com
+      roles-claim: groups                        # 可选:claim → 角色映射
+      role-mappings:
+        "/oryxos-admins": ADMIN
+```
+
+- **本地账密始终并存**:登录页双入口,IdP 宕机不锁死管理员;开启前置 `auth.enabled: true`。
+- **身份映射**:锚点 `iss+sub`（改名改邮箱不影响）;无对应用户时首登自动供给（JIT）,默认最低角色 VIEWER。
+- **角色条件权威**:配置了 `role-mappings` 且 claim 命中 → 每次登录刷新（撤组即降权）;未配置/未命中 → 保留本地角色（`oryxos user role` 有效）。
+- **审计**:登录成功/失败（分类）、登出、映射建立、角色变化全部落 `auth_events` 表,令牌内容零落库。
+- IdP 侧回调地址填 `{redirect-base-url}/api/v1/auth/oidc/callback`。完整口径见仓库 `docs/OidcSsoGuide.md`。
+
 ## 设计说明
 
-- **不引 Spring Security 全套**:只用 `spring-security-crypto`（密码哈希单 jar）——无 filter chain、无 autoconfig、无 RBAC。`BasicAuthFilter` 是普通 `OncePerRequestFilter`,经 `FilterRegistrationBean` 挂在 `/admin/**`。
-- **这不是**:非 SSO、非 RBAC、非多租户、非带登出的 session 登录。这些是扩展阶段能力。密码哈希用 delegating encoder 留了将来升 Argon2 无迁移的路径。
+- **不引 Spring Security 全套**:只用 `spring-security-crypto`（密码哈希单 jar）与 `nimbus-jose-jwt`（ID Token 验签单 jar）——无 filter chain、无 autoconfig。`BasicAuthFilter` 是普通 `OncePerRequestFilter`,经 `FilterRegistrationBean` 挂在 `/admin/**`;OIDC 流程同样收在自研 Filter/Controller 体系内。
+- **这不是**:非多租户、非 SCIM 用户同步、非 back-channel logout、非多 IdP 并存。SSO（040）与 RBAC（039）已落地;密码哈希用 delegating encoder 留了将来升 Argon2 无迁移的路径。
 - **HTTP Basic 无登出**——清凭据由浏览器控制。要更丰富的 session 语义,后续 feature 可加登录页,复用同一张 `web_users` 表。
