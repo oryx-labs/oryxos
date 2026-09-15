@@ -114,6 +114,10 @@ oryxos:
     auth:
       enabled: false
       realm: OryxOS
+    # 040 OIDC/SSO（#461）。默认关=零行为变化；开启前先配置 issuer/client 与 identity_mappings。
+    oidc:
+      enabled: false
+      scopes: openid profile email
 
 # Observability: Actuator + Micrometer/Prometheus
 # /actuator/** 由 ApiKeyAuthFilter 保护（API Key 或管理台 session），health 探活子树豁免；

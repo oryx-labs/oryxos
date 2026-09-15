@@ -115,6 +115,14 @@ public class WebUserService {
     return repository.findAll().stream().anyMatch(WebUser::isEnabled);
   }
 
+  /** OIDC 映射后验启用态；不存在/禁用均 false（与 verify 同防枚举口径）。 */
+  public boolean isEnabledUser(String username) {
+    if (username == null || username.isBlank()) {
+      return false;
+    }
+    return repository.findByUsername(username.strip()).filter(WebUser::isEnabled).isPresent();
+  }
+
   /**
    * 每请求解析账号角色（039）。
    *

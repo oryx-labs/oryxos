@@ -1,5 +1,7 @@
 package io.oryxos.web.controller;
 
+import io.oryxos.storage.AuthEventRecorder;
+import io.oryxos.storage.AuthEventType;
 import io.oryxos.storage.WebSession;
 import io.oryxos.storage.WebSessionService;
 import io.oryxos.storage.WebUserService;
@@ -42,8 +44,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class AuthApiController {
 
-  /** cookie 名。 */
-  static final String SESSION_COOKIE = "oryxos_session";
+  /** cookie 名（OIDC callback 与密码登录共用）。 */
+  public static final String SESSION_COOKIE = "oryxos_session";
 
   /** 锁定期内的 429 文案：不透露阀值/剩余次数，不区分账号存否。 */
   private static final String TOO_MANY_ATTEMPTS_MESSAGE =
@@ -53,16 +55,19 @@ public class AuthApiController {
   private final WebSessionService sessionService;
   private final WebAuthProperties properties;
   private final LoginAttemptService loginAttemptService;
+  private final AuthEventRecorder authEventRecorder;
 
   public AuthApiController(
       WebUserService userService,
       WebSessionService sessionService,
       WebAuthProperties properties,
-      LoginAttemptService loginAttemptService) {
+      LoginAttemptService loginAttemptService,
+      AuthEventRecorder authEventRecorder) {
     this.userService = userService;
     this.sessionService = sessionService;
     this.properties = properties;
     this.loginAttemptService = loginAttemptService;
+    this.authEventRecorder = authEventRecorder;
   }
 
   /**
@@ -102,11 +107,17 @@ public class AuthApiController {
     return ApiResponse.ok(new AuthMeView(properties.isEnabled(), loginRequest.username()));
   }
 
-  /** 登出：清当前 session + 清 cookie。幂等（无 session 也成功）。 */
+  /** 登出：清当前 session + 清 cookie。幂等（无 session 也成功）。附带 auth_events LOGOUT（best-effort）。 */
   @PostMapping("/logout")
   public ApiResponse<Void> logout(HttpServletRequest request, HttpServletResponse response) {
-    findSessionId(request).ifPresent(sessionService::delete);
+    Optional<String> sessionId = findSessionId(request);
+    String username =
+        sessionId.flatMap(sessionService::findValid).map(WebSession::getUsername).orElse(null);
+    sessionId.ifPresent(sessionService::delete);
     response.addHeader(HttpHeaders.SET_COOKIE, buildCookie("", 0, request.isSecure()));
+    if (username != null) {
+      authEventRecorder.recordBestEffort(AuthEventType.LOGOUT, username, "session logout");
+    }
     return ApiResponse.ok(null);
   }
 

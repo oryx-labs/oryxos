@@ -194,6 +194,21 @@ oryxos:
   #     roles:
   #       default-user-roles: []           # 空=拒绝；可选显式 [VIEWER]/[EDITOR]/[ADMIN]
   #       default-api-key-roles: []        # 默认空 = 机器凭证不默认授权
+  # OIDC/SSO（040 / #461）。默认关=零行为变化。开启后浏览器走 /api/v1/auth/oidc/login；
+  # 须先 `oryxos user oidc-map <username> <issuer> <subject>` 建立映射（无 JIT 建号）。
+  # client-secret 勿提交、勿打日志。callback 只建 oryxos_session，不调用 AuthorizationService。
+  # web:
+  #   oidc:
+  #     enabled: true
+  #     issuer: https://idp.example.com
+  #     client-id: oryxos
+  #     client-secret: ${ORYXOS_OIDC_CLIENT_SECRET}
+  #     redirect-uri: https://oryxos.example.com/api/v1/auth/oidc/callback
+  #     scopes: openid profile email
+  #     # 可选：跳过 discovery 时显式端点
+  #     # authorization-endpoint:
+  #     # token-endpoint:
+  #     # jwks-uri:
   # SSE 流式响应（019-sse-streaming）。消息端点带 Accept: text/event-stream 即流式返回，
   # 无需开关；heartbeat-seconds 为静默期心跳间隔（SSE 注释行，防代理空闲断连），默认 15。
   # web:

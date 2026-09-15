@@ -60,6 +60,10 @@ import io.oryxos.storage.AgentExecutionRepository;
 import io.oryxos.storage.AgentRunEventRepository;
 import io.oryxos.storage.ApiKeyRepository;
 import io.oryxos.storage.ApiKeyService;
+import io.oryxos.storage.AuthEventRecorder;
+import io.oryxos.storage.AuthEventRepository;
+import io.oryxos.storage.IdentityMappingRepository;
+import io.oryxos.storage.IdentityMappingService;
 import io.oryxos.storage.JpaAgentExecutionStore;
 import io.oryxos.storage.JpaAgentRunEventStore;
 import io.oryxos.storage.JpaLlmCallAuditor;
@@ -1146,6 +1150,21 @@ public class OryxOsRuntime {
   io.oryxos.storage.AuthzEventRecorder authzEventRecorder(
       io.oryxos.storage.AuthzEventRepository repository) {
     return new io.oryxos.storage.AuthzEventRecorder(repository);
+  }
+
+  /** 040：认证事件审计（LOGIN_* / LOGOUT / MAPPING_*）。 */
+  @Bean
+  AuthEventRecorder authEventRecorder(AuthEventRepository repository) {
+    return new AuthEventRecorder(repository);
+  }
+
+  /** 040：OIDC issuer/sub → 本地 username 映射。 */
+  @Bean
+  IdentityMappingService identityMappingService(
+      IdentityMappingRepository repository,
+      WebUserRepository userRepository,
+      AuthEventRecorder authEventRecorder) {
+    return new IdentityMappingService(repository, userRepository, authEventRecorder);
   }
 
   /**

@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.oryxos.storage.AuthEventRecorder;
 import io.oryxos.storage.WebSession;
 import io.oryxos.storage.WebSessionService;
 import io.oryxos.storage.WebUserService;
@@ -47,7 +48,11 @@ class AuthApiControllerTest {
     mvc =
         MockMvcBuilders.standaloneSetup(
                 new AuthApiController(
-                    userService, sessionService, properties, new LoginAttemptService()))
+                    userService,
+                    sessionService,
+                    properties,
+                    new LoginAttemptService(),
+                    mock(AuthEventRecorder.class)))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
@@ -142,7 +147,11 @@ class AuthApiControllerTest {
     MockMvc proxiedMvc =
         MockMvcBuilders.standaloneSetup(
                 new AuthApiController(
-                    userService, sessionService, properties, new LoginAttemptService()))
+                    userService,
+                    sessionService,
+                    properties,
+                    new LoginAttemptService(),
+                    mock(AuthEventRecorder.class)))
             .addFilters(new org.springframework.web.filter.ForwardedHeaderFilter())
             .build();
 
@@ -242,7 +251,12 @@ class AuthApiControllerTest {
     LoginAttemptService attempts = new LoginAttemptService();
     MockMvc proxiedMvc =
         MockMvcBuilders.standaloneSetup(
-                new AuthApiController(userService, sessionService, properties, attempts))
+                new AuthApiController(
+                    userService,
+                    sessionService,
+                    properties,
+                    attempts,
+                    mock(AuthEventRecorder.class)))
             .addFilters(new org.springframework.web.filter.ForwardedHeaderFilter())
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();

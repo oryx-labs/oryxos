@@ -1,6 +1,7 @@
 package io.oryxos.cli.command;
 
 import io.oryxos.cli.OryxOsRuntime;
+import io.oryxos.storage.IdentityMappingService;
 import io.oryxos.storage.WebUser;
 import io.oryxos.storage.WebUserService;
 import java.io.Console;
@@ -29,7 +30,8 @@ import picocli.CommandLine.Parameters;
       UserCommand.PasswdCommand.class,
       UserCommand.DisableCommand.class,
       UserCommand.EnableCommand.class,
-      UserCommand.RoleCommand.class
+      UserCommand.RoleCommand.class,
+      UserCommand.OidcMapCommand.class
     })
 public class UserCommand implements Runnable {
 
@@ -205,6 +207,35 @@ public class UserCommand implements Runnable {
             service.setRoles(username, java.util.Set.of(role));
             System.out.println("Role of '" + username + "' set to " + role.name());
           });
+    }
+  }
+
+  @Command(
+      name = "oidc-map",
+      description = "映射 OIDC issuer/sub 到本地用户（040）",
+      mixinStandardHelpOptions = true)
+  static class OidcMapCommand implements Runnable {
+    @Parameters(index = "0", description = "本地 web_users.username")
+    String username;
+
+    @Parameters(index = "1", description = "IdP issuer")
+    String issuer;
+
+    @Parameters(index = "2", description = "IdP subject")
+    String subject;
+
+    @Override
+    public void run() {
+      try (ConfigurableApplicationContext context =
+          new SpringApplicationBuilder(OryxOsRuntime.class)
+              .web(WebApplicationType.NONE)
+              .bannerMode(Banner.Mode.OFF)
+              .run()) {
+        IdentityMappingService mappings = context.getBean(IdentityMappingService.class);
+        mappings.upsert(issuer, subject, username, null);
+        System.out.println(
+            "Mapped issuer='" + issuer + "' subject='" + subject + "' -> user='" + username + "'");
+      }
     }
   }
 }
