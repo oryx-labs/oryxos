@@ -128,7 +128,8 @@ public class OidcAuthService {
       authEventRecorder.recordOrThrow(
           AuthEventType.LOGIN_SUCCESS, username, "oidc issuer=" + claims.issuer());
     } catch (RuntimeException ex) {
-      LOG.error("LOGIN_SUCCESS 审计失败，拒绝建 session：{}", ex.toString().replace('\r', '_').replace('\n', '_'));
+      LOG.error(
+          "LOGIN_SUCCESS 审计失败，拒绝建 session：{}", ex.toString().replace('\r', '_').replace('\n', '_'));
       return OidcLoginResult.failure("auth audit failed");
     }
     WebSession session = sessionService.create(username);
@@ -187,7 +188,8 @@ public class OidcAuthService {
 
     @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
         value = "EI_EXPOSE_REP",
-        justification = "Intentional handoff of newly created WebSession to Controller for cookie write.")
+        justification =
+            "Intentional handoff of newly created WebSession to Controller for cookie write.")
     public WebSession getSession() {
       return session;
     }
