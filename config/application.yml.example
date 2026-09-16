@@ -209,6 +209,11 @@ oryxos:
   #     # authorization-endpoint:
   #     # token-endpoint:
   #     # jwks-uri:
+  # 资产治理（041 / #463）。默认关=零行为变化。开启后叠加 OFFLINE/PRIVATE 门禁，且必须同时
+  # 打开 rbac.enabled（无主体则跳过资产门禁）。仍只走 AuthorizationService.decide。
+  # web:
+  #   asset-governance:
+  #     enabled: true
   # SSE 流式响应（019-sse-streaming）。消息端点带 Accept: text/event-stream 即流式返回，
   # 无需开关；heartbeat-seconds 为静默期心跳间隔（SSE 注释行，防代理空闲断连），默认 15。
   # web:

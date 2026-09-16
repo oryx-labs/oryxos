@@ -40,6 +40,7 @@ import io.oryxos.web.controller.dto.UpdateAgentBasicRequest;
 import io.oryxos.web.controller.dto.UpdateAgentRequest;
 import io.oryxos.web.controller.dto.UpdatePersonaRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
+import io.oryxos.web.security.AssetBindGuard;
 import io.oryxos.web.sse.SseStreamSupport;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -101,6 +102,14 @@ public class AgentApiController {
   @Autowired
   public void setSseStreamSupport(SseStreamSupport sseStreamSupport) {
     this.sseStreamSupport = sseStreamSupport;
+  }
+
+  /** 041：绑定/调用的资产门禁。可空以便单测直构——空时不额外 decide（与 flag 关时 ALLOW_ALL 同向：不改变绑定行为）。 */
+  private AssetBindGuard assetBindGuard;
+
+  @Autowired(required = false)
+  public void setAssetBindGuard(AssetBindGuard assetBindGuard) {
+    this.assetBindGuard = assetBindGuard;
   }
 
   public AgentApiController(
@@ -312,6 +321,7 @@ public class AgentApiController {
       throw new IllegalArgumentException("消息超过 32KB 上限"); // → 400
     }
     requireAgent(name);
+    requireAgentRun(request, name);
     // 021：controller 先 open 拿 ID 回传调用方；AgentService 兜底 openIfAbsent 复用同一 ID
     try (TraceContext.Scope traceScope = TraceContext.openIfAbsent()) {
       if (SseStreamSupport.wantsEventStream(request)) {
@@ -494,8 +504,9 @@ public class AgentApiController {
 
   @PutMapping("/{name}/knowledge/{kb}")
   public ApiResponse<AgentKnowledgeBindingsView> bindKnowledge(
-      @PathVariable String name, @PathVariable String kb) {
+      @PathVariable String name, @PathVariable String kb, HttpServletRequest request) {
     requireAgent(name);
+    requireKnowledgeBind(request, kb);
     requireKnowledgeBindings().bind(name, kb);
     return knowledge(name);
   }
@@ -510,12 +521,14 @@ public class AgentApiController {
 
   @PutMapping("/{name}/knowledge")
   public ApiResponse<AgentKnowledgeBindingsView> replaceKnowledge(
-      @PathVariable String name, @RequestBody ReplaceKnowledgeBindingsRequest request) {
+      @PathVariable String name,
+      @RequestBody ReplaceKnowledgeBindingsRequest body,
+      HttpServletRequest request) {
     requireAgent(name);
+    List<String> desired = body == null ? List.of() : body.knowledge();
+    requireKnowledgeBinds(request, desired);
     return ApiResponse.ok(
-        AgentKnowledgeBindingsView.from(
-            requireKnowledgeBindings()
-                .replaceBindings(name, request == null ? List.of() : request.knowledge())));
+        AgentKnowledgeBindingsView.from(requireKnowledgeBindings().replaceBindings(name, desired)));
   }
 
   @GetMapping("/{name}/skills")
@@ -526,8 +539,9 @@ public class AgentApiController {
 
   @PutMapping("/{name}/skills/{skill}")
   public ApiResponse<AgentSkillBindingsView> bind(
-      @PathVariable String name, @PathVariable String skill) {
+      @PathVariable String name, @PathVariable String skill, HttpServletRequest request) {
     requireAgent(name);
+    requireSkillBind(request, skill);
     requireSkillsExist(List.of(skill));
     validateCatalog(List.of(skill));
     requireBindings().bind(name, skill);
@@ -544,9 +558,12 @@ public class AgentApiController {
 
   @PutMapping("/{name}/skills")
   public ApiResponse<AgentSkillBindingsView> replaceSkills(
-      @PathVariable String name, @RequestBody ReplaceSkillBindingsRequest request) {
+      @PathVariable String name,
+      @RequestBody ReplaceSkillBindingsRequest body,
+      HttpServletRequest request) {
     requireAgent(name);
-    List<String> desired = request == null ? List.of() : request.skills();
+    List<String> desired = body == null ? List.of() : body.skills();
+    requireSkillBinds(request, desired);
     requireSkillsExist(desired);
     validateCatalog(desired);
     return ApiResponse.ok(
@@ -561,6 +578,42 @@ public class AgentApiController {
                 .map(BoundSkillDescriptor::name)
                 .toList();
     return AgentView.from(profile, skills);
+  }
+
+  private void requireAgentRun(HttpServletRequest request, String name) {
+    if (assetBindGuard != null) {
+      assetBindGuard.requireAgentRun(request, name);
+    }
+  }
+
+  private void requireSkillBind(HttpServletRequest request, String skill) {
+    if (assetBindGuard != null) {
+      assetBindGuard.requireSkillBind(request, skill);
+    }
+  }
+
+  private void requireSkillBinds(HttpServletRequest request, List<String> skills) {
+    if (skills == null) {
+      return;
+    }
+    for (String skill : skills) {
+      requireSkillBind(request, skill);
+    }
+  }
+
+  private void requireKnowledgeBind(HttpServletRequest request, String kb) {
+    if (assetBindGuard != null) {
+      assetBindGuard.requireKnowledgeBind(request, kb);
+    }
+  }
+
+  private void requireKnowledgeBinds(HttpServletRequest request, List<String> knowledge) {
+    if (knowledge == null) {
+      return;
+    }
+    for (String kb : knowledge) {
+      requireKnowledgeBind(request, kb);
+    }
   }
 
   private void requireAgent(String name) {

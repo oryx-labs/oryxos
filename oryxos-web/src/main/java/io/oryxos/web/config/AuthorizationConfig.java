@@ -1,8 +1,11 @@
 package io.oryxos.web.config;
 
 import io.oryxos.core.auth.Role;
+import io.oryxos.core.policy.AssetAwareAuthorizationService;
+import io.oryxos.core.policy.AssetGovernanceStore;
 import io.oryxos.core.policy.AuthorizationService;
 import io.oryxos.core.policy.RoleBasedAuthorizationServiceImpl;
+import io.oryxos.web.security.AssetBindGuard;
 import io.oryxos.web.security.RbacEnforcer;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -23,7 +26,11 @@ import org.springframework.context.annotation.Configuration;
  * ADMIN，避免治理面锁死。
  */
 @Configuration
-@EnableConfigurationProperties({WebRbacProperties.class, RoleMappingProperties.class})
+@EnableConfigurationProperties({
+  WebRbacProperties.class,
+  RoleMappingProperties.class,
+  WebAssetGovernanceProperties.class
+})
 public class AuthorizationConfig {
 
   private static final Logger LOG = LoggerFactory.getLogger(AuthorizationConfig.class);
@@ -46,7 +53,10 @@ public class AuthorizationConfig {
           "日志仅记录枚举 Role 集合与 boolean 开关；角色名来自配置绑定后经 parseRoles 归一为 Role 枚举，"
               + "无法携带 CR/LF（镜像 ApiKeyService 的 SuppressFBWarnings 模式）。")
   AuthorizationService authorizationService(
-      WebRbacProperties properties, RoleMappingProperties roleProperties) {
+      WebRbacProperties properties,
+      RoleMappingProperties roleProperties,
+      WebAssetGovernanceProperties assetGovernance,
+      org.springframework.beans.factory.ObjectProvider<AssetGovernanceStore> governanceStore) {
     if (!properties.isEnabled()) {
       LOG.info(LOG_ALLOW_ALL);
       return AuthorizationService.ALLOW_ALL;
@@ -54,7 +64,23 @@ public class AuthorizationConfig {
     Set<Role> userRoles = parseRoles(roleProperties.getDefaultUserRoles());
     Set<Role> apiKeyRoles = parseRoles(roleProperties.getDefaultApiKeyRoles());
     LOG.info(LOG_ROLE_BASED, userRoles, apiKeyRoles, properties.isDenyAnonymous());
-    return new RoleBasedAuthorizationServiceImpl(userRoles, apiKeyRoles);
+    AuthorizationService roleBased = new RoleBasedAuthorizationServiceImpl(userRoles, apiKeyRoles);
+    // 资产门禁只在「RBAC 已开且资产治理开」时包一层；否则仍是纯角色矩阵（或上方的 ALLOW_ALL）。
+    if (assetGovernance == null || !assetGovernance.isEnabled()) {
+      return roleBased;
+    }
+    AssetGovernanceStore store = governanceStore.getIfAvailable();
+    if (store == null) {
+      LOG.warn("资产治理已启用但未装配 AssetGovernanceStore，跳过资产门禁");
+      return roleBased;
+    }
+    return new AssetAwareAuthorizationService(roleBased, store, true);
+  }
+
+  /** 绑定/调用点的薄封装：内部仍只调 {@link AuthorizationService#decide}。 */
+  @Bean
+  AssetBindGuard assetBindGuard(AuthorizationService authorizationService) {
+    return new AssetBindGuard(authorizationService);
   }
 
   /**

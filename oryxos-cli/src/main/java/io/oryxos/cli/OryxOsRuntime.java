@@ -1158,6 +1158,19 @@ public class OryxOsRuntime {
     return new AuthEventRecorder(repository);
   }
 
+  /** 041：资产侧车读写，根目录与 AgentStore 同为 {@code oryxos.root}。 */
+  @Bean
+  io.oryxos.core.policy.AssetGovernanceStore assetGovernanceStore() {
+    return new io.oryxos.core.policy.AssetGovernanceStore(oryxosRoot());
+  }
+
+  /** 041：治理侧车变更审计（写失败不回滚已落盘的 YAML）。 */
+  @Bean
+  io.oryxos.storage.AssetGovernanceEventRecorder assetGovernanceEventRecorder(
+      io.oryxos.storage.AssetGovernanceEventRepository repository) {
+    return new io.oryxos.storage.AssetGovernanceEventRecorder(repository);
+  }
+
   /** 040：OIDC issuer/sub → 本地 username 映射。 */
   @Bean
   IdentityMappingService identityMappingService(

@@ -10,6 +10,7 @@ import io.oryxos.web.error.ProviderUnavailableException;
 import io.oryxos.web.error.ResourceNotFoundException;
 import io.oryxos.web.error.ScheduleKeyAmbiguityException;
 import io.oryxos.web.error.SessionNotFoundException;
+import io.oryxos.web.security.AssetGovernanceAccessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -75,6 +76,16 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(HttpStatus.NOT_FOUND)
         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
         .body(ApiResponse.error(HttpStatus.NOT_FOUND.value(), ex.getMessage()));
+  }
+
+  /** 403 — 资产治理或授权决策拒绝（041）。理由来自 {@code AuthorizationService.decide}，不另写权限矩阵。 */
+  @ExceptionHandler(AssetGovernanceAccessException.class)
+  public ResponseEntity<ApiResponse<Void>> handleAssetGovernanceDenied(
+      AssetGovernanceAccessException ex) {
+    LOG.warn("Asset governance denied: {}", sanitize(ex.getMessage()));
+    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+        .body(ApiResponse.error(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
   }
 
   /** 503 — a downstream dependency (provider, tool, storage) is unavailable. */
