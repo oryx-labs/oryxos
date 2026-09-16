@@ -91,7 +91,9 @@ class ConcurrentMigrationIT {
               "--oryxos.providers[0].name=mock",
               "--spring.datasource.url=" + url,
               "--spring.lifecycle.timeout-per-shutdown-phase=100ms",
-              "--spring.main.web-application-type=none");
+              "--spring.main.web-application-type=none",
+              // Two Spring contexts in one JVM race on logback-spring.xml %clr converters.
+              "--logging.config=classpath:logback-concurrent-it.xml");
     } catch (IOException e) {
       throw new IllegalStateException(e);
     }

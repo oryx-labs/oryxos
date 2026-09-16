@@ -1,0 +1,13 @@
+<configuration>
+  <!-- ConcurrentMigrationIT starts two Spring contexts in one JVM.
+       logback-spring.xml's %clr/%wEx converters race on the second init
+       and Spring Boot treats that as a fatal logging config error. -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %5p %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+</configuration>
