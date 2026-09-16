@@ -28,5 +28,5 @@ Append-only audit of governance PUT:
 
 ## Runtime wiring
 
-- `AssetAwareAuthorizationService` wraps role-based decide when `rbac.enabled && asset-governance.enabled`
+- `AssetAwareAuthorizationServiceImpl` wraps role-based decide when `rbac.enabled && asset-governance.enabled`
 - Channels: optional governance block later（本刀可跳过写入）

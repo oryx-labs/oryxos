@@ -22,7 +22,7 @@
 ## In scope
 
 - `GOVERNANCE.yml` sidecar + `AssetGovernanceStore`
-- `AssetAwareAuthorizationService` 装饰 `RoleBasedAuthorizationServiceImpl`
+- `AssetAwareAuthorizationServiceImpl` 装饰 `RoleBasedAuthorizationServiceImpl`
 - 绑定 / 调用额外 `decide`（Skill / Knowledge / Agent OFFLINE）
 - `GET/PUT .../governance`（agents / skills / knowledge）
 - V11 `asset_governance_events` 审计

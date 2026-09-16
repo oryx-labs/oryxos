@@ -6,7 +6,7 @@
 
 - [x] Flag default off (`oryxos.web.asset-governance.enabled=false`)
 - [x] `GOVERNANCE.yml` sidecar for agents / skills / knowledge
-- [x] `AssetAwareAuthorizationService` decorator reuses `AuthorizationService.decide` only
+- [x] `AssetAwareAuthorizationServiceImpl` decorator reuses `AuthorizationService.decide` only
 - [x] OFFLINE deny + PRIVATE owner/ADMIN gate (USER); API_KEY only OFFLINE
 - [x] Bind/invoke extra decide via `AssetBindGuard`
 - [x] GET/PUT governance APIs + V11 `asset_governance_events`

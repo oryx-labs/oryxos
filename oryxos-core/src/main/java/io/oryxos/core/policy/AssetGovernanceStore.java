@@ -123,12 +123,12 @@ public final class AssetGovernanceStore {
       }
       Object loaded = new Yaml(new SafeConstructor(new LoaderOptions())).load(text);
       if (!(loaded instanceof Map<?, ?> raw)) {
-        LOG.warn("GOVERNANCE.yml 不是映射，按未设治理处理: {}", file.getFileName());
+        LOG.warn("GOVERNANCE.yml 不是映射，按未设治理处理");
         return AssetGovernance.empty();
       }
       return fromMap(raw);
     } catch (IOException | YAMLException ex) {
-      LOG.warn("读取 GOVERNANCE.yml 失败，按未设治理处理: {}", file.getFileName());
+      LOG.warn("读取 GOVERNANCE.yml 失败，按未设治理处理");
       return AssetGovernance.empty();
     }
   }

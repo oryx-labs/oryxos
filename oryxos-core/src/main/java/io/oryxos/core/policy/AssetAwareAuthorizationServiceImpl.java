@@ -11,7 +11,7 @@ import io.oryxos.core.auth.Role;
  *
  * <p>API_KEY：本刀只挡 OFFLINE，不做 owner 匹配（Key 名称不是账号归属模型）。
  */
-public final class AssetAwareAuthorizationService implements AuthorizationService {
+public final class AssetAwareAuthorizationServiceImpl implements AuthorizationService {
 
   /** OFFLINE 拒绝理由（固定文案，进审计）。 */
   public static final String REASON_OFFLINE = "资产已安全下线";
@@ -27,7 +27,7 @@ public final class AssetAwareAuthorizationService implements AuthorizationServic
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
       justification = "delegate/store 为注入共享单例，存同一引用正是意图。")
-  public AssetAwareAuthorizationService(
+  public AssetAwareAuthorizationServiceImpl(
       AuthorizationService delegate, AssetGovernanceStore store, boolean enabled) {
     this.delegate = delegate == null ? AuthorizationService.ALLOW_ALL : delegate;
     if (store == null) {
@@ -47,7 +47,7 @@ public final class AssetAwareAuthorizationService implements AuthorizationServic
       return delegated;
     }
     AssetGovernance governance = store.load(resource.type(), resource.id());
-    if (governance == null || !governance.isPresent()) {
+    if (!governance.isPresent()) {
       return delegated;
     }
     if (governance.health() == AssetGovernance.Health.OFFLINE) {

@@ -1,7 +1,7 @@
 package io.oryxos.web.config;
 
 import io.oryxos.core.auth.Role;
-import io.oryxos.core.policy.AssetAwareAuthorizationService;
+import io.oryxos.core.policy.AssetAwareAuthorizationServiceImpl;
 import io.oryxos.core.policy.AssetGovernanceStore;
 import io.oryxos.core.policy.AuthorizationService;
 import io.oryxos.core.policy.RoleBasedAuthorizationServiceImpl;
@@ -74,7 +74,7 @@ public class AuthorizationConfig {
       LOG.warn("资产治理已启用但未装配 AssetGovernanceStore，跳过资产门禁");
       return roleBased;
     }
-    return new AssetAwareAuthorizationService(roleBased, store, true);
+    return new AssetAwareAuthorizationServiceImpl(roleBased, store, true);
   }
 
   /** 绑定/调用点的薄封装：内部仍只调 {@link AuthorizationService#decide}。 */

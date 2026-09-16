@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /** 041 资产门禁装饰器：flag 关必须原样透传；开时 OFFLINE / PRIVATE 叠加，缺元数据不加拒绝。 */
-class AssetAwareAuthorizationServiceTest {
+class AssetAwareAuthorizationServiceImplTest {
 
   private static final String AGENT = "ops-agent";
 
@@ -28,8 +28,8 @@ class AssetAwareAuthorizationServiceTest {
   void flagOffPassesThroughEvenWhenOffline() throws Exception {
     writeAgent(offlinePrivate(OWNER));
     AuthorizationService stub = allowAllButCounting();
-    AssetAwareAuthorizationService service =
-        new AssetAwareAuthorizationService(stub, new AssetGovernanceStore(root), false);
+    AssetAwareAuthorizationServiceImpl service =
+        new AssetAwareAuthorizationServiceImpl(stub, new AssetGovernanceStore(root), false);
 
     Decision decision = service.decide(user(OTHER), Action.RUN_AGENT, ResourceRef.agent(AGENT));
 
@@ -40,18 +40,18 @@ class AssetAwareAuthorizationServiceTest {
   @Test
   void offlineDeniesWhenFlagOn() throws Exception {
     writeAgent(offlinePrivate(OWNER));
-    AssetAwareAuthorizationService service = enabled(allowAllButCounting());
+    AssetAwareAuthorizationServiceImpl service = enabled(allowAllButCounting());
 
     Decision decision = service.decide(user(OWNER), Action.RUN_AGENT, ResourceRef.agent(AGENT));
 
     assertThat(decision.allowed()).isFalse();
-    assertThat(decision.reason()).isEqualTo(AssetAwareAuthorizationService.REASON_OFFLINE);
+    assertThat(decision.reason()).isEqualTo(AssetAwareAuthorizationServiceImpl.REASON_OFFLINE);
   }
 
   @Test
   void privateOwnerAllowedOtherUserDeniedAdminAllowed() throws Exception {
     writeAgent(activePrivate(OWNER));
-    AssetAwareAuthorizationService service = enabled(allowAllButCounting());
+    AssetAwareAuthorizationServiceImpl service = enabled(allowAllButCounting());
 
     assertThat(
             service.decide(user(OWNER), Action.MANAGE_AGENTS, ResourceRef.agent(AGENT)).allowed())
@@ -66,7 +66,7 @@ class AssetAwareAuthorizationServiceTest {
 
   @Test
   void missingMetaAllows() {
-    AssetAwareAuthorizationService service = enabled(allowAllButCounting());
+    AssetAwareAuthorizationServiceImpl service = enabled(allowAllButCounting());
 
     Decision decision = service.decide(user(OTHER), Action.RUN_AGENT, ResourceRef.agent(AGENT));
 
@@ -77,8 +77,8 @@ class AssetAwareAuthorizationServiceTest {
   void delegateDenyShortCircuitsWithoutAssetGate() throws Exception {
     writeAgent(activePrivate(OWNER));
     AuthorizationService deny = (principal, action, resource) -> Decision.denied("角色不足");
-    AssetAwareAuthorizationService service =
-        new AssetAwareAuthorizationService(deny, new AssetGovernanceStore(root), true);
+    AssetAwareAuthorizationServiceImpl service =
+        new AssetAwareAuthorizationServiceImpl(deny, new AssetGovernanceStore(root), true);
 
     Decision decision = service.decide(user(OTHER), Action.MANAGE_AGENTS, ResourceRef.agent(AGENT));
 
@@ -89,7 +89,7 @@ class AssetAwareAuthorizationServiceTest {
   @Test
   void apiKeyOnlyBlockedByOffline() throws Exception {
     writeAgent(activePrivate(OWNER));
-    AssetAwareAuthorizationService service = enabled(allowAllButCounting());
+    AssetAwareAuthorizationServiceImpl service = enabled(allowAllButCounting());
     Principal key = Principal.apiKey(KEY_NAME, KEY_NAME, Set.of(Role.EDITOR));
 
     assertThat(service.decide(key, Action.RUN_AGENT, ResourceRef.agent(AGENT)).allowed()).isTrue();
@@ -97,11 +97,11 @@ class AssetAwareAuthorizationServiceTest {
     writeAgent(offlinePrivate(OWNER));
     Decision offline = service.decide(key, Action.RUN_AGENT, ResourceRef.agent(AGENT));
     assertThat(offline.allowed()).isFalse();
-    assertThat(offline.reason()).isEqualTo(AssetAwareAuthorizationService.REASON_OFFLINE);
+    assertThat(offline.reason()).isEqualTo(AssetAwareAuthorizationServiceImpl.REASON_OFFLINE);
   }
 
-  private AssetAwareAuthorizationService enabled(AuthorizationService delegate) {
-    return new AssetAwareAuthorizationService(delegate, new AssetGovernanceStore(root), true);
+  private AssetAwareAuthorizationServiceImpl enabled(AuthorizationService delegate) {
+    return new AssetAwareAuthorizationServiceImpl(delegate, new AssetGovernanceStore(root), true);
   }
 
   private void writeAgent(AssetGovernance governance) throws Exception {
