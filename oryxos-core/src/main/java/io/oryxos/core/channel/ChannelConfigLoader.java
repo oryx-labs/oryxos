@@ -1,5 +1,7 @@
 package io.oryxos.core.channel;
 
+import io.oryxos.core.policy.AssetGovernance;
+import io.oryxos.core.policy.AssetGovernanceStore;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
@@ -37,6 +39,9 @@ public class ChannelConfigLoader {
   private static final Pattern ENV_PLACEHOLDER = Pattern.compile("\\$\\{([A-Za-z0-9_]+)}");
   private static final String POSIX_VIEW = "posix";
 
+  /** 条目上的治理块键。与 {@link AssetGovernanceStore#KEY_GOVERNANCE} 同一字面量。 */
+  private static final String KEY_GOVERNANCE = AssetGovernanceStore.KEY_GOVERNANCE;
+
   private final Path configFile;
 
   public ChannelConfigLoader(Path configFile) {
@@ -52,7 +57,11 @@ public class ChannelConfigLoader {
     return resolved;
   }
 
-  /** 对单份原始配置解析占位符，供 Admin 增/改后立即建连用。 */
+  /**
+   * 对单份原始配置解析占位符，供 Admin 增/改后立即建连用。
+   *
+   * <p>治理块原样穿过：不是凭证，不做 {@code ${ENV}} 替换，也不从 appSecret/extra 拷入。
+   */
   public ChannelConfig resolve(ChannelConfig raw) {
     Map<String, String> extra = new LinkedHashMap<>();
     raw.extra().forEach((key, value) -> extra.put(key, resolvePlaceholders(value)));
@@ -63,7 +72,8 @@ public class ChannelConfigLoader {
         resolvePlaceholders(raw.appSecret()),
         raw.agent(),
         raw.enabled(),
-        extra);
+        extra,
+        raw.governance());
   }
 
   /**
@@ -106,7 +116,8 @@ public class ChannelConfigLoader {
               asString(entry.get("app_secret")),
               asString(entry.get("agent")),
               asEnabled(entry.get("enabled"), asString(entry.get("name"))),
-              asExtra(entry.get("extra"), asString(entry.get("name"))));
+              asExtra(entry.get("extra"), asString(entry.get("name"))),
+              asGovernance(entry.get(KEY_GOVERNANCE), asString(entry.get("name"))));
       config.validateShape();
       if (!seen.add(config.name())) {
         throw new IllegalArgumentException("channels.yaml 渠道名重复: " + config.name());
@@ -129,6 +140,10 @@ public class ChannelConfigLoader {
       entry.put("enabled", c.enabled());
       if (!c.extra().isEmpty()) {
         entry.put("extra", new LinkedHashMap<>(c.extra()));
+      }
+      Map<String, String> governance = AssetGovernanceStore.toBlock(c.governance());
+      if (!governance.isEmpty()) {
+        entry.put(KEY_GOVERNANCE, governance);
       }
       channels.add(entry);
     }
@@ -232,6 +247,19 @@ public class ChannelConfigLoader {
       extra.put(String.valueOf(entry.getKey()), asString(entry.getValue()));
     }
     return extra;
+  }
+
+  /** 缺块 = 未设（null）。非映射 fail-loud。空块折叠为未设，避免回写空 governance。 */
+  private static AssetGovernance asGovernance(Object value, String channelName) {
+    if (value == null) {
+      return null;
+    }
+    if (!(value instanceof Map<?, ?>)) {
+      String who = channelName == null || channelName.isBlank() ? "渠道" : "渠道 " + channelName;
+      throw new IllegalArgumentException(who + " 的 " + KEY_GOVERNANCE + " 必须是映射");
+    }
+    AssetGovernance parsed = AssetGovernanceStore.parseNode(value);
+    return parsed.isPresent() ? parsed : null;
   }
 
   private static String asString(Object value) {

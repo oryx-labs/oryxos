@@ -1,9 +1,12 @@
 package io.oryxos.core.channel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.oryxos.core.policy.AssetGovernance;
 import io.oryxos.core.testing.SymlinkAssumptions;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -272,5 +275,73 @@ class ChannelConfigLoaderTest {
         """);
     ChannelConfig resolved = new ChannelConfigLoader(configFile()).load().get(0);
     assertEquals(System.getenv("PATH"), resolved.extra("tenant_id"));
+  }
+
+  @Test
+  @DisplayName("governance 块 save/load 往返；缺块保持未设；不含 app_secret")
+  void governanceBlockRoundTrip() throws Exception {
+    write(
+        """
+        channels:
+          - name: ops-feishu
+            type: feishu
+            app_id: ${FEISHU_APP_ID}
+            app_secret: ${FEISHU_APP_SECRET}
+            agent: ops-agent
+            governance:
+              owner: alice
+              version: "2"
+              visibility: PRIVATE
+              riskLevel: low
+              health: OFFLINE
+          - name: plain-chan
+            type: feishu
+            app_id: a
+            app_secret: b
+            agent: ops-agent
+        """);
+    ChannelConfigLoader loader = new ChannelConfigLoader(configFile());
+    List<ChannelConfig> raw = loader.loadRaw();
+    assertEquals(AssetGovernance.Health.OFFLINE, raw.get(0).governance().health());
+    assertEquals(AssetGovernance.Visibility.PRIVATE, raw.get(0).governance().visibility());
+    assertEquals("alice", raw.get(0).governance().owner());
+    assertEquals("low", raw.get(0).governance().riskLevel());
+    assertNull(raw.get(1).governance());
+
+    loader.save(raw);
+    String written = Files.readString(configFile());
+    int blockAt = written.indexOf("governance:");
+    assertTrue(blockAt >= 0);
+    int nextEntry = written.indexOf("- name:", blockAt);
+    String block =
+        nextEntry < 0 ? written.substring(blockAt) : written.substring(blockAt, nextEntry);
+    assertFalse(block.contains("app_secret"));
+    assertTrue(block.contains("owner: alice"));
+    List<ChannelConfig> again = loader.loadRaw();
+    assertEquals("alice", again.get(0).governance().owner());
+    assertEquals("2", again.get(0).governance().version());
+    assertEquals(AssetGovernance.Health.OFFLINE, again.get(0).governance().health());
+    assertNull(again.get(1).governance());
+  }
+
+  @Test
+  @DisplayName("resolve 不把 governance 当凭证：块内 ${ENV} 原样保留")
+  void resolveDoesNotTreatGovernanceAsCredentials() throws Exception {
+    write(
+        """
+        channels:
+          - name: ops-feishu
+            type: feishu
+            app_id: ${PATH}
+            app_secret: ${PATH}
+            agent: ops-agent
+            governance:
+              owner: "${PATH}"
+              health: OFFLINE
+        """);
+    ChannelConfig resolved = new ChannelConfigLoader(configFile()).load().get(0);
+    assertEquals(System.getenv("PATH"), resolved.appId());
+    assertEquals("${PATH}", resolved.governance().owner());
+    assertEquals(AssetGovernance.Health.OFFLINE, resolved.governance().health());
   }
 }

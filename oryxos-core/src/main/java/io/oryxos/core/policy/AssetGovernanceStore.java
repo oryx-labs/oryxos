@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -17,9 +18,13 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.error.YAMLException;
 
 /**
- * GOVERNANCE.yml 侧车读写（041 / #463）：约定落在 {@code .oryxos/{agents|skills|knowledge}/&lt;name&gt;/}。
+ * 治理元数据读取（041 / #463）。
  *
- * <p>缺文件返回 {@link AssetGovernance#empty()}——调用方不得把「没元数据」当成拒绝。写入用原子改名，避免共享卷读到半文件。 渠道侧车本刀不写。
+ * <p>Agent / Skill / Knowledge 约定落在 {@code
+ * .oryxos/{agents|skills|knowledge}/&lt;name&gt;/GOVERNANCE.yml}。 渠道不写侧车：从同一工作区根的 {@code
+ * channels.yaml} 条目 {@code governance:} 块读取。写入渠道治理只走渠道 Admin → loader.save，本类不另写一份以免被覆盖丢掉。
+ *
+ * <p>缺文件或未知渠道返回 {@link AssetGovernance#empty()}——调用方不得把「没元数据」当成拒绝。侧车写入用原子改名。
  */
 public final class AssetGovernanceStore {
 
@@ -45,6 +50,16 @@ public final class AssetGovernanceStore {
   private static final String KEY_RISK = "riskLevel";
 
   private static final String KEY_HEALTH = "health";
+
+  /** 渠道配置文件名（与运行时 {@code oryxosRoot/channels.yaml} 同一路径）。 */
+  static final String CHANNELS_FILE = "channels.yaml";
+
+  private static final String KEY_CHANNELS = "channels";
+
+  private static final String KEY_ENTRY_NAME = "name";
+
+  /** channels.yaml 条目上的治理块键。Loader 回写必须使用同一常量，避免两套字面量漂移。 */
+  public static final String KEY_GOVERNANCE = "governance";
 
   private final Path workspaceRoot;
 
@@ -82,6 +97,7 @@ public final class AssetGovernanceStore {
       case ResourceRef.TYPE_AGENT -> loadAgent(id);
       case ResourceRef.TYPE_SKILL -> loadSkill(id);
       case ResourceRef.TYPE_KNOWLEDGE -> loadKnowledge(id);
+      case ResourceRef.TYPE_CHANNEL -> loadChannel(id);
       default -> AssetGovernance.empty();
     };
   }
@@ -99,6 +115,43 @@ public final class AssetGovernanceStore {
   /** 写入知识库侧车。 */
   public void saveKnowledge(String name, AssetGovernance governance) {
     save(path(DIR_KNOWLEDGE, name), governance);
+  }
+
+  /** 读取渠道治理块。缺文件、未知名称、块缺失或解析失败均返回 empty（不把脏文件当成拒绝，也不记录可能含凭证的原文）。 */
+  public AssetGovernance loadChannel(String name) {
+    if (name == null || !SAFE_NAME.matcher(name).matches()) {
+      return AssetGovernance.empty();
+    }
+    Path file = workspaceRoot.resolve(CHANNELS_FILE);
+    if (!Files.isRegularFile(file)) {
+      return AssetGovernance.empty();
+    }
+    try {
+      String yaml = Files.readString(file);
+      if (yaml.isBlank()) {
+        return AssetGovernance.empty();
+      }
+      Object loaded = new Yaml(new SafeConstructor(new LoaderOptions())).load(yaml);
+      if (!(loaded instanceof Map<?, ?> root)) {
+        return AssetGovernance.empty();
+      }
+      Object channels = root.get(KEY_CHANNELS);
+      if (!(channels instanceof List<?> list)) {
+        return AssetGovernance.empty();
+      }
+      for (Object item : list) {
+        if (!(item instanceof Map<?, ?> entry)) {
+          continue;
+        }
+        if (name.equals(text(entry.get(KEY_ENTRY_NAME)))) {
+          return parseNode(entry.get(KEY_GOVERNANCE));
+        }
+      }
+      return AssetGovernance.empty();
+    } catch (IOException | YAMLException ex) {
+      LOG.warn("读取 channels.yaml 治理块失败，按未设治理处理");
+      return AssetGovernance.empty();
+    }
   }
 
   private Path path(String dir, String name) {
@@ -133,6 +186,38 @@ public final class AssetGovernanceStore {
     }
   }
 
+  /** 解析嵌套治理块。非映射、空映射或无有效字段返回 empty。未知键忽略——避免把凭证字段带进治理模型。 */
+  public static AssetGovernance parseNode(Object node) {
+    if (!(node instanceof Map<?, ?> raw) || raw.isEmpty()) {
+      return AssetGovernance.empty();
+    }
+    return fromMap(raw);
+  }
+
+  /** 可回写的治理字段。未设返回空映射（调用方省略键）。只含已知字段，不含凭证。 */
+  public static Map<String, String> toBlock(AssetGovernance governance) {
+    Map<String, String> body = new LinkedHashMap<>();
+    if (governance == null || !governance.isPresent()) {
+      return body;
+    }
+    putText(body, KEY_OWNER, governance.owner());
+    putText(body, KEY_VERSION, governance.version());
+    if (governance.visibility() != null) {
+      body.put(KEY_VISIBILITY, governance.visibility().name());
+    }
+    putText(body, KEY_RISK, governance.riskLevel());
+    if (governance.health() != null) {
+      body.put(KEY_HEALTH, governance.health().name());
+    }
+    return body;
+  }
+
+  private static void putText(Map<String, String> body, String key, String value) {
+    if (value != null && !value.isBlank()) {
+      body.put(key, value.strip());
+    }
+  }
+
   private static AssetGovernance fromMap(Map<?, ?> raw) {
     return new AssetGovernance(
         text(raw.get(KEY_OWNER)),
@@ -157,24 +242,9 @@ public final class AssetGovernanceStore {
     AtomicFiles.writeString(file, render(governance));
   }
 
-  /** 渲染侧车 YAML（块风格，字段名稳定）。 */
+  /** 渲染侧车 YAML（块风格，字段名稳定）。与 channels.yaml 治理块共用 {@link #toBlock}。 */
   static String render(AssetGovernance governance) {
-    Map<String, String> body = new LinkedHashMap<>();
-    if (governance.owner() != null && !governance.owner().isBlank()) {
-      body.put(KEY_OWNER, governance.owner().strip());
-    }
-    if (governance.version() != null && !governance.version().isBlank()) {
-      body.put(KEY_VERSION, governance.version().strip());
-    }
-    if (governance.visibility() != null) {
-      body.put(KEY_VISIBILITY, governance.visibility().name());
-    }
-    if (governance.riskLevel() != null && !governance.riskLevel().isBlank()) {
-      body.put(KEY_RISK, governance.riskLevel().strip());
-    }
-    if (governance.health() != null) {
-      body.put(KEY_HEALTH, governance.health().name());
-    }
+    Map<String, String> body = toBlock(governance);
     DumperOptions options = new DumperOptions();
     options.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
     options.setPrettyFlow(true);

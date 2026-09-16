@@ -20,6 +20,25 @@ Fields:
 
 Missing file → empty governance → no extra deny when flag on.
 
+## channels.yaml governance block
+
+渠道不写 `GOVERNANCE.yml`。同一字段嵌在 `.oryxos/channels.yaml` 条目下，缺块 = 未设：
+
+```yaml
+channels:
+  - name: ops-feishu
+    type: feishu
+    app_id: ${FEISHU_APP_ID}
+    app_secret: ${FEISHU_APP_SECRET}
+    agent: ops-agent
+    governance:
+      owner: alice
+      visibility: PRIVATE
+      health: OFFLINE
+```
+
+写入只经 Channel API → `ChannelAdminService` → `ChannelConfigLoader.save`。`resolve()` 不把该块当凭证。未知键不落盘（避免把 appSecret 塞进治理块后被回写）。
+
 ## asset_governance_events (V11)
 
 Append-only audit of governance PUT:
@@ -29,4 +48,4 @@ Append-only audit of governance PUT:
 ## Runtime wiring
 
 - `AssetAwareAuthorizationServiceImpl` wraps role-based decide when `rbac.enabled && asset-governance.enabled`
-- Channels: optional governance block later（本刀可跳过写入）
+- Channel writes: extra `decide(MANAGE_CHANNELS, channel(name))` so the decorator can see the named block. Filter still uses `channel(null)`.

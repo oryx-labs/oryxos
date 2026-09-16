@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.oryxos.core.auth.Principal;
 import io.oryxos.core.auth.Role;
+import io.oryxos.core.channel.ChannelConfig;
+import io.oryxos.core.channel.ChannelConfigLoader;
 import io.oryxos.core.policy.AuthorizationService.Decision;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -142,5 +145,44 @@ class AssetAwareAuthorizationServiceImplTest {
       calls++;
       return Decision.ALLOWED;
     }
+  }
+
+  @Test
+  void channelOfflineDeniedWhenFlagOn() {
+    writeChannel(
+        new AssetGovernance(
+            OWNER, "1", AssetGovernance.Visibility.PRIVATE, null, AssetGovernance.Health.OFFLINE));
+    AssetAwareAuthorizationServiceImpl service = enabled(allowAllButCounting());
+
+    Decision decision =
+        service.decide(user(OWNER), Action.MANAGE_CHANNELS, ResourceRef.channel(CHANNEL));
+
+    assertThat(decision.allowed()).isFalse();
+    assertThat(decision.reason()).isEqualTo(AssetAwareAuthorizationServiceImpl.REASON_OFFLINE);
+  }
+
+  @Test
+  void channelFlagOffDoesNotExtraDeny() {
+    writeChannel(
+        new AssetGovernance(
+            OWNER, "1", AssetGovernance.Visibility.PRIVATE, null, AssetGovernance.Health.OFFLINE));
+    AssetAwareAuthorizationServiceImpl service =
+        new AssetAwareAuthorizationServiceImpl(
+            allowAllButCounting(), new AssetGovernanceStore(root), false);
+
+    Decision decision =
+        service.decide(user(OTHER), Action.MANAGE_CHANNELS, ResourceRef.channel(CHANNEL));
+
+    assertThat(decision.allowed()).isTrue();
+  }
+
+  private static final String CHANNEL = "ops-feishu";
+
+  private void writeChannel(AssetGovernance governance) {
+    new ChannelConfigLoader(root.resolve(AssetGovernanceStore.CHANNELS_FILE))
+        .save(
+            List.of(
+                new ChannelConfig(CHANNEL, "feishu", "app", "secret", AGENT, true)
+                    .withGovernance(governance)));
   }
 }

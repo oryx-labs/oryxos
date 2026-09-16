@@ -95,15 +95,24 @@ public class ChannelAdminService {
     if (idx < 0) {
       throw new IllegalArgumentException("渠道不存在: " + name);
     }
-    ChannelConfig resolved = loader.resolve(raw);
-    if (raw.enabled()) {
+    ChannelConfig merged = preserveGovernance(raw, existing.get(idx));
+    ChannelConfig resolved = loader.resolve(merged);
+    if (merged.enabled()) {
       validateForLaunch(resolved);
     }
     stopOne(name);
-    existing.set(idx, raw);
+    existing.set(idx, merged);
     loader.save(existing);
     startOne(resolved);
-    return raw;
+    return merged;
+  }
+
+  /** 更新未携带治理块时保留既有块，避免 CRUD 把 channels.yaml 里的 governance 抹掉。显式空块表示清除。 */
+  private static ChannelConfig preserveGovernance(ChannelConfig incoming, ChannelConfig previous) {
+    if (incoming.governance() != null) {
+      return incoming;
+    }
+    return incoming.withGovernance(previous.governance());
   }
 
   /** 删除渠道：断开连接并从配置移除。 */

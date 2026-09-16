@@ -15,12 +15,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import io.oryxos.core.channel.ChannelAdminService;
 import io.oryxos.core.channel.ChannelConfig;
+import io.oryxos.core.channel.ChannelConfigLoader;
 import io.oryxos.core.channel.ChannelStatus;
+import io.oryxos.core.policy.AssetAwareAuthorizationServiceImpl;
+import io.oryxos.core.policy.AssetGovernance;
+import io.oryxos.core.policy.AssetGovernanceStore;
+import io.oryxos.core.policy.AuthorizationService;
 import io.oryxos.web.GlobalExceptionHandler;
+import io.oryxos.web.security.AssetBindGuard;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -29,7 +37,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ChannelApiControllerTest {
 
   private ChannelAdminService admin;
+  private ChannelApiController controller;
   private MockMvc mvc;
+
+  @TempDir Path governanceRoot;
+
+  private static final String CHANNEL = "ops-feishu";
+
+  private static final String CHANNELS_YAML = "channels.yaml";
 
   private static final ChannelConfig RAW =
       new ChannelConfig(
@@ -38,8 +53,9 @@ class ChannelApiControllerTest {
   @BeforeEach
   void setUp() {
     admin = mock(ChannelAdminService.class);
+    controller = new ChannelApiController(admin);
     mvc =
-        MockMvcBuilders.standaloneSetup(new ChannelApiController(admin))
+        MockMvcBuilders.standaloneSetup(controller)
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
   }
@@ -149,5 +165,61 @@ class ChannelApiControllerTest {
 
     when(admin.listRaw()).thenReturn(List.of());
     mvc.perform(delete("/api/v1/channels/ops-feishu")).andExpect(status().isNotFound());
+  }
+
+  @Test
+  @DisplayName("flag 开：OFFLINE 渠道 update 被 AuthorizationService 拒绝且不落盘")
+  void updateDeniedWhenChannelOffline() throws Exception {
+    AssetGovernance offline =
+        new AssetGovernance(
+            "alice", "1", AssetGovernance.Visibility.PRIVATE, null, AssetGovernance.Health.OFFLINE);
+    new ChannelConfigLoader(governanceRoot.resolve(CHANNELS_YAML))
+        .save(
+            List.of(
+                new ChannelConfig(CHANNEL, "feishu", "a", "b", "ops-agent", true)
+                    .withGovernance(offline)));
+    AuthorizationService auth =
+        new AssetAwareAuthorizationServiceImpl(
+            AuthorizationService.ALLOW_ALL, new AssetGovernanceStore(governanceRoot), true);
+    controller.setAssetBindGuard(new AssetBindGuard(auth));
+    when(admin.listRaw()).thenReturn(List.of(RAW));
+
+    mvc.perform(
+            put("/api/v1/channels/" + CHANNEL)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(updateBody()))
+        .andExpect(status().isForbidden());
+    verify(admin, never()).update(eq(CHANNEL), any());
+  }
+
+  @Test
+  @DisplayName("flag 关：同一 OFFLINE 块不额外拒绝 update")
+  void updateNotExtraDeniedWhenFlagOff() throws Exception {
+    AssetGovernance offline =
+        new AssetGovernance(
+            "alice", "1", AssetGovernance.Visibility.PRIVATE, null, AssetGovernance.Health.OFFLINE);
+    new ChannelConfigLoader(governanceRoot.resolve(CHANNELS_YAML))
+        .save(
+            List.of(
+                new ChannelConfig(CHANNEL, "feishu", "a", "b", "ops-agent", true)
+                    .withGovernance(offline)));
+    AuthorizationService auth =
+        new AssetAwareAuthorizationServiceImpl(
+            AuthorizationService.ALLOW_ALL, new AssetGovernanceStore(governanceRoot), false);
+    controller.setAssetBindGuard(new AssetBindGuard(auth));
+    when(admin.listRaw()).thenReturn(List.of(RAW));
+    when(admin.update(eq(CHANNEL), any())).thenReturn(RAW);
+
+    mvc.perform(
+            put("/api/v1/channels/" + CHANNEL)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(updateBody()))
+        .andExpect(status().isOk());
+    verify(admin).update(eq(CHANNEL), any());
+  }
+
+  private static String updateBody() {
+    return "{\"name\":\"ops-feishu\",\"type\":\"feishu\",\"appId\":\"a\","
+        + "\"appSecret\":\"b\",\"agent\":\"ops-agent\",\"enabled\":true}";
   }
 }

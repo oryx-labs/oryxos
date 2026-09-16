@@ -4,7 +4,8 @@ import java.util.Locale;
 import java.util.Objects;
 
 /**
- * 资产治理侧车模型（041 / #463）：落在资产目录旁的 {@code GOVERNANCE.yml}，描述 owner / 可见性 / 健康态。
+ * 资产治理模型（041 / #463）：Agent/Skill/Knowledge 落在 {@code GOVERNANCE.yml}；渠道嵌在 {@code channels.yaml} 的
+ * {@code governance:} 块。字段相同，不承载凭证。
  *
  * <p>缺文件或字段全空视为「未设治理」——装饰器不得额外拒绝（存量兼容）。{@code riskLevel} 与 {@code version} 本刀只承载展示/审计，不参与裁决。
  */

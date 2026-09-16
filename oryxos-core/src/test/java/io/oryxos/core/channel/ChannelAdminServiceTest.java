@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import io.oryxos.core.policy.AssetGovernance;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import java.nio.file.Path;
@@ -183,5 +184,21 @@ class ChannelAdminServiceTest {
     lifecycle.setLength(0);
     admin.stopAll(); // 不抛 NPE
     assertTrue(lifecycle.toString().contains("stop:chan-a"));
+  }
+
+  @Test
+  @DisplayName("update 未携带治理块时保留 channels.yaml 已有块")
+  void updateKeepsGovernanceWhenOmitted() {
+    AssetGovernance block =
+        new AssetGovernance(
+            "alice", "1", AssetGovernance.Visibility.PRIVATE, null, AssetGovernance.Health.ACTIVE);
+    admin.add(config("chan-a", "ops-agent", true).withGovernance(block));
+
+    admin.update("chan-a", config("chan-a", "ops-agent", false));
+
+    AssetGovernance loaded = loader.loadRaw().get(0).governance();
+    assertEquals("alice", loaded.owner());
+    assertEquals(AssetGovernance.Visibility.PRIVATE, loaded.visibility());
+    assertEquals(AssetGovernance.Health.ACTIVE, loaded.health());
   }
 }

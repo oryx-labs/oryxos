@@ -1,5 +1,6 @@
 package io.oryxos.core.channel;
 
+import io.oryxos.core.policy.AssetGovernance;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -9,6 +10,8 @@ import java.util.regex.Pattern;
  * <p>凭证字段（appId/appSecret）以及 {@code extra} 值在 raw 读法下保留 {@code ${ENV}} 字面量、resolved 读法下为真实值——两套读法
  * 不能混用，见 {@link ChannelConfigLoader}。
  *
+ * <p>{@code governance} 是可选治理块，不是凭证：解析占位符时不得替换其中字段，也不得把 appSecret 写入该块。{@code null} = 未设。
+ *
  * @param name 渠道名，唯一，[a-zA-Z0-9_-]+
  * @param type 渠道类型（须是已注册的适配器类型）
  * @param appId 平台应用标识（推荐 ${ENV} 占位）
@@ -16,6 +19,7 @@ import java.util.regex.Pattern;
  * @param agent 绑定的 Agent 名（.oryxos/agents/ 目录名）
  * @param enabled false = 停用（断开连接但保留配置），缺省 true
  * @param extra 渠道扩展字段（如 WhatsApp phone_number_id、Teams tenant_id）；缺省空
+ * @param governance 可选治理块；缺省未设。只含 owner/visibility/health 等，不含凭证
  */
 public record ChannelConfig(
     String name,
@@ -24,7 +28,8 @@ public record ChannelConfig(
     String appSecret,
     String agent,
     boolean enabled,
-    Map<String, String> extra) {
+    Map<String, String> extra,
+    AssetGovernance governance) {
 
   private static final Pattern NAME_PATTERN = Pattern.compile("[a-zA-Z0-9_-]+");
 
@@ -35,10 +40,27 @@ public record ChannelConfig(
     extra = extra == null || extra.isEmpty() ? Map.of() : Map.copyOf(extra);
   }
 
-  /** 无扩展字段的便捷构造——既有 6 参调用点保持编译。 */
+  /** 无扩展字段、未设治理的便捷构造——既有 6 参调用点保持编译。 */
   public ChannelConfig(
       String name, String type, String appId, String appSecret, String agent, boolean enabled) {
-    this(name, type, appId, appSecret, agent, enabled, Map.of());
+    this(name, type, appId, appSecret, agent, enabled, Map.of(), null);
+  }
+
+  /** 带 extra、未设治理——既有 7 参调用点保持编译。 */
+  public ChannelConfig(
+      String name,
+      String type,
+      String appId,
+      String appSecret,
+      String agent,
+      boolean enabled,
+      Map<String, String> extra) {
+    this(name, type, appId, appSecret, agent, enabled, extra, null);
+  }
+
+  /** 替换治理块；传入 {@code null} 表示未设（更新时是否保留旧块由 Admin 决定）。 */
+  public ChannelConfig withGovernance(AssetGovernance block) {
+    return new ChannelConfig(name, type, appId, appSecret, agent, enabled, extra, block);
   }
 
   /**
@@ -63,6 +85,8 @@ public record ChannelConfig(
 
   /**
    * 凭证已解析校验：resolved 读法下值仍含 {@code ${} } 即环境变量未解析（仿 ProvidersProperties 口径，017 R2）。
+   *
+   * <p>不检查 {@code governance}——那不是凭证。
    *
    * @throws IllegalArgumentException 凭证缺失或未解析时点名报错
    */
