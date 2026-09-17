@@ -118,6 +118,9 @@ oryxos:
     oidc:
       enabled: false
       scopes: openid profile email
+      # group-roles 为空则不改角色。非空时仅命中组才 setRoles，未命中不撤权。不调用 AuthorizationService。
+      # group-claim: groups
+      # group-roles: {}
 
 # Observability: Actuator + Micrometer/Prometheus
 # /actuator/** 由 ApiKeyAuthFilter 保护（API Key 或管理台 session），health 探活子树豁免；

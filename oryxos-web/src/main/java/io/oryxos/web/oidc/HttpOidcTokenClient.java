@@ -187,7 +187,8 @@ public class HttpOidcTokenClient implements OidcTokenClient {
       throw new OidcTokenException("id_token missing sub");
     }
     String email = claims.getStringClaim("email");
-    return new OidcIdTokenClaims(claims.getIssuer(), subject, email);
+    List<String> groups = OidcGroupClaims.normalize(claims.getClaim(properties.getGroupClaim()));
+    return new OidcIdTokenClaims(claims.getIssuer(), subject, email, groups);
   }
 
   private static String text(JsonNode root, String field) {

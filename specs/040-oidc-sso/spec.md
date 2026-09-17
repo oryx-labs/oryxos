@@ -22,7 +22,7 @@ Default-off OIDC authorization-code + PKCE login for the admin console. Maps IdP
 ## Out of scope (honest gaps)
 
 - JIT / auto-provision local users from IdP claims
-- Groups / IdP roles → OryxOS roles
+- Groups → roles is config-only (`oryxos.web.oidc.group-roles`). Empty map does not touch roles. Unmatched login does not revoke. No admin UI for the map. No JIT.
 - Admin UI for mapping
 - Multi-IdP / discovery UI
 - Full 九件套 research/plan/tasks/contracts
@@ -35,4 +35,4 @@ Default-off OIDC authorization-code + PKCE login for the admin console. Maps IdP
 ## Data
 
 - `identity_mappings` — UNIQUE(issuer, subject) → username
-- `auth_events` — LOGIN_SUCCESS / LOGIN_FAILURE / LOGOUT / MAPPING_UPSERT / MAPPING_DELETE
+- `auth_events` — LOGIN_SUCCESS / LOGIN_FAILURE / LOGOUT / MAPPING_UPSERT / MAPPING_DELETE / GROUP_ROLE_SYNC

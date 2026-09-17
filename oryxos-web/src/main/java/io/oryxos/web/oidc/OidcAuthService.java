@@ -1,5 +1,6 @@
 package io.oryxos.web.oidc;
 
+import io.oryxos.core.auth.Role;
 import io.oryxos.storage.AuthEventRecorder;
 import io.oryxos.storage.AuthEventType;
 import io.oryxos.storage.IdentityMapping;
@@ -16,6 +17,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +25,8 @@ import org.slf4j.LoggerFactory;
  * OIDC 授权码 + PKCE 登录编排（040 / #461）。
  *
  * <p><b>刻意不依赖</b>{@code AuthorizationService}——callback 只做认证、映射与建 {@link WebSession}；授权留给既有
- * session→Principal→Filter 路径（#462）。角色比对同样禁止出现在本类。
+ * session→Principal→Filter 路径（#462）。组→角色只写 {@code web_users.roles}，不在这里做角色比对或
+ * AuthorizationService.decide。
  */
 public class OidcAuthService {
 
@@ -38,6 +41,7 @@ public class OidcAuthService {
   private final WebUserService userService;
   private final WebSessionService sessionService;
   private final AuthEventRecorder authEventRecorder;
+  private final OidcGroupRoleSync groupRoleSync;
 
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
@@ -57,6 +61,7 @@ public class OidcAuthService {
     this.userService = userService;
     this.sessionService = sessionService;
     this.authEventRecorder = authEventRecorder;
+    this.groupRoleSync = new OidcGroupRoleSync(userService);
   }
 
   public boolean isEnabled() {
@@ -124,6 +129,9 @@ public class OidcAuthService {
       fail("user_missing_or_disabled", username);
       return OidcLoginResult.failure("user missing or disabled");
     }
+    if (!syncGroupRoles(username, claims)) {
+      return OidcLoginResult.failure("group role sync failed");
+    }
     try {
       authEventRecorder.recordOrThrow(
           AuthEventType.LOGIN_SUCCESS, username, "oidc issuer=" + claims.issuer());
@@ -134,6 +142,38 @@ public class OidcAuthService {
     }
     WebSession session = sessionService.create(username);
     return OidcLoginResult.success(session, username);
+  }
+
+  /**
+   * 映射表为空或未命中时不写角色。命中则 setRoles；写库或审计失败则拒绝建 session。不调用 AuthorizationService。
+   *
+   * @return false 表示登录应失败
+   */
+  private boolean syncGroupRoles(String username, OidcIdTokenClaims claims) {
+    Optional<Set<Role>> synced;
+    try {
+      synced = groupRoleSync.apply(username, claims.groups(), properties);
+    } catch (RuntimeException ex) {
+      LOG.warn("OIDC 组角色写入失败：{}", sanitize(ex.toString()));
+      fail("group_role_sync_failed", username);
+      return false;
+    }
+    if (synced.isEmpty()) {
+      return true;
+    }
+    try {
+      authEventRecorder.recordOrThrow(
+          AuthEventType.GROUP_ROLE_SYNC, username, "roles=" + synced.get());
+    } catch (RuntimeException ex) {
+      LOG.error("GROUP_ROLE_SYNC 审计失败，拒绝建 session：{}", sanitize(ex.toString()));
+      fail("group_role_sync_audit_failed", username);
+      return false;
+    }
+    return true;
+  }
+
+  private static String sanitize(String value) {
+    return value.replace('\r', '_').replace('\n', '_');
   }
 
   private void fail(String detail, String principalId) {

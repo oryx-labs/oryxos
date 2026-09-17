@@ -197,6 +197,7 @@ oryxos:
   # OIDC/SSO（040 / #461）。默认关=零行为变化。开启后浏览器走 /api/v1/auth/oidc/login；
   # 须先 `oryxos user oidc-map <username> <issuer> <subject>` 建立映射（无 JIT 建号）。
   # client-secret 勿提交、勿打日志。callback 只建 oryxos_session，不调用 AuthorizationService。
+  # group-roles 为空则不改角色；非空时仅命中组才 setRoles，未命中保留原角色（不自动降权）。
   # web:
   #   oidc:
   #     enabled: true
@@ -205,6 +206,11 @@ oryxos:
   #     client-secret: ${ORYXOS_OIDC_CLIENT_SECRET}
   #     redirect-uri: https://oryxos.example.com/api/v1/auth/oidc/callback
   #     scopes: openid profile email
+  #     # group-roles 为空则不改 web_users.roles。非空时登录把命中的组写成角色（VIEWER/EDITOR/ADMIN）。
+  #     # 未命中不撤权。IdP 须把组放进 id_token 的 group-claim（默认 groups）；本配置不自动加 scope。
+  #     # group-claim: groups
+  #     # group-roles:
+  #     #   oryxos-editors: EDITOR
   #     # 可选：跳过 discovery 时显式端点
   #     # authorization-endpoint:
   #     # token-endpoint:

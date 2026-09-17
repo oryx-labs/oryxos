@@ -14,6 +14,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.oryxos.core.auth.Role;
 import io.oryxos.core.policy.AuthorizationService;
 import io.oryxos.storage.AuthEventRecorder;
 import io.oryxos.storage.AuthEventType;
@@ -26,7 +27,10 @@ import io.oryxos.web.GlobalExceptionHandler;
 import io.oryxos.web.config.WebOidcProperties;
 import io.oryxos.web.oidc.OidcAuthService.OidcLoginResult;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -147,6 +151,7 @@ class OidcAuthServiceTest {
     verify(sessionService).create("alice");
     verify(authEventRecorder)
         .recordOrThrow(eq(AuthEventType.LOGIN_SUCCESS), eq("alice"), anyString());
+    verify(userService, never()).setRoles(anyString(), any());
     verifyNoInteractions(authorizationService);
   }
 
@@ -169,5 +174,32 @@ class OidcAuthServiceTest {
     assertThat(service.completeLogin("code", "st").isSuccess()).isTrue();
     verifyNoInteractions(authorizationService);
     verify(authorizationService, never()).decide(any(), any(), any());
+    verify(userService, never()).setRoles(anyString(), any());
+  }
+
+  @Test
+  @DisplayName("命中组映射时写角色且仍不调用AuthorizationService")
+  void callback_matchingGroup_writesRolesWithoutDecide() {
+    pendingStore.put("st", "verifier");
+    properties.setGroupRoles(Map.of("oryxos-editors", "EDITOR"));
+    when(tokenClient.exchangeAndValidate(anyString(), anyString(), any()))
+        .thenReturn(
+            new OidcIdTokenClaims(
+                "https://idp.example", "sub-1", null, List.of("oryxos-editors")));
+    IdentityMapping mapping = new IdentityMapping();
+    mapping.setUsername("alice");
+    when(mappingService.findByIssuerAndSubject(anyString(), anyString()))
+        .thenReturn(Optional.of(mapping));
+    when(userService.isEnabledUser("alice")).thenReturn(true);
+    WebSession session = new WebSession();
+    session.setSessionId("sid");
+    session.setUsername("alice");
+    when(sessionService.create("alice")).thenReturn(session);
+
+    assertThat(service.completeLogin("code", "st").isSuccess()).isTrue();
+    verify(userService).setRoles("alice", Set.of(Role.EDITOR));
+    verify(authEventRecorder)
+        .recordOrThrow(eq(AuthEventType.GROUP_ROLE_SYNC), eq("alice"), eq("roles=[EDITOR]"));
+    verifyNoInteractions(authorizationService);
   }
 }

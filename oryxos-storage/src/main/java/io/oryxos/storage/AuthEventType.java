@@ -6,5 +6,7 @@ public enum AuthEventType {
   LOGIN_FAILURE,
   LOGOUT,
   MAPPING_UPSERT,
-  MAPPING_DELETE
+  MAPPING_DELETE,
+  /** 登录时按已配置的 IdP 组写入本地角色；不是授权拒绝事件。 */
+  GROUP_ROLE_SYNC
 }
