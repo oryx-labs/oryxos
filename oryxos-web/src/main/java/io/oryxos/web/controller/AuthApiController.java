@@ -1,5 +1,6 @@
 package io.oryxos.web.controller;
 
+import io.oryxos.core.auth.Role;
 import io.oryxos.storage.AuthEventRecorder;
 import io.oryxos.storage.AuthEventType;
 import io.oryxos.storage.WebSession;
@@ -15,7 +16,9 @@ import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -104,7 +107,7 @@ public class AuthApiController {
     WebSession session = sessionService.create(loginRequest.username());
     response.addHeader(
         HttpHeaders.SET_COOKIE, buildCookie(session.getSessionId(), -1, request.isSecure()));
-    return ApiResponse.ok(new AuthMeView(properties.isEnabled(), loginRequest.username()));
+    return ApiResponse.ok(meView(properties.isEnabled(), loginRequest.username()));
   }
 
   /** 登出：清当前 session + 清 cookie。幂等（无 session 也成功）。附带 auth_events LOGOUT（best-effort）。 */
@@ -121,7 +124,7 @@ public class AuthApiController {
     return ApiResponse.ok(null);
   }
 
-  /** 查当前登录用户。认证关闭时 200 返开关状态；认证开启时，已登录返用户名、未登录 401。 */
+  /** 查当前登录用户。认证关闭时 200 返开关状态；认证开启时，已登录返用户名与 rolesOf，未登录 401。 */
   @GetMapping("/me")
   public ApiResponse<AuthMeView> me(HttpServletRequest request, HttpServletResponse response) {
     if (!properties.isEnabled()) {
@@ -137,7 +140,26 @@ public class AuthApiController {
       response.setStatus(HttpStatus.UNAUTHORIZED.value());
       return ApiResponse.error(HttpStatus.UNAUTHORIZED.value(), "Not authenticated");
     }
-    return ApiResponse.ok(new AuthMeView(true, session.get().getUsername()));
+    return ApiResponse.ok(meView(true, session.get().getUsername()));
+  }
+
+  /**
+   * 角色只读 {@link WebUserService#rolesOf}，与 ApiKeyAuthFilter 的 session 主体同源。不调用 AuthorizationService。
+   */
+  private AuthMeView meView(boolean authenticationEnabled, String username) {
+    if (username == null || username.isBlank()) {
+      return new AuthMeView(authenticationEnabled, username, Set.of());
+    }
+    Set<Role> parsed = userService.rolesOf(username);
+    Set<String> names = new LinkedHashSet<>();
+    if (parsed != null) {
+      for (Role role : parsed) {
+        if (role != null) {
+          names.add(role.name());
+        }
+      }
+    }
+    return new AuthMeView(authenticationEnabled, username, names);
   }
 
   /** 从请求 cookie 里取 session id。 */

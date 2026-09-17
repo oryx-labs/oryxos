@@ -12,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.oryxos.core.auth.Role;
 import io.oryxos.storage.AuthEventRecorder;
 import io.oryxos.storage.WebSession;
 import io.oryxos.storage.WebSessionService;
@@ -21,6 +22,7 @@ import io.oryxos.web.config.WebAuthProperties;
 import io.oryxos.web.security.LoginAttemptService;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -143,7 +145,7 @@ class AuthApiControllerTest {
   void login_behindProxy_forwardedProtoYieldsSecureCookie() throws Exception {
     when(userService.verify("admin", "s3cret-pw")).thenReturn(true);
     when(sessionService.create("admin")).thenReturn(newSession("admin", "sid-123"));
-    // 镜像 server.forward-headers-strategy=framework 的装配：该策略就是注册 ForwardedHeaderFilter
+    // 镜像 server.forward-headers-strategy=framework 的装配：该策略就是注册 ForwardedHeaderFilte
     MockMvc proxiedMvc =
         MockMvcBuilders.standaloneSetup(
                 new AuthApiController(
@@ -214,6 +216,7 @@ class AuthApiControllerTest {
   void me_validSession_200() throws Exception {
     when(sessionService.findValid("sid-123"))
         .thenReturn(Optional.of(newSession("admin", "sid-123")));
+    when(userService.rolesOf("admin")).thenReturn(Set.of(Role.EDITOR));
 
     mvc.perform(
             get("/api/v1/auth/me")
@@ -221,7 +224,9 @@ class AuthApiControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.code").value(0))
         .andExpect(jsonPath("$.data.authenticationEnabled").value(true))
-        .andExpect(jsonPath("$.data.username").value("admin"));
+        .andExpect(jsonPath("$.data.username").value("admin"))
+        .andExpect(jsonPath("$.data.roles[0]").value("EDITOR"));
+    verify(userService).rolesOf("admin");
   }
 
   @Test
