@@ -127,4 +127,17 @@
         <packageUrl regex="true">^pkg:maven/io\.oryxos/oryxos-channel-matrix@.*$</packageUrl>
         <cpe regex="true">cpe:/a:.*:matrix</cpe>
     </suppress>
+    <suppress>
+        <notes><![CDATA[
+        CVE-2026-59318: DefaultToolCallingManager may dispatch a tool that was not advertised
+        on the current request. Spring rates it 6.5; NVD scores 9.8, which trips failBuildOnCVSS 8.
+        OSS fix is Spring AI 2.0.1 only; 1.1.9 is enterprise-only (https://spring.io/security/cve-2026-59318).
+        OryxOS stays on 1.1.8. Provider sets internalToolExecutionEnabled=false and
+        ToolSchemaAdapter.SchemaOnlyCallback.call always throws; execution is ToolExecutor,
+        not DefaultToolCallingManager. Not introduced by channel governance. Remove when
+        upgrading Spring AI to 2.0.1+.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:maven/org\.springframework\.ai/.*@1\.1\.8$</packageUrl>
+        <cve>CVE-2026-59318</cve>
+    </suppress>
 </suppressions>
