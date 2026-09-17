@@ -11,9 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
 
-/**
- * RBAC 开启时枚举已注册 handler，未登记的受保护路径拒绝启动（039 SC-005）。关闭时不扫描。
- */
+/** RBAC 开启时枚举已注册 handler，未登记的受保护路径拒绝启动（039 SC-005）。关闭时不扫描。 */
 @Component
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 public class RbacEndpointCoverageCheck implements ApplicationRunner {

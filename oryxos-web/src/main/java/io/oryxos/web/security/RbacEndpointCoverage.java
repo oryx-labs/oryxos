@@ -15,8 +15,8 @@ import org.springframework.web.util.pattern.PathPattern;
 /**
  * 启动期端点覆盖（039 / #462）：受保护前缀上的 handler 必须被 {@link RequestActionResolver} 登记或显式跳过。
  *
- * <p>未登记返回 null 的路径在运行时已经 fail-closed；这里在启用 RBAC 时提前失败，避免新端点静默变成 403。
- * 不改 URL pattern，也不调用 {@code AuthorizationService}。
+ * <p>未登记返回 null 的路径在运行时已经 fail-closed；这里在启用 RBAC 时提前失败，避免新端点静默变成 403。 不改 URL pattern，也不调用 {@code
+ * AuthorizationService}。
  */
 public final class RbacEndpointCoverage {
 
