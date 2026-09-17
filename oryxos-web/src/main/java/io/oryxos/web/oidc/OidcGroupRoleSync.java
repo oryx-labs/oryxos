@@ -26,6 +26,9 @@ public final class OidcGroupRoleSync {
 
   private final WebUserService userService;
 
+  @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
+      value = "EI_EXPOSE_REP2",
+      justification = "userService 是注入的共享单例，存同一引用正是意图。")
   public OidcGroupRoleSync(WebUserService userService) {
     this.userService = userService;
   }
