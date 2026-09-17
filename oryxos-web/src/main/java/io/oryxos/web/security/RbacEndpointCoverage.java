@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.method.HandlerMethod;
+import org.springframework.web.servlet.mvc.condition.PathPatternsRequestCondition;
 import org.springframework.web.servlet.mvc.method.RequestMappingInfo;
 import org.springframework.web.util.pattern.PathPattern;
 
@@ -95,12 +96,16 @@ public final class RbacEndpointCoverage {
   }
 
   private static void addPatterns(List<MappedEndpoint> endpoints, RequestMappingInfo info) {
-    if (info == null || info.getPathPatternsCondition() == null) {
+    if (info == null) {
+      return;
+    }
+    PathPatternsRequestCondition pathPatterns = info.getPathPatternsCondition();
+    if (pathPatterns == null) {
       return;
     }
     Set<RequestMethod> methods = info.getMethodsCondition().getMethods();
     Set<RequestMethod> toCheck = methods.isEmpty() ? METHODS_WHEN_UNSPECIFIED : methods;
-    for (PathPattern pathPattern : info.getPathPatternsCondition().getPatterns()) {
+    for (PathPattern pathPattern : pathPatterns.getPatterns()) {
       String pattern = pathPattern.getPatternString();
       for (RequestMethod method : toCheck) {
         endpoints.add(new MappedEndpoint(method.name(), pattern));
