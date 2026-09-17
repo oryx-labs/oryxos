@@ -1,6 +1,8 @@
 package io.oryxos.web.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.oryxos.core.auth.Principal;
+import io.oryxos.core.auth.Role;
 import io.oryxos.storage.WebSessionService;
 import io.oryxos.storage.WebUserService;
 import io.oryxos.web.common.ApiResponse;
@@ -14,6 +16,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Optional;
+import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -42,6 +46,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *
  * <p>{@code auth.enabled=false} 直接放行（默认关，SC-001 回归零破坏）。不抛异常——{@code @RestControllerAdvice} 捕不到
  * filter 异常（filter 在 DispatcherServlet 之前），故直接写响应。
+ *
+ * <p>039 / #462：认证成功时置 {@link Principal}（角色来自 {@code WebUserService.rolesOf}），供后续特性读取。 {@code
+ * /admin/**} 仍只认证不裁决——本类不调用 {@code AuthorizationService} / {@code RbacEnforcer}（数据面走 {@code
+ * /api/v1/**}）。
  */
 public class BasicAuthFilter extends OncePerRequestFilter {
 
@@ -85,6 +93,24 @@ public class BasicAuthFilter extends OncePerRequestFilter {
     BAD
   }
 
+  private record BasicAuthAttempt(BasicOutcome outcome, String username) {
+    static BasicAuthAttempt none() {
+      return new BasicAuthAttempt(BasicOutcome.NONE, null);
+    }
+
+    static BasicAuthAttempt locked() {
+      return new BasicAuthAttempt(BasicOutcome.LOCKED, null);
+    }
+
+    static BasicAuthAttempt ok(String username) {
+      return new BasicAuthAttempt(BasicOutcome.OK, username);
+    }
+
+    static BasicAuthAttempt bad() {
+      return new BasicAuthAttempt(BasicOutcome.BAD, null);
+    }
+  }
+
   private final WebUserService userService;
   private final WebSessionService sessionService;
   private final WebAuthProperties properties;
@@ -124,17 +150,20 @@ public class BasicAuthFilter extends OncePerRequestFilter {
       return;
     }
     // (1) session cookie 路径
-    if (authenticatedBySession(request)) {
+    Optional<String> sessionUser = sessionUsername(request);
+    if (sessionUser.isPresent()) {
+      attachUserPrincipal(request, sessionUser.get());
       filterChain.doFilter(request, response);
       return;
     }
     // (2) Basic Auth 路径（含暴力破解锁定）
-    BasicOutcome basic = authenticateByBasic(request);
-    if (basic == BasicOutcome.OK) {
+    BasicAuthAttempt basic = authenticateByBasic(request);
+    if (basic.outcome() == BasicOutcome.OK) {
+      attachUserPrincipal(request, basic.username());
       filterChain.doFilter(request, response);
       return;
     }
-    if (basic == BasicOutcome.LOCKED) {
+    if (basic.outcome() == BasicOutcome.LOCKED) {
       rejectTooMany(response);
       return;
     }
@@ -150,10 +179,10 @@ public class BasicAuthFilter extends OncePerRequestFilter {
     return uri != null && uri.startsWith(ASSETS_PATH);
   }
 
-  private boolean authenticatedBySession(HttpServletRequest request) {
+  private Optional<String> sessionUsername(HttpServletRequest request) {
     Cookie[] cookies = request.getCookies();
     if (cookies == null) {
-      return false;
+      return Optional.empty();
     }
     return Arrays.stream(cookies)
         .filter(c -> SESSION_COOKIE.equals(c.getName()))
@@ -161,28 +190,37 @@ public class BasicAuthFilter extends OncePerRequestFilter {
         .filter(v -> v != null && !v.isBlank())
         .findFirst()
         .flatMap(sessionService::findValid)
-        .isPresent();
+        .map(io.oryxos.storage.WebSession::getUsername);
   }
 
-  private BasicOutcome authenticateByBasic(HttpServletRequest request) {
+  private BasicAuthAttempt authenticateByBasic(HttpServletRequest request) {
     String header = request.getHeader(HttpHeaders.AUTHORIZATION);
     if (header == null || !header.startsWith(BASIC_PREFIX)) {
-      return BasicOutcome.NONE;
+      return BasicAuthAttempt.none();
     }
     String[] credentials = decode(header.substring(BASIC_PREFIX.length()));
     if (credentials == null || credentials.length != BASIC_CREDENTIAL_PARTS) {
-      return BasicOutcome.NONE;
+      return BasicAuthAttempt.none();
     }
     String attemptKey = credentials[0] + "|" + ClientIp.peerAddress(request);
     if (loginAttemptService.isBlocked(attemptKey)) {
-      return BasicOutcome.LOCKED;
+      return BasicAuthAttempt.locked();
     }
     if (userService.verify(credentials[0], credentials[1])) {
       loginAttemptService.onSuccess(attemptKey);
-      return BasicOutcome.OK;
+      return BasicAuthAttempt.ok(credentials[0]);
     }
     loginAttemptService.onFailure(attemptKey);
-    return BasicOutcome.BAD;
+    return BasicAuthAttempt.bad();
+  }
+
+  /** 置主体，不裁决。角色每请求重解析，与 ApiKeyAuthFilter session 分支同源。 */
+  private void attachUserPrincipal(HttpServletRequest request, String username) {
+    if (username == null || username.isBlank()) {
+      return;
+    }
+    Set<Role> roles = userService.rolesOf(username);
+    PrincipalHolder.set(request, Principal.user(username, username, roles));
   }
 
   private void reject(HttpServletRequest request, HttpServletResponse response) throws IOException {
