@@ -184,8 +184,7 @@ class OidcAuthServiceTest {
     properties.setGroupRoles(Map.of("oryxos-editors", "EDITOR"));
     when(tokenClient.exchangeAndValidate(anyString(), anyString(), any()))
         .thenReturn(
-            new OidcIdTokenClaims(
-                "https://idp.example", "sub-1", null, List.of("oryxos-editors")));
+            new OidcIdTokenClaims("https://idp.example", "sub-1", null, List.of("oryxos-editors")));
     IdentityMapping mapping = new IdentityMapping();
     mapping.setUsername("alice");
     when(mappingService.findByIssuerAndSubject(anyString(), anyString()))

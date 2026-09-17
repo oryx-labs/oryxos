@@ -3,8 +3,8 @@ package io.oryxos.web.oidc;
 import java.util.List;
 
 /**
- * 经验证的 id_token 声明子集（040）。callback 用 iss/sub 做身份映射；{@code groups} 只供组→角色同步，不做
- * AuthorizationService 裁决。
+ * 经验证的 id_token 声明子集（040）。callback 用 iss/sub 做身份映射；{@code groups} 只供组→角色同步，不做 AuthorizationService
+ * 裁决。
  *
  * @param issuer iss
  * @param subject sub

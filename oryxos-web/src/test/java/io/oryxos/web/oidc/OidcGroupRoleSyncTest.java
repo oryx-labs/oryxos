@@ -21,7 +21,8 @@ class OidcGroupRoleSyncTest {
     OidcGroupRoleSync sync = new OidcGroupRoleSync(users);
 
     assertThat(sync.apply("alice", List.of("oryxos-editors"), new WebOidcProperties())).isEmpty();
-    verify(users, never()).setRoles(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+    verify(users, never())
+        .setRoles(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
   }
 
   @Test
