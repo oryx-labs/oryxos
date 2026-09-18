@@ -53,7 +53,7 @@
         <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
         <spotbugs.version>4.8.6</spotbugs.version>
         <findsecbugs.version>1.13.0</findsecbugs.version>
-        <dependency-check.version>12.2.2</dependency-check.version>
+        <dependency-check.version>13.0.0</dependency-check.version>
         <nvd.datafeed.url>https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/</nvd.datafeed.url>
 
         <!-- OWASP Dependency-Check is skipped by default for fast local builds and enabled in CI. -->
