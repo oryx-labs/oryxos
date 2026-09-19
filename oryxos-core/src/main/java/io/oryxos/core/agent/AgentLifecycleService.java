@@ -478,7 +478,7 @@ public class AgentLifecycleService {
     Set<String> onDisk = new java.util.LinkedHashSet<>();
     if (java.nio.file.Files.isDirectory(agentsDir)) {
       try (java.util.stream.Stream<Path> dirs = java.nio.file.Files.list(agentsDir)) {
-        dirs.filter(dir -> java.nio.file.Files.isDirectory(dir))
+        dirs.filter(java.nio.file.Files::isDirectory)
             .filter(dir -> java.nio.file.Files.isRegularFile(dir.resolve("AGENT.md")))
             .sorted()
             .forEach(

@@ -45,10 +45,9 @@
 
         <!-- Quality / format / security plugins -->
         <spotless.version>3.10.2</spotless.version>
-        <!-- Stay on 3.21.2 + PMD 6.55: 3.22+ defaults to PMD 7 and breaks p3c (#518). -->
-        <maven-pmd-plugin.version>3.21.2</maven-pmd-plugin.version>
+        <!-- PMD 7 requires maven-pmd-plugin 3.22+; 3.28 ships 7.17, we override to 7.27. -->
+        <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
         <pmd.version>7.27.0</pmd.version>
-        <p3c.version>2.1.1</p3c.version>
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
         <checkstyle.version>10.18.2</checkstyle.version>
         <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
@@ -415,40 +414,22 @@
                     </executions>
                 </plugin>
 
-                <!-- Coding rules: Alibaba P3C on top of PMD (PMD 6.x for P3C compatibility) -->
+                <!-- Coding rules: stock PMD 7 (p3c-pmd is PMD 6-only; dropped in #518). -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-pmd-plugin</artifactId>
                     <version>${maven-pmd-plugin.version}</version>
                     <configuration>
-                        <!-- PMD 6.55 (newest that P3C 2.1.1 supports) tops out at Java 19,
-                             so parse at the 17 grammar level. Code must avoid Java 18-21
-                             *syntax* (record patterns, pattern switch); records/sealed are fine. -->
-                        <targetJdk>17</targetJdk>
+                        <targetJdk>${java.version}</targetJdk>
                         <printFailingErrors>true</printFailingErrors>
                         <skipPmdError>false</skipPmdError>
                         <linkXRef>false</linkXRef>
                         <analysisCache>true</analysisCache>
                         <rulesets>
-                            <ruleset>rulesets/java/ali-naming.xml</ruleset>
-                            <ruleset>rulesets/java/ali-oop.xml</ruleset>
-                            <ruleset>rulesets/java/ali-concurrent.xml</ruleset>
-                            <ruleset>rulesets/java/ali-exception.xml</ruleset>
-                            <ruleset>rulesets/java/ali-constant.xml</ruleset>
-                            <ruleset>rulesets/java/ali-flowcontrol.xml</ruleset>
-                            <ruleset>rulesets/java/ali-set.xml</ruleset>
-                            <ruleset>rulesets/java/ali-other.xml</ruleset>
+                            <ruleset>${maven.multiModuleProjectDirectory}/config/pmd-ruleset.xml</ruleset>
                         </rulesets>
                     </configuration>
                     <dependencies>
-                        <!-- Upgrade ASM ahead of PMD 6.55's bundled copy: the old one throws
-                             "Unsupported class file major version 65" when type resolution reads
-                             Java 21 bytecode on the auxclasspath. ASM 9.7 understands class v65. -->
-                        <dependency>
-                            <groupId>org.ow2.asm</groupId>
-                            <artifactId>asm</artifactId>
-                            <version>9.10.1</version>
-                        </dependency>
                         <dependency>
                             <groupId>net.sourceforge.pmd</groupId>
                             <artifactId>pmd-core</artifactId>
@@ -458,11 +439,6 @@
                             <groupId>net.sourceforge.pmd</groupId>
                             <artifactId>pmd-java</artifactId>
                             <version>${pmd.version}</version>
-                        </dependency>
-                        <dependency>
-                            <groupId>com.alibaba.p3c</groupId>
-                            <artifactId>p3c-pmd</artifactId>
-                            <version>${p3c.version}</version>
                         </dependency>
                     </dependencies>
                     <executions>

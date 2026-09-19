@@ -15,6 +15,8 @@ import org.yaml.snakeyaml.Yaml;
  */
 public final class AgentMarkdown {
 
+  private AgentMarkdown() {}
+
   private static final String FENCE = "---";
   private static final int QUOTED_KEY_MIN_LENGTH = 2;
   private static final char SINGLE_QUOTE = '\'';

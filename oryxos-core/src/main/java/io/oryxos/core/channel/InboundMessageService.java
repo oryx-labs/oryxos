@@ -209,15 +209,16 @@ public class InboundMessageService {
         () -> {
           try {
             job.inference().run();
-          } catch (RuntimeException e) {
-            // B6：失败以可读消息告知用户（不含堆栈），异常继续上抛让执行记录记为失败；
+          } catch (io.oryxos.core.cluster.TurnWaitTimeoutException e) {
             // 026：等待超限单独提示（用户稍候重发即可，不是系统故障）
             if (!job.streamed()) {
-              String reply =
-                  e instanceof io.oryxos.core.cluster.TurnWaitTimeoutException
-                      ? TURN_BUSY_REPLY
-                      : FAILURE_REPLY;
-              safeReply(replyVia, msg.chatId(), reply, replyTo);
+              safeReply(replyVia, msg.chatId(), TURN_BUSY_REPLY, replyTo);
+            }
+            throw e;
+          } catch (RuntimeException e) {
+            // B6：失败以可读消息告知用户（不含堆栈），异常继续上抛让执行记录记为失败
+            if (!job.streamed()) {
+              safeReply(replyVia, msg.chatId(), FAILURE_REPLY, replyTo);
             }
             throw e;
           } finally {

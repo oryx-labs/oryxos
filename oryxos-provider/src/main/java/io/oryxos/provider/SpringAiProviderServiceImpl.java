@@ -490,6 +490,7 @@ public class SpringAiProviderServiceImpl implements ProviderService {
     private final Map<String, PendingCall> byId = new java.util.LinkedHashMap<>();
     private PendingCall current;
 
+    @SuppressWarnings("PMD.AvoidStringBufferField")
     private static final class PendingCall {
       private String name;
       private final StringBuilder arguments = new StringBuilder();

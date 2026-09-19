@@ -170,7 +170,8 @@ public class AgentScheduler {
                   trigger);
           if (future != null) {
             ScheduledFuture<?> previous = scheduledTasks.put(scheduleId, future);
-            if (previous != null && previous != future) {
+            // identity: cancel only a different Future instance
+            if (previous != null && previous != future) { // NOPMD
               previous.cancel(false);
             }
           }

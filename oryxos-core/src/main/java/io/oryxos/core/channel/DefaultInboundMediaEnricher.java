@@ -223,7 +223,7 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
       return true;
     }
     String v = raw.strip();
-    return !(v.equals("0") || equalsIgnoreAscii(v, "false") || equalsIgnoreAscii(v, "off"));
+    return !("0".equals(v) || equalsIgnoreAscii(v, "false") || equalsIgnoreAscii(v, "off"));
   }
 
   private static boolean equalsIgnoreAscii(String a, String b) {

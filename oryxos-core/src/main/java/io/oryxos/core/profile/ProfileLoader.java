@@ -324,7 +324,7 @@ public class ProfileLoader {
       return null;
     }
     String backend = asString(map.get("backend"));
-    if (backend != null && !backend.equals(LOCAL_BACKEND) && !backend.equals(DOCKER_BACKEND)) {
+    if (backend != null && !LOCAL_BACKEND.equals(backend) && !DOCKER_BACKEND.equals(backend)) {
       LOG.warn(
           "Profile {} 的 sandbox.backend 非法值 '{}'（仅认 local/docker）——按继承全局档处理",
           sanitize(profileName),
@@ -455,13 +455,13 @@ public class ProfileLoader {
         "Profile " + profileName + " 的 " + field + " 必须是整数: " + value);
   }
 
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "PMD.ReturnEmptyCollectionRatherThanNull"})
   private static Map<String, Object> asMap(Object value) {
     return value instanceof Map ? (Map<String, Object>) value : null;
   }
 
   /** 列表字段：缺省（null）→ 空列表语义由调用方处理；显式写成标量/映射则报错，避免「写了却静默变空」。 */
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "PMD.ReturnEmptyCollectionRatherThanNull"})
   private static List<Object> requireListOrNull(Object value, String field, String profileName) {
     if (value == null) {
       return null;

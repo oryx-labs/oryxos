@@ -90,7 +90,7 @@ public class AgentRunStreamController {
   private void push(long runId, long after, SseEmitter emitter, AtomicBoolean closed) {
     BlockingQueue<AgentRunEvent> incoming = new LinkedBlockingQueue<>(LIVE_QUEUE_CAPACITY);
     AtomicBoolean overflowed = new AtomicBoolean(false);
-    try (AutoCloseable subscription =
+    try (AutoCloseable ignored =
         eventHub.subscribe(
             runId,
             event -> {

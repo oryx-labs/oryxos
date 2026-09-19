@@ -170,7 +170,8 @@ public class FormatTools {
 
       int rowNum = 1;
       for (List<String> rowData : rows) {
-        Row row = sheet.createRow(rowNum++);
+        Row row = sheet.createRow(rowNum);
+        rowNum++;
         for (int i = 0; i < rowData.size(); i++) {
           Cell cell = row.createCell(i);
           cell.setCellValue(rowData.get(i));

@@ -214,7 +214,8 @@ public final class WhisperHttpTranscriber implements InboundSpeechTranscriber {
     for (int p = quote + 1; p < json.length(); p++) {
       char c = json.charAt(p);
       if (c == '\\' && p + 1 < json.length()) {
-        char n = json.charAt(++p);
+        p++;
+        char n = json.charAt(p);
         out.append(
             switch (n) {
               case 'n' -> '\n';

@@ -152,7 +152,7 @@ public final class InboundMediaHttp {
           try {
             current = current.resolve(loc.strip());
           } catch (IllegalArgumentException | IllegalStateException e) {
-            throw new IOException("下载临时文件重定向 Location 非法 HTTP " + code);
+            throw new IOException("下载临时文件重定向 Location 非法 HTTP " + code, e);
           }
           continue;
         }

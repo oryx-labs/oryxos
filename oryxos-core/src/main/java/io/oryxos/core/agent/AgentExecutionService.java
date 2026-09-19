@@ -71,7 +71,7 @@ public class AgentExecutionService {
     }
     executor.execute(
         () -> {
-          try (TraceContext.Scope scope = TraceContext.open(traceId)) {
+          try (TraceContext.Scope ignored = TraceContext.open(traceId)) {
             if (actor != null) {
               io.oryxos.core.auth.PrincipalContext.set(actor);
             }

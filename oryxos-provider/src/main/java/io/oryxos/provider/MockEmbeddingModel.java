@@ -34,7 +34,8 @@ public final class MockEmbeddingModel implements TextEmbedder {
                 | (block[offset + 3] & 0xFF);
         // 映射到 [-1, 1)：整数除以 2^31，保持确定性且分布均匀
         float value = bits / 2147483648.0f;
-        vector[produced++] = value;
+        vector[produced] = value;
+        produced++;
         normSquared += (double) value * value;
       }
       counter++;

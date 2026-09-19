@@ -158,7 +158,8 @@ public class SkillStore {
     Path candidate = skillArchives.resolve(base);
     int suffix = 2;
     while (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
-      candidate = skillArchives.resolve(base + "-" + suffix++);
+      candidate = skillArchives.resolve(base + "-" + suffix);
+      suffix++;
     }
     return candidate;
   }

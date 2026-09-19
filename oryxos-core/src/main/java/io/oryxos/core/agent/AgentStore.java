@@ -211,7 +211,8 @@ public class AgentStore {
     Path candidate = archiveDir.resolve(base);
     int suffix = 2;
     while (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
-      candidate = archiveDir.resolve(base + "-" + suffix++);
+      candidate = archiveDir.resolve(base + "-" + suffix);
+      suffix++;
     }
     return candidate;
   }
