@@ -56,7 +56,7 @@
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
-            <version>5.2.5</version>
+            <version>5.5.1</version>
         </dependency>
         <!-- PDF 文本抽取（read_file 对文本型 PDF）；版本由父 POM pdfbox.version 管理 -->
         <dependency>

@@ -22,8 +22,8 @@
     <properties>
         <java.version>21</java.version>
         <spring-ai.version>1.1.8</spring-ai.version>
-        <picocli.version>4.7.6</picocli.version>
-        <sqlite-jdbc.version>3.53.2.1</sqlite-jdbc.version>
+        <picocli.version>4.7.7</picocli.version>
+        <sqlite-jdbc.version>3.53.4.0</sqlite-jdbc.version>
         <!-- 025：覆盖 Boot BOM 的 42.7.11——CVE-2026-54291（CVSS 8.2）修复于 42.7.12（OSV 实证），OWASP 门禁线 8.0 -->
         <postgresql.version>42.7.12</postgresql.version>
         <pdfbox.version>3.0.8</pdfbox.version>
@@ -41,18 +41,18 @@
         <!-- Boot 3.5.x line; 2.9+/3.x need Boot 4 -->
         <springdoc.version>2.8.17</springdoc.version>
         <!-- springdoc 2.8.17 still ships older swagger-ui; override for DOMPurify CVEs -->
-        <swagger-ui.version>5.32.13</swagger-ui.version>
+        <swagger-ui.version>5.32.15</swagger-ui.version>
 
         <!-- Quality / format / security plugins -->
         <spotless.version>2.43.0</spotless.version>
-        <maven-pmd-plugin.version>3.21.2</maven-pmd-plugin.version>
+        <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
         <pmd.version>6.55.0</pmd.version>
         <p3c.version>2.1.1</p3c.version>
-        <maven-checkstyle-plugin.version>3.5.0</maven-checkstyle-plugin.version>
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
         <checkstyle.version>10.18.2</checkstyle.version>
-        <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
-        <spotbugs.version>4.8.6</spotbugs.version>
-        <findsecbugs.version>1.13.0</findsecbugs.version>
+        <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
+        <spotbugs.version>4.10.4</spotbugs.version>
+        <findsecbugs.version>1.14.0</findsecbugs.version>
         <dependency-check.version>13.0.0</dependency-check.version>
         <nvd.datafeed.url>https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/</nvd.datafeed.url>
 
@@ -109,7 +109,7 @@
             <dependency>
                 <groupId>io.opentelemetry</groupId>
                 <artifactId>opentelemetry-bom</artifactId>
-                <version>1.44.1</version>
+                <version>1.66.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -136,7 +136,7 @@
             <dependency>
                 <groupId>com.squareup.okio</groupId>
                 <artifactId>okio</artifactId>
-                <version>3.9.1</version>
+                <version>3.18.2</version>
             </dependency>
 
             <!-- Internal modules -->
@@ -306,7 +306,7 @@
             <dependency>
                 <groupId>com.github.spotbugs</groupId>
                 <artifactId>spotbugs-annotations</artifactId>
-                <version>4.8.6</version>
+                <version>4.10.4</version>
                 <scope>provided</scope>
             </dependency>
 
@@ -339,7 +339,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-enforcer-plugin</artifactId>
-                    <version>3.5.0</version>
+                    <version>3.6.3</version>
                     <executions>
                         <execution>
                             <id>enforce-environment</id>
@@ -434,7 +434,7 @@
                         <dependency>
                             <groupId>org.ow2.asm</groupId>
                             <artifactId>asm</artifactId>
-                            <version>9.7</version>
+                            <version>9.10.1</version>
                         </dependency>
                         <dependency>
                             <groupId>net.sourceforge.pmd</groupId>
