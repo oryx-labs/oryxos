@@ -850,7 +850,7 @@ public class OryxOsRuntime {
           new Mem0MemoryStore(
               restClient.mutate().baseUrl(mem0BaseUrl).build(), mem0UserId, mem0ApiKey);
       case "markdown" -> new MarkdownMemoryStore(oryxosRoot());
-        // 026 顺修：未知值曾静默回落 markdown——配置了却不生效比启动失败更危险（knowledge.store 同口径）
+      // 026 顺修：未知值曾静默回落 markdown——配置了却不生效比启动失败更危险（knowledge.store 同口径）
       default ->
           throw new IllegalStateException(
               "未知的 memory.backend: " + backend + "（支持 markdown / sqlite / mem0）");
