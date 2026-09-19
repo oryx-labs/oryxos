@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "node --test src/chat-scroll.test.js src/mcp-timeout.test.js src/skill-filter.test.js src/features/governance/governance-edit.test.js src/features/governance/governance-revisions-api.test.js src/features/runs/run-state.test.js src/features/runs/run-api.test.js src/features/runs/run-navigation.test.js src/features/runs/run-management.test.js src/features/teams/teams-api.test.js src/features/teams/org-tree.test.js src/features/teams/team-tree.test.js src/features/identity-mappings/identity-mappings-api.test.js",
+    "test": "node --test src/chat-scroll.test.js src/mcp-timeout.test.js src/skill-filter.test.js src/features/governance/governance-edit.test.js src/features/governance/governance-revisions-api.test.js src/features/runs/run-state.test.js src/features/runs/run-api.test.js src/features/runs/run-navigation.test.js src/features/runs/run-management.test.js src/features/teams/teams-api.test.js src/features/teams/org-tree.test.js src/features/teams/team-tree.test.js src/features/teams/tree-dnd.test.js src/features/identity-mappings/identity-mappings-api.test.js",
     "build": "vite build",
     "preview": "vite preview"
   },

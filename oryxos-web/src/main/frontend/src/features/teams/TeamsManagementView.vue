@@ -19,6 +19,13 @@ import {
 } from './teams-api.js'
 import { buildOrgTreeRows } from './org-tree.js'
 import { buildTeamTreeRows } from './team-tree.js'
+import {
+  ORG_DND_MIME,
+  TEAM_DND_MIME,
+  applyTreeDrop,
+  readDragId,
+  writeDragId,
+} from './tree-dnd.js'
 
 const catalog = ref({ loading: true, error: null, disabled: false, data: [] })
 const orgs = ref({ loading: true, error: null, disabled: false, data: [] })
@@ -53,6 +60,147 @@ const canLoadMembers = computed(() => member.username.trim().length > 0 && !memb
 const canAddMember = computed(
   () => member.loadedFor && member.addTeamId.trim().length > 0 && !member.busy,
 )
+
+const dndOrg = reactive({ overId: '', rootOver: false, busy: false, error: '' })
+const dndTeam = reactive({ overId: '', rootOver: false, busy: false, error: '' })
+
+function onOrgDragStart(ev, row) {
+  if (!row?.orgId || dndOrg.busy) {
+    ev.preventDefault()
+    return
+  }
+  writeDragId(ev.dataTransfer, ORG_DND_MIME, row.orgId)
+  dndOrg.error = ''
+}
+
+function onOrgDragOverRow(ev, row) {
+  if (!row?.orgId) return
+  ev.dataTransfer.dropEffect = 'move'
+  dndOrg.overId = row.orgId
+  dndOrg.rootOver = false
+}
+
+function onOrgDragLeaveRow(row) {
+  if (dndOrg.overId === row?.orgId) dndOrg.overId = ''
+}
+
+function onOrgRootDragOver(ev) {
+  ev.dataTransfer.dropEffect = 'move'
+  dndOrg.rootOver = true
+  dndOrg.overId = ''
+}
+
+async function onOrgDropOnRow(ev, row) {
+  const draggedId = readDragId(ev.dataTransfer, ORG_DND_MIME)
+  dndOrg.overId = ''
+  if (!draggedId || dndOrg.busy) return
+  dndOrg.busy = true
+  dndOrg.error = ''
+  try {
+    await applyTreeDrop({
+      draggedId,
+      targetId: row.orgId,
+      mode: 'row',
+      setParent: setParentOrg,
+      reload: loadOrgs,
+    })
+  } catch (e) {
+    if (applyDisabled(e)) return
+    dndOrg.error = e.message
+  } finally {
+    dndOrg.busy = false
+  }
+}
+
+async function onOrgDropRoot(ev) {
+  const draggedId = readDragId(ev.dataTransfer, ORG_DND_MIME)
+  dndOrg.rootOver = false
+  if (!draggedId || dndOrg.busy) return
+  dndOrg.busy = true
+  dndOrg.error = ''
+  try {
+    await applyTreeDrop({
+      draggedId,
+      mode: 'root',
+      setParent: setParentOrg,
+      reload: loadOrgs,
+    })
+  } catch (e) {
+    if (applyDisabled(e)) return
+    dndOrg.error = e.message
+  } finally {
+    dndOrg.busy = false
+  }
+}
+
+function onTeamDragStart(ev, row) {
+  if (!row?.teamId || dndTeam.busy) {
+    ev.preventDefault()
+    return
+  }
+  writeDragId(ev.dataTransfer, TEAM_DND_MIME, row.teamId)
+  dndTeam.error = ''
+}
+
+function onTeamDragOverRow(ev, row) {
+  if (!row?.teamId) return
+  ev.dataTransfer.dropEffect = 'move'
+  dndTeam.overId = row.teamId
+  dndTeam.rootOver = false
+}
+
+function onTeamDragLeaveRow(row) {
+  if (dndTeam.overId === row?.teamId) dndTeam.overId = ''
+}
+
+function onTeamRootDragOver(ev) {
+  ev.dataTransfer.dropEffect = 'move'
+  dndTeam.rootOver = true
+  dndTeam.overId = ''
+}
+
+async function onTeamDropOnRow(ev, row) {
+  const draggedId = readDragId(ev.dataTransfer, TEAM_DND_MIME)
+  dndTeam.overId = ''
+  if (!draggedId || dndTeam.busy) return
+  dndTeam.busy = true
+  dndTeam.error = ''
+  try {
+    await applyTreeDrop({
+      draggedId,
+      targetId: row.teamId,
+      mode: 'row',
+      setParent: setParentTeam,
+      reload: loadTeams,
+    })
+  } catch (e) {
+    if (applyDisabled(e)) return
+    dndTeam.error = e.message
+  } finally {
+    dndTeam.busy = false
+  }
+}
+
+async function onTeamDropRoot(ev) {
+  const draggedId = readDragId(ev.dataTransfer, TEAM_DND_MIME)
+  dndTeam.rootOver = false
+  if (!draggedId || dndTeam.busy) return
+  dndTeam.busy = true
+  dndTeam.error = ''
+  try {
+    await applyTreeDrop({
+      draggedId,
+      mode: 'root',
+      setParent: setParentTeam,
+      reload: loadTeams,
+    })
+  } catch (e) {
+    if (applyDisabled(e)) return
+    dndTeam.error = e.message
+  } finally {
+    dndTeam.busy = false
+  }
+}
 
 function applyDisabled(e) {
   if (e instanceof TeamsApiDisabledError) {
@@ -401,7 +549,7 @@ defineExpose({ load })
       <span class="mono">oryxos.web.teams-api.enabled</span>（默认关 → API 404）。需 ADMIN /
       <span class="mono">MANAGE_MEMBERS</span>。组织按
       <span class="mono">parentOrgId</span>、团队按
-      <span class="mono">parentTeamId</span> 客户端缩进树展示；可设父级（无拖拽改父 / 环检测 UI / OIDC→org JIT）。
+      <span class="mono">parentTeamId</span> 客户端缩进树展示；可表单设父，或拖拽行改父（拖到根区清空；环由服务端 400）。无跨组织↔团队拖拽 / 兄弟排序。
     </p>
 
     <p v-if="catalog.disabled || orgs.disabled" class="error">
@@ -449,6 +597,18 @@ defineExpose({ load })
         <button class="btn" :disabled="setParentForm.busy" @click="cancelSetParent">取消</button>
       </div>
       <p v-if="setParentForm.error" class="error">{{ setParentForm.error }}</p>
+      <p v-if="dndOrg.error" class="error">拖拽改父失败：{{ dndOrg.error }}</p>
+
+      <div
+        v-if="!orgs.loading && orgTreeRows.length"
+        class="dnd-root-zone"
+        :class="{ 'dnd-root-over': dndOrg.rootOver }"
+        @dragover.prevent="onOrgRootDragOver"
+        @dragleave="dndOrg.rootOver = false"
+        @drop.prevent="onOrgDropRoot"
+      >
+        拖到此处清空 parentOrgId（设为根）
+      </div>
 
       <table v-if="!orgs.loading">
         <thead>
@@ -463,7 +623,17 @@ defineExpose({ load })
           <tr v-if="!orgTreeRows.length">
             <td colspan="4" class="empty">（暂无组织目录）</td>
           </tr>
-          <tr v-for="o in orgTreeRows" :key="o.orgId">
+          <tr
+            v-for="o in orgTreeRows"
+            :key="o.orgId"
+            class="tree-row"
+            :class="{ 'tree-row-over': dndOrg.overId === o.orgId }"
+            draggable="true"
+            @dragstart="onOrgDragStart($event, o)"
+            @dragover.prevent="onOrgDragOverRow($event, o)"
+            @dragleave="onOrgDragLeaveRow(o)"
+            @drop.prevent="onOrgDropOnRow($event, o)"
+          >
             <td class="mono">
               <span class="org-indent" :style="{ paddingLeft: o.depth * 16 + 'px' }">
                 <span v-if="o.depth > 0" class="org-branch" aria-hidden="true">└ </span>{{ o.orgId }}
@@ -535,6 +705,18 @@ defineExpose({ load })
         <button class="btn" :disabled="setTeamParentForm.busy" @click="cancelSetTeamParent">取消</button>
       </div>
       <p v-if="setTeamParentForm.error" class="error">{{ setTeamParentForm.error }}</p>
+      <p v-if="dndTeam.error" class="error">拖拽改父失败：{{ dndTeam.error }}</p>
+
+      <div
+        v-if="!catalog.loading && teamTreeRows.length"
+        class="dnd-root-zone"
+        :class="{ 'dnd-root-over': dndTeam.rootOver }"
+        @dragover.prevent="onTeamRootDragOver"
+        @dragleave="dndTeam.rootOver = false"
+        @drop.prevent="onTeamDropRoot"
+      >
+        拖到此处清空 parentTeamId（设为根）
+      </div>
 
       <table v-if="!catalog.loading">
         <thead>
@@ -550,7 +732,17 @@ defineExpose({ load })
           <tr v-if="!teamTreeRows.length">
             <td colspan="5" class="empty">（暂无团队目录）</td>
           </tr>
-          <tr v-for="t in teamTreeRows" :key="t.teamId">
+          <tr
+            v-for="t in teamTreeRows"
+            :key="t.teamId"
+            class="tree-row"
+            :class="{ 'tree-row-over': dndTeam.overId === t.teamId }"
+            draggable="true"
+            @dragstart="onTeamDragStart($event, t)"
+            @dragover.prevent="onTeamDragOverRow($event, t)"
+            @dragleave="onTeamDragLeaveRow(t)"
+            @drop.prevent="onTeamDropOnRow($event, t)"
+          >
             <td class="mono">
               <span class="org-indent" :style="{ paddingLeft: t.depth * 16 + 'px' }">
                 <span v-if="t.depth > 0" class="org-branch" aria-hidden="true">└ </span>{{ t.teamId }}
@@ -655,5 +847,25 @@ defineExpose({ load })
   border: 1px solid var(--border, #ccc);
   border-radius: 3px;
   padding: 0 4px;
+}
+.tree-row {
+  cursor: grab;
+}
+.tree-row-over {
+  outline: 1px dashed var(--accent, #4a7);
+  background: color-mix(in srgb, var(--accent, #4a7) 8%, transparent);
+}
+.dnd-root-zone {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border, #ccc);
+  color: var(--text-2);
+  font-size: 12px;
+  text-align: center;
+}
+.dnd-root-over {
+  border-color: var(--accent, #4a7);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent, #4a7) 8%, transparent);
 }
 </style>

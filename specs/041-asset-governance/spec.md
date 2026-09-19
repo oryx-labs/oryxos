@@ -54,5 +54,5 @@
 
 ## Out of scope (honest gaps)
 
-- OIDC group→org 绑定 / 拖拽改父（#554 organizations + `teams.org_id`；#566 `parent_org_id`；#581 `parent_team_id` + set-parent；#585 Admin team set-parent UI；#573/#581 setParent 有界环检测；#568 org 祖先匹配有界深度截断；#588 team 祖先匹配有界深度截断；#579 `max-org-ancestor-depth` 可配默认 16；#548/#556/#570/#575/#583/#585 Admin 含 org/team 缩进树与设父；#558 WORKSPACE `orgOwner`；#560 session `orgIds` 缓存 opt-in；相关 API/UI 仍默认关）
+- OIDC group→org 绑定仍 deferred；拖拽改父已落地（#595 HTML5 DnD，同种树 + 根区清空；复用 set-parent API / 服务端环检测）。已落地基线：#554 organizations + `teams.org_id`；#566 `parent_org_id`；#581 `parent_team_id` + set-parent；#585 Admin team set-parent UI；#573/#581 setParent 有界环检测；#568 org 祖先匹配有界深度截断；#588 team 祖先匹配有界深度截断；#579 `max-org-ancestor-depth` 可配默认 16；#548/#556/#570/#575/#583/#585 Admin 含 org/team 缩进树与设父；#558 WORKSPACE `orgOwner`；#560 session `orgIds` 缓存 opt-in；相关 API/UI 仍默认关。仍 deferred：Multi-IdP
 - OIDC JIT 目录行已落地：`oryxos.web.oidc.jit-team-catalog-enabled`（#552，默认关）；OIDC JIT org catalog：`jit-org-catalog-enabled`（#592，默认关；须 `org-ids-claim` 非空）；OIDC JIT 成员写已落地：`oryxos.web.oidc.jit-team-memberships-enabled`（#562，默认关；无 catalog 行则跳过）；撤销未匹配成员：`revoke-unmatched-team-memberships`（#564，默认关；空 groups → 清空；与 JIT memberships 同路径）
