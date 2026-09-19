@@ -15,4 +15,7 @@
   <Match>
     <Bug pattern="US_USELESS_SUPPRESSION_ON_METHOD"/>
   </Match>
+  <Match>
+    <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+  </Match>
 </FindBugsFilter>
