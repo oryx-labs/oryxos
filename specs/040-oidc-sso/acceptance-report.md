@@ -13,7 +13,7 @@
 
 ## Honest gaps
 
-- JIT user provision / revoke-unmatched-roles / group-roles / JIT team catalog / JIT team memberships / revoke-unmatched-team-memberships are default-off flags (#502/#552/#562/#564); orgs table + `teams.org_id` done (#554); `parent_org_id` + set-parent done (#566); Admin org UI + team set-org done (#556); multilevel-org-decide / OIDC→org JIT still deferred
+- JIT user provision / revoke-unmatched-roles / group-roles / JIT team catalog / JIT team memberships / revoke-unmatched-team-memberships are default-off flags (#502/#552/#562/#564); orgs table + `teams.org_id` done (#554); `parent_org_id` + set-parent done (#566); Admin org UI + team set-org done (#556); Admin org set-parent UI done (#570); multilevel-org-decide / OIDC→org JIT still deferred
 - No mapping admin UI (CLI `oryxos user oidc-map` only)
 - Thin spec (not full 九件套)
 - Single IdP configuration only

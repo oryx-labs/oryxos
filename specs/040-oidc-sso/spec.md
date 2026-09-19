@@ -21,7 +21,7 @@ Default-off OIDC authorization-code + PKCE login for the admin console. Maps IdP
 
 ## Out of scope (honest gaps)
 
-- Default-off flags only: JIT user (`jit-provision-enabled`), group-roles / revoke-unmatched-roles, JIT team catalog (`jit-team-catalog-enabled` / #552), JIT team memberships (`jit-team-memberships-enabled` / #562), revoke unmatched memberships (`revoke-unmatched-team-memberships` / #564; empty groups → clear all when on). Organizations catalog + nullable `teams.org_id` landed (#554); `parent_org_id` + set-parent landed (#566); Admin org UI + team set-org landed (#556). Session `Principal.orgIds` cache from `teams.org_id` is opt-in (#560, `org-ids-from-team-org-enabled`). Still deferred: multilevel dept/project, OIDC group→org JIT.
+- Default-off flags only: JIT user (`jit-provision-enabled`), group-roles / revoke-unmatched-roles, JIT team catalog (`jit-team-catalog-enabled` / #552), JIT team memberships (`jit-team-memberships-enabled` / #562), revoke unmatched memberships (`revoke-unmatched-team-memberships` / #564; empty groups → clear all when on). Organizations catalog + nullable `teams.org_id` landed (#554); `parent_org_id` + set-parent landed (#566); Admin org UI + team set-org landed (#556); Admin org set-parent UI landed (#570). Session `Principal.orgIds` cache from `teams.org_id` is opt-in (#560, `org-ids-from-team-org-enabled`). Still deferred: multilevel dept/project, OIDC group→org JIT.
 - Admin UI for mapping
 - Multi-IdP / discovery UI
 - Full 九件套 research/plan/tasks/contracts

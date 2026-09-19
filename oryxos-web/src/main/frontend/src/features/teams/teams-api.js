@@ -1,6 +1,6 @@
 /**
- * Teams / Orgs Admin HTTP helpers (#548 / #556): catalog + memberships + org bind
- * via /api/v1/teams and /api/v1/orgs.
+ * Teams / Orgs Admin HTTP helpers (#548 / #556 / #570): catalog + memberships + org bind
+ * + org set-parent via /api/v1/teams and /api/v1/orgs.
  * Flag oryxos.web.teams-api.enabled default off → 404 (TeamsApiDisabledError).
  */
 
@@ -80,6 +80,19 @@ export async function renameOrg(orgId, displayName) {
 export async function deleteOrg(orgId) {
   return unwrap(
     await fetch(`/api/v1/orgs/${encodeURIComponent(orgId)}`, { method: 'DELETE' }),
+  )
+}
+
+/** Set org parent; pass null/empty parentOrgId to clear. */
+export async function setParentOrg(orgId, parentOrgId) {
+  const normalized =
+    parentOrgId == null || String(parentOrgId).trim() === '' ? null : String(parentOrgId).trim()
+  return unwrap(
+    await fetch(`/api/v1/orgs/${encodeURIComponent(orgId)}/parent`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parentOrgId: normalized }),
+    }),
   )
 }
 

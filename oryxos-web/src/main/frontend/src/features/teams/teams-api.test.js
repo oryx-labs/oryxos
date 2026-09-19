@@ -14,6 +14,7 @@ import {
   removeUserTeam,
   renameOrg,
   renameTeam,
+  setParentOrg,
   setTeamOrg,
 } from './teams-api.js'
 
@@ -123,6 +124,31 @@ test('setTeamOrg puts orgId; empty clears', async () => {
     assert.deepEqual(seen, [
       { url: '/api/v1/teams/eng/org', method: 'PUT', body: { orgId: 'acme' } },
       { url: '/api/v1/teams/a%2Fb/org', method: 'PUT', body: { orgId: null } },
+    ])
+  } finally {
+    restore()
+  }
+})
+
+test('setParentOrg puts parentOrgId; empty clears', async () => {
+  const seen = []
+  const restore = mockFetch(async (url, opts) => {
+    seen.push({ url, method: opts.method, body: JSON.parse(opts.body) })
+    return jsonRes(200, {
+      code: 0,
+      data: {
+        orgId: 'eng',
+        displayName: 'Eng',
+        parentOrgId: seen.length === 1 ? 'acme' : null,
+      },
+    })
+  })
+  try {
+    await setParentOrg('eng', 'acme')
+    await setParentOrg('a/b', '  ')
+    assert.deepEqual(seen, [
+      { url: '/api/v1/orgs/eng/parent', method: 'PUT', body: { parentOrgId: 'acme' } },
+      { url: '/api/v1/orgs/a%2Fb/parent', method: 'PUT', body: { parentOrgId: null } },
     ])
   } finally {
     restore()

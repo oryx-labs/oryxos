@@ -13,6 +13,7 @@ import {
   removeUserTeam,
   renameOrg,
   renameTeam,
+  setParentOrg,
   setTeamOrg,
 } from './teams-api.js'
 
@@ -23,6 +24,7 @@ const renameForm = reactive({ teamId: '', displayName: '', busy: false, error: '
 const setOrgForm = reactive({ teamId: '', orgId: '', busy: false, error: '' })
 const orgCreate = reactive({ orgId: '', displayName: '', busy: false, error: '' })
 const orgRename = reactive({ orgId: '', displayName: '', busy: false, error: '' })
+const setParentForm = reactive({ orgId: '', parentOrgId: '', busy: false, error: '' })
 const member = reactive({
   username: '',
   loadedFor: '',
@@ -39,6 +41,7 @@ const canRename = computed(() => renameForm.displayName.trim().length > 0 && !re
 const canSetOrg = computed(() => !!setOrgForm.teamId && !setOrgForm.busy)
 const canCreateOrg = computed(() => orgCreate.orgId.trim().length > 0 && !orgCreate.busy)
 const canRenameOrg = computed(() => orgRename.displayName.trim().length > 0 && !orgRename.busy)
+const canSetParent = computed(() => !!setParentForm.orgId && !setParentForm.busy)
 const canLoadMembers = computed(() => member.username.trim().length > 0 && !member.loading)
 const canAddMember = computed(
   () => member.loadedFor && member.addTeamId.trim().length > 0 && !member.busy,
@@ -130,7 +133,49 @@ async function onDeleteOrg(row) {
   try {
     await deleteOrg(row.orgId)
     if (orgRename.orgId === row.orgId) cancelRenameOrg()
+    if (setParentForm.orgId === row.orgId) cancelSetParent()
     await Promise.all([loadOrgs(), loadTeams()])
+  } catch (e) {
+    if (applyDisabled(e)) return
+    orgs.value = { ...orgs.value, error: e.message }
+  }
+}
+
+function startSetParent(row) {
+  setParentForm.orgId = row.orgId
+  setParentForm.parentOrgId = row.parentOrgId || ''
+  setParentForm.error = ''
+}
+
+function cancelSetParent() {
+  setParentForm.orgId = ''
+  setParentForm.parentOrgId = ''
+  setParentForm.error = ''
+  setParentForm.busy = false
+}
+
+async function onSetParent() {
+  if (!canSetParent.value) return
+  setParentForm.busy = true
+  setParentForm.error = ''
+  try {
+    await setParentOrg(setParentForm.orgId, setParentForm.parentOrgId)
+    cancelSetParent()
+    await loadOrgs()
+  } catch (e) {
+    setParentForm.error = e.message
+  } finally {
+    setParentForm.busy = false
+  }
+}
+
+async function onClearParent(row) {
+  if (!row?.orgId) return
+  if (!confirm(`清空组织「${row.orgId}」的 parentOrgId？`)) return
+  try {
+    await setParentOrg(row.orgId, null)
+    if (setParentForm.orgId === row.orgId) cancelSetParent()
+    await loadOrgs()
   } catch (e) {
     if (applyDisabled(e)) return
     orgs.value = { ...orgs.value, error: e.message }
@@ -305,7 +350,7 @@ defineExpose({ load })
     <p class="lede">
       管理组织目录、团队目录与用户成员关系。依赖
       <span class="mono">oryxos.web.teams-api.enabled</span>（默认关 → API 404）。需 ADMIN /
-      <span class="mono">MANAGE_MEMBERS</span>。无 org→decide / 多级组织 / OIDC→org JIT。
+      <span class="mono">MANAGE_MEMBERS</span>。无完整树 UI / 环检测 / OIDC→org JIT。
     </p>
 
     <p v-if="catalog.disabled || orgs.disabled" class="error">
@@ -334,23 +379,47 @@ defineExpose({ load })
       </div>
       <p v-if="orgRename.error" class="error">{{ orgRename.error }}</p>
 
+      <div v-if="setParentForm.orgId" class="toolbar create-row">
+        <span class="mono">设父组织 {{ setParentForm.orgId }}</span>
+        <input
+          v-model="setParentForm.parentOrgId"
+          class="gen-input mono"
+          list="parent-org-id-options"
+          placeholder="parentOrgId（空=清空）"
+        />
+        <datalist id="parent-org-id-options">
+          <option
+            v-for="o in orgs.data.filter((x) => x.orgId !== setParentForm.orgId)"
+            :key="o.orgId"
+            :value="o.orgId"
+          />
+        </datalist>
+        <button class="btn btn-primary" :disabled="!canSetParent" @click="onSetParent">保存</button>
+        <button class="btn" :disabled="setParentForm.busy" @click="cancelSetParent">取消</button>
+      </div>
+      <p v-if="setParentForm.error" class="error">{{ setParentForm.error }}</p>
+
       <table v-if="!orgs.loading">
         <thead>
           <tr>
             <th>orgId</th>
             <th>displayName</th>
-            <th style="width:160px">操作</th>
+            <th>parentOrgId</th>
+            <th style="width:240px">操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="!orgs.data.length">
-            <td colspan="3" class="empty">（暂无组织目录）</td>
+            <td colspan="4" class="empty">（暂无组织目录）</td>
           </tr>
           <tr v-for="o in orgs.data" :key="o.orgId">
             <td class="mono">{{ o.orgId }}</td>
             <td>{{ o.displayName || '—' }}</td>
+            <td class="mono">{{ o.parentOrgId || '—' }}</td>
             <td class="ops">
               <button class="btn" @click="startRenameOrg(o)">重命名</button>
+              <button class="btn" @click="startSetParent(o)">设父级</button>
+              <button v-if="o.parentOrgId" class="btn" @click="onClearParent(o)">清父级</button>
               <button class="btn" @click="onDeleteOrg(o)">删除</button>
             </td>
           </tr>

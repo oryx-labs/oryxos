@@ -73,4 +73,4 @@ Optional org catalog metadata (not used by `AuthorizationService.decide`):
 
 CLI: `oryxos org create|list|rename|delete|set-parent`, `oryxos team set-org`.
 HTTP under same `oryxos.web.teams-api.enabled` (default off → 404): `/api/v1/orgs`, `PUT /api/v1/teams/{teamId}/org`, `PUT /api/v1/orgs/{orgId}/parent`.
-Admin org UI (#556): same teams Admin page — org catalog CRUD + team set-org/clear; still not used by `AuthorizationService.decide`. No Admin tree UI in this cut.
+Admin org UI (#556/#570): same teams Admin page — org catalog CRUD + parentOrgId show/set/clear + team set-org/clear; still not used by `AuthorizationService.decide`. No Admin tree UI in this cut.
