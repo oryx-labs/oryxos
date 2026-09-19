@@ -82,6 +82,45 @@ class ConcurrentMigrationIT {
   }
 
   private static ConfigurableApplicationContext boot(String url) {
+    RuntimeException last = null;
+    for (int attempt = 1; attempt <= 8; attempt++) {
+      try {
+        return bootOnce(url);
+      } catch (RuntimeException e) {
+        if (!isEmptyFlywayHistoryRace(e) || attempt == 8) {
+          throw e;
+        }
+        last = e;
+        try {
+          Thread.sleep(50L * attempt);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw e;
+        }
+      }
+    }
+    throw last;
+  }
+
+  /**
+   * Flyway baseline-on-migrate races on an empty PG: one replica creates an empty {@code
+   * flyway_schema_history}, the other then fails with "already exists, and is empty". Retry the
+   * loser so concurrent migrate (PG advisory lock) can still be asserted.
+   */
+  private static boolean isEmptyFlywayHistoryRace(Throwable t) {
+    for (Throwable c = t; c != null; c = c.getCause()) {
+      String msg = c.getMessage();
+      if (msg != null
+          && msg.contains("flyway_schema_history")
+          && msg.contains("already exists")
+          && msg.contains("empty")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static ConfigurableApplicationContext bootOnce(String url) {
     try {
       Path root = Files.createTempDirectory("oryxos-concurrent-migration");
       Files.createDirectories(root.resolve("memory"));
