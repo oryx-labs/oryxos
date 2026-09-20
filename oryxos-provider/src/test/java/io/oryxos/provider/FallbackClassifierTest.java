@@ -2,20 +2,30 @@ package io.oryxos.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.openai.core.http.Headers;
+import com.openai.errors.BadRequestException;
+import com.openai.errors.InternalServerException;
+import com.openai.errors.OpenAIIoException;
+import com.openai.errors.RateLimitException;
+import com.openai.errors.UnauthorizedException;
+import com.openai.errors.UnexpectedStatusCodeException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpHeaders;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClientResponseException;
 
-/** 023 US1：可切换性分类表逐行钉死（R3）。 */
+/** 023 US1：可切换性分类表逐行钉死（R3）；Spring AI 2.0 对齐 openai-java 异常族。 */
 class FallbackClassifierTest {
 
-  private static RestClientResponseException status(int code) {
-    return new RestClientResponseException(
-        "status " + code, code, "st", new HttpHeaders(), new byte[0], StandardCharsets.UTF_8);
+  private static RuntimeException status(int code) {
+    Headers headers = Headers.builder().build();
+    return switch (code) {
+      case 400 -> BadRequestException.builder().headers(headers).build();
+      case 401 -> UnauthorizedException.builder().headers(headers).build();
+      case 429 -> RateLimitException.builder().headers(headers).build();
+      case 500, 502, 503 ->
+          InternalServerException.builder().statusCode(code).headers(headers).build();
+      default -> UnexpectedStatusCodeException.builder().statusCode(code).headers(headers).build();
+    };
   }
 
   @Test
@@ -38,8 +48,7 @@ class FallbackClassifierTest {
 
   @Test
   void 网络与超时类_可切换() {
-    assertThat(FallbackClassifier.isSwitchable(new ResourceAccessException("connect refused")))
-        .isTrue();
+    assertThat(FallbackClassifier.isSwitchable(new OpenAIIoException("connect refused"))).isTrue();
     assertThat(
             FallbackClassifier.isSwitchable(
                 new RuntimeException("wrapped", new TimeoutException("read timeout"))))
@@ -48,7 +57,6 @@ class FallbackClassifierTest {
 
   @Test
   void 异常链深埋_逐层提取() {
-    // 状态码埋在两层包装之下（Spring AI 常见包装形态）
     RuntimeException deep400 =
         new RuntimeException("outer", new IllegalStateException(status(400)));
     assertThat(FallbackClassifier.isSwitchable(deep400)).isFalse();
@@ -63,29 +71,14 @@ class FallbackClassifierTest {
   }
 
   @Test
-  void SpringAI包装形态_message前缀状态码判定() {
-    // 真机验证的形态：4xx 被包成 NonTransientAiException("400 - {json}")，cause 链无 RestClient 异常
+  void message前缀状态码判定_兼容旧包装形态() {
     assertThat(
             FallbackClassifier.isSwitchable(
-                new org.springframework.ai.retry.NonTransientAiException(
-                    "400 - {\"error\":{\"message\":\"invalid request body\"}}")))
+                new RuntimeException("400 - {\"error\":{\"message\":\"invalid request body\"}}")))
         .isFalse();
-    assertThat(
-            FallbackClassifier.isSwitchable(
-                new org.springframework.ai.retry.NonTransientAiException("401 - unauthorized")))
-        .isTrue(); // 凭证问题换家有意义（R3）
-    assertThat(
-            FallbackClassifier.isSwitchable(
-                new org.springframework.ai.retry.TransientAiException("429 - rate limited")))
+    assertThat(FallbackClassifier.isSwitchable(new RuntimeException("401 - unauthorized")))
         .isTrue();
-    // 无前缀码：信 Spring AI 的瞬时性分类
-    assertThat(
-            FallbackClassifier.isSwitchable(
-                new org.springframework.ai.retry.NonTransientAiException("schema mismatch")))
-        .isFalse();
-    assertThat(
-            FallbackClassifier.isSwitchable(
-                new org.springframework.ai.retry.TransientAiException("temporary hiccup")))
+    assertThat(FallbackClassifier.isSwitchable(new RuntimeException("429 - rate limited")))
         .isTrue();
   }
 }

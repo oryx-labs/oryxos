@@ -42,8 +42,8 @@ import org.springframework.util.MimeTypeUtils;
  * Provider 前台（core {@link ProviderService} 契约的 Spring AI 实现）：按 Profile 显式路由到对应
  * ChatModel，完成一次调用并落审计。
  *
- * <p>宪法 II/III：显式 name→ChatModel 映射、调用方式 {@code chatModel.call(new Prompt(...))}、 {@code
- * internalToolExecutionEnabled=false} 关闭框架自动工具执行——工具 schema 只翻译、tool call 原样透传。
+ * <p>宪法 II/III：显式 name→ChatModel 映射、调用方式 {@code chatModel.call(new Prompt(...))}。Spring AI 2.0 已移除
+ * ChatModel 内置工具执行循环——工具 schema 只翻译、tool call 原样透传，执行权只在 ToolExecutor（17 节）。
  */
 public class SpringAiProviderServiceImpl implements ProviderService {
 
@@ -578,10 +578,7 @@ public class SpringAiProviderServiceImpl implements ProviderService {
 
   /** {@code model} 为本次尝试的模型名（023）：备用候选必须用备用模型名，不再固定取主声明。 */
   private Prompt buildPrompt(Profile profile, ProviderRequest request, String model) {
-    OpenAiChatOptions.Builder options =
-        OpenAiChatOptions.builder()
-            .model(model)
-            .internalToolExecutionEnabled(Boolean.FALSE); // 执行权只在 ToolExecutor（17 节）
+    OpenAiChatOptions.Builder options = OpenAiChatOptions.builder().model(model);
     if (profile.provider().temperature() != null) {
       options.temperature(profile.provider().temperature());
     }
@@ -769,8 +766,8 @@ public class SpringAiProviderServiceImpl implements ProviderService {
   private static boolean isClientError(RuntimeException e) {
     Throwable t = e;
     while (t != null) {
-      if (t instanceof org.springframework.web.client.RestClientResponseException rest) {
-        int code = rest.getStatusCode().value();
+      if (t instanceof com.openai.errors.OpenAIServiceException svc) {
+        int code = svc.statusCode();
         return code >= 400
             && code < 500
             && code != 401
@@ -778,28 +775,14 @@ public class SpringAiProviderServiceImpl implements ProviderService {
             && code != 408
             && code != 429;
       }
-      if (t
-          instanceof
-          org.springframework.web.reactive.function.client.WebClientResponseException web) {
-        int code = web.getStatusCode().value();
+      Integer code = leadingHttpStatus(t.getMessage());
+      if (code != null) {
         return code >= 400
             && code < 500
             && code != 401
             && code != 403
             && code != 408
             && code != 429;
-      }
-      if (t instanceof org.springframework.ai.retry.NonTransientAiException
-          || t instanceof org.springframework.ai.retry.TransientAiException) {
-        Integer code = leadingHttpStatus(t.getMessage());
-        if (code != null) {
-          return code >= 400
-              && code < 500
-              && code != 401
-              && code != 403
-              && code != 408
-              && code != 429;
-        }
       }
       t = t.getCause();
     }

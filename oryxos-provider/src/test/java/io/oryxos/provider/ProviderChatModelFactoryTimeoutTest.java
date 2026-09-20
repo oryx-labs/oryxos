@@ -8,19 +8,18 @@ import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClient;
 
 /**
  * 超时回归：LLM 端点挂死时，单次 HTTP 调用必须在读取超时内失败，不能无限阻塞。
  *
- * <p>直接测 {@link ProviderChatModelFactory#timeoutFactory()} 装配出的客户端（buildOne 传给 OpenAiApi 的就是它）：走
- * ChatModel.call 会叠加 Spring AI 默认 RetryTemplate（对 ResourceAccessException 重试 10 次、 指数退避至
- * 180s），无法在单测时间预算内断言。
+ * <p>Spring AI 2.0 使用 openai-java OkHttp；此处用与工厂相同的 {@link
+ * ProviderChatModelFactory#requestTimeout()} 装配 OkHttpClient，验证读超时生效（避免叠 ChatModel 协议层干扰单测预算）。
  */
 class ProviderChatModelFactoryTimeoutTest {
 
@@ -48,22 +47,30 @@ class ProviderChatModelFactoryTimeoutTest {
     release.countDown(); // 放行 handler，避免 stop 等待
     hangingServer.stop(0);
     System.clearProperty(ProviderChatModelFactory.READ_TIMEOUT_PROP);
+    System.clearProperty(ProviderChatModelFactory.CONNECT_TIMEOUT_PROP);
   }
 
   @Test
   @DisplayName("端点收到请求后挂死_单次调用在读取超时内失败而非永久阻塞")
   void hangingEndpointFailsWithinReadTimeout() {
     System.setProperty(ProviderChatModelFactory.READ_TIMEOUT_PROP, "1");
-    String baseUrl = "http://127.0.0.1:" + hangingServer.getAddress().getPort();
-    RestClient client =
-        RestClient.builder().requestFactory(ProviderChatModelFactory.timeoutFactory()).build();
+    System.setProperty(ProviderChatModelFactory.CONNECT_TIMEOUT_PROP, "1");
+    String baseUrl = "http://127.0.0.1:" + hangingServer.getAddress().getPort() + "/";
+    var timeout = ProviderChatModelFactory.requestTimeout();
+    OkHttpClient client =
+        new OkHttpClient.Builder()
+            .connectTimeout(timeout.connect())
+            .readTimeout(timeout.read())
+            .writeTimeout(timeout.write())
+            .callTimeout(timeout.request())
+            .followRedirects(false)
+            .build();
 
-    // 修复前：默认请求工厂无读取超时，这里会永久阻塞（preemptive 兜底 10 秒防测试挂死）
     assertTimeoutPreemptively(
         Duration.ofSeconds(10),
         () ->
             assertThrows(
-                ResourceAccessException.class,
-                () -> client.get().uri(baseUrl).retrieve().toEntity(String.class)));
+                Exception.class,
+                () -> client.newCall(new Request.Builder().url(baseUrl).get().build()).execute()));
   }
 }

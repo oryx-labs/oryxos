@@ -11,7 +11,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.oryxos.core.ToolResult;
-import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -54,8 +53,10 @@ class McpToolAdapterTest {
   void executeForwardsArgsAndWrapsResult() throws Exception {
     when(client.callTool(org.mockito.ArgumentMatchers.any()))
         .thenReturn(
-            new McpSchema.CallToolResult(
-                List.of(new McpSchema.TextContent("found 3 repos")), false));
+            McpSchema.CallToolResult.builder()
+                .addTextContent("found 3 repos")
+                .isError(false)
+                .build());
 
     ToolResult result = adapter.execute(MAPPER.readTree("{\"query\":\"oryxos\"}"));
 
@@ -73,7 +74,10 @@ class McpToolAdapterTest {
   void mcpErrorWrapsAsRetryableFailure() throws Exception {
     when(client.callTool(org.mockito.ArgumentMatchers.any()))
         .thenReturn(
-            new McpSchema.CallToolResult(List.of(new McpSchema.TextContent("rate limited")), true));
+            McpSchema.CallToolResult.builder()
+                .addTextContent("rate limited")
+                .isError(true)
+                .build());
 
     ToolResult result = adapter.execute(MAPPER.readTree("{}"));
 
@@ -87,7 +91,7 @@ class McpToolAdapterTest {
   void oversizedContentIsTruncated() throws Exception {
     String big = "x".repeat(64 * 1024 + 100);
     when(client.callTool(org.mockito.ArgumentMatchers.any()))
-        .thenReturn(new McpSchema.CallToolResult(List.of(new McpSchema.TextContent(big)), false));
+        .thenReturn(McpSchema.CallToolResult.builder().addTextContent(big).isError(false).build());
 
     ToolResult result = adapter.execute(MAPPER.readTree("{}"));
 

@@ -14,13 +14,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.openai.core.http.Headers;
+import com.openai.errors.BadRequestException;
+import com.openai.errors.OpenAIIoException;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.provider.LlmCallAuditor;
 import io.oryxos.core.provider.ProviderDef;
 import io.oryxos.core.provider.ProviderRegistry;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.provider.ProviderResponse;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,9 +35,6 @@ import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
-import org.springframework.http.HttpHeaders;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClientResponseException;
 import reactor.core.publisher.Flux;
 
 /** 023 US1：切换序列语义——主败备成/全败/不可切/候选跳过/零声明回归/流式边界/无健康记忆 + 审计每尝试一条。 */
@@ -90,14 +89,13 @@ class ProviderFallbackTest {
     return new ChatResponse(List.of(new Generation(new AssistantMessage(text))));
   }
 
-  private static RestClientResponseException badRequest() {
-    return new RestClientResponseException(
-        "bad request", 400, "st", new HttpHeaders(), new byte[0], StandardCharsets.UTF_8);
+  private static BadRequestException badRequest() {
+    return BadRequestException.builder().headers(Headers.builder().build()).build();
   }
 
   @Test
   void 主败备成_返回备结果且备调用携带备model() {
-    when(primary.call(any(Prompt.class))).thenThrow(new ResourceAccessException("connect refused"));
+    when(primary.call(any(Prompt.class))).thenThrow(new OpenAIIoException("connect refused"));
     when(backup.call(any(Prompt.class))).thenReturn(reply("备用回复"));
 
     ProviderResponse response =
@@ -116,8 +114,8 @@ class ProviderFallbackTest {
 
   @Test
   void 全部候选失败_上抛最后异常() {
-    when(primary.call(any(Prompt.class))).thenThrow(new ResourceAccessException("primary down"));
-    ResourceAccessException lastError = new ResourceAccessException("backup down");
+    when(primary.call(any(Prompt.class))).thenThrow(new OpenAIIoException("primary down"));
+    OpenAIIoException lastError = new OpenAIIoException("backup down");
     when(backup.call(any(Prompt.class))).thenThrow(lastError);
 
     assertThatThrownBy(
@@ -131,7 +129,7 @@ class ProviderFallbackTest {
 
   @Test
   void 业务性失败400_不切换直接上抛() {
-    RestClientResponseException error = badRequest();
+    BadRequestException error = badRequest();
     when(primary.call(any(Prompt.class))).thenThrow(error);
 
     assertThatThrownBy(
@@ -146,7 +144,7 @@ class ProviderFallbackTest {
 
   @Test
   void 候选未注册_跳过直达下一候选() {
-    when(primary.call(any(Prompt.class))).thenThrow(new ResourceAccessException("down"));
+    when(primary.call(any(Prompt.class))).thenThrow(new OpenAIIoException("down"));
     when(backup.call(any(Prompt.class))).thenReturn(reply("第三候选接住"));
 
     ProviderResponse response =
@@ -164,7 +162,7 @@ class ProviderFallbackTest {
 
   @Test
   void 零fallback声明_行为与现状一致() {
-    ResourceAccessException error = new ResourceAccessException("down");
+    OpenAIIoException error = new OpenAIIoException("down");
     when(primary.call(any(Prompt.class))).thenThrow(error);
 
     assertThatThrownBy(() -> service.chat("s-1", profileWithFallback(), request())).isSameAs(error);
@@ -185,7 +183,7 @@ class ProviderFallbackTest {
   @Test
   void 流式_首片段前失败可切换_客户端无感知() {
     when(primary.stream(any(Prompt.class)))
-        .thenReturn(Flux.error(new ResourceAccessException("down before first token")));
+        .thenReturn(Flux.error(new OpenAIIoException("down before first token")));
     when(backup.stream(any(Prompt.class))).thenReturn(Flux.just(reply("备"), reply("用")));
 
     StringBuilder streamed = new StringBuilder();
@@ -202,7 +200,7 @@ class ProviderFallbackTest {
 
   @Test
   void 流式_已出token后失败_不切换按现状收尾() {
-    ResourceAccessException midStream = new ResourceAccessException("mid-stream cut");
+    OpenAIIoException midStream = new OpenAIIoException("mid-stream cut");
     // error 延迟 300ms 订阅：保证首 chunk 先被消费端拿到（onToken 已回调）后错误才到达——
     // 同批投递时 BlockingIterable 会让 error 抢先于排队 chunk（019 已知特性），那种情况客户端
     // 实际没收到内容、切换反而是安全的，正是本实现「以真实送达为准」的判定依据
@@ -227,7 +225,7 @@ class ProviderFallbackTest {
   @Test
   void 连续两次调用_第二次仍先尝试主_无健康记忆() {
     when(primary.call(any(Prompt.class)))
-        .thenThrow(new ResourceAccessException("第一次挂"))
+        .thenThrow(new OpenAIIoException("第一次挂"))
         .thenReturn(reply("主恢复了"));
     when(backup.call(any(Prompt.class))).thenReturn(reply("备用回复"));
     Profile profile = profileWithFallback(new Profile.ProviderRef.FallbackRef("backup", "b-model"));
@@ -243,7 +241,7 @@ class ProviderFallbackTest {
 
   @Test
   void 审计每尝试一条_主败备成恰两条且参数如实() {
-    when(primary.call(any(Prompt.class))).thenThrow(new ResourceAccessException("down"));
+    when(primary.call(any(Prompt.class))).thenThrow(new OpenAIIoException("down"));
     when(backup.call(any(Prompt.class))).thenReturn(reply("备用回复"));
 
     service.chat(

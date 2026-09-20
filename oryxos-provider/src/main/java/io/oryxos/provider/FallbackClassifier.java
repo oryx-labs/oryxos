@@ -1,15 +1,19 @@
 package io.oryxos.provider;
 
+import com.openai.errors.OpenAIIoException;
+import com.openai.errors.OpenAIRetryableException;
+import com.openai.errors.OpenAIServiceException;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClientResponseException;
 
 /**
  * 可切换性分类（023，R3）：判定一次 LLM 调用失败是否值得换备用 Provider 重试。
  *
  * <p>分类原则：换一个 Provider 有合理成功预期的才算可切换——网络/超时/5xx/限流/认证（各家凭证独立）切； 400
  * 类请求本身非法不切（FR-003）。提取不到状态码的未知异常偏向切换：多试一次的代价是一次超时， 漏切的代价是本可避免的服务中断（全败仍上抛最后错误，不吞）。
+ *
+ * <p>Spring AI 2.0 改用 openai-java：HTTP 失败以 {@link OpenAIServiceException}（及 IO/可重试包装）呈现， 不再依赖
+ * {@code RestClient}/{@code spring-ai-retry} 异常族。
  */
 final class FallbackClassifier {
 
@@ -22,32 +26,20 @@ final class FallbackClassifier {
   static boolean isSwitchable(RuntimeException e) {
     Throwable t = e;
     while (t != null) {
-      // RestClient 族（provider 非流式路径）：带状态码，按码判定
-      if (t instanceof RestClientResponseException rest) {
-        return switchableStatus(rest.getStatusCode().value());
+      if (t instanceof OpenAIServiceException svc) {
+        return switchableStatus(svc.statusCode());
       }
-      // WebClient 族（流式路径可能经 reactive 客户端）：同样带状态码
-      if (t
-          instanceof
-          org.springframework.web.reactive.function.client.WebClientResponseException web) {
-        return switchableStatus(web.getStatusCode().value());
-      }
-      // Spring AI 错误处理器的包装形态（真机验证）：4xx/5xx 被包成 (Non)TransientAiException，
-      // cause 链上没有 RestClient 异常、真实状态码在 message 前缀（"400 - {json}"）——按前缀码判定
-      if (t instanceof org.springframework.ai.retry.NonTransientAiException
-          || t instanceof org.springframework.ai.retry.TransientAiException) {
-        Integer code = leadingStatus(t.getMessage());
-        if (code != null) {
-          return switchableStatus(code);
-        }
-        // 提取不到码：信 Spring AI 的瞬时性分类——Transient 切、NonTransient 不切
-        return t instanceof org.springframework.ai.retry.TransientAiException;
-      }
-      // 网络/超时类：连接不上、读超时、IO 断流——换端点最典型收益
-      if (t instanceof ResourceAccessException
+      // SDK 瞬时/IO：换端点最典型收益
+      if (t instanceof OpenAIIoException
+          || t instanceof OpenAIRetryableException
           || t instanceof IOException
           || t instanceof TimeoutException) {
         return true;
+      }
+      // 兼容旧 message 前缀形态（"400 - {json}"），以防上层仍按该格式包装
+      Integer code = leadingStatus(t.getMessage());
+      if (code != null) {
+        return switchableStatus(code);
       }
       t = t.getCause();
     }
@@ -57,7 +49,7 @@ final class FallbackClassifier {
   private static final java.util.regex.Pattern LEADING_STATUS =
       java.util.regex.Pattern.compile("^(\\d{3}) - ");
 
-  /** 解析 Spring AI 异常 message 前缀的 HTTP 状态码；无则 null。 */
+  /** 解析异常 message 前缀的 HTTP 状态码；无则 null。 */
   private static Integer leadingStatus(String message) {
     if (message == null) {
       return null;

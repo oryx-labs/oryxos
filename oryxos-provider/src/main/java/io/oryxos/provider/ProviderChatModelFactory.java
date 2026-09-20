@@ -1,20 +1,24 @@
 package io.oryxos.provider;
 
-import java.net.http.HttpClient;
+import com.openai.client.OpenAIClient;
+import com.openai.client.OpenAIClientAsync;
+import com.openai.client.okhttp.OpenAIOkHttpClient;
+import com.openai.client.okhttp.OpenAIOkHttpClientAsync;
+import com.openai.core.Timeout;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.openai.api.OpenAiApi;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
-import org.springframework.web.client.RestClient;
 
 /**
  * 按全局配置逐条手工构造 ChatModel，产出显式 name→ChatModel 映射表（宪法 III）。
  *
- * <p>不使用任何 starter 自动装配（宪法 II 禁 eager 装配）；deepseek/kimi 均为 OpenAI 兼容端点， 经 {@code spring-ai-openai}
- * 的 OpenAiApi(baseUrl, apiKey) 接入（research D1，T003 已核实签名）。
+ * <p>不使用任何 starter 自动装配（宪法 II 禁 eager 装配）；deepseek/kimi 均为 OpenAI 兼容端点，经 {@code spring-ai-openai} +
+ * 官方 openai-java OkHttp 客户端接入。
+ *
+ * <p>Spring AI 2.0 移除了手写 {@code OpenAiApi}/{@code RestClient} 路径，改为 {@link OpenAIClient}；重试收敛到
+ * {@code maxRetries(0)}（单次尝试），「重试」语义整层上收到 fallback 切换循环（023 R8）。
  */
 public class ProviderChatModelFactory {
 
@@ -51,69 +55,74 @@ public class ProviderChatModelFactory {
     if (MOCK.equals(name)) {
       return new MockChatModel(); // 不连真实端点，无需 key/url
     }
-    // baseUrl 约定不含 /v1：OpenAiApi 内部会追加 /v1/chat/completions；用户填带 /v1 则先剥离，避免双 /v1（fix-issue-47）
-    String base = stripTrailingV1(baseUrl);
-    OpenAiApi.Builder api =
-        OpenAiApi.builder()
-            .baseUrl(base)
-            .apiKey(apiKey)
-            .restClientBuilder(RestClient.builder().requestFactory(timeoutFactory()));
-    if (TRAILING_VERSION.matcher(base).matches()) {
-      // 端点版本在 baseUrl 里（如 GLM 的 /api/paas/v4），改补无版本的 /chat/completions
-      api.completionsPath("/chat/completions");
-    }
-    // 023 R8：收敛 Spring AI 默认 RetryTemplate（原为 10 次指数退避至 180s）为单次尝试——
-    // 「重试」语义整层上收到 fallback 切换循环（单层负责），挂死端点不再卡同步会话数分钟。
+    String base = normalizeBaseUrl(baseUrl);
     return OpenAiChatModel.builder()
-        .openAiApi(api.build())
-        .retryTemplate(noRetryTemplate())
+        .openAiClient(syncClient(base, apiKey))
+        .openAiClientAsync(asyncClient(base, apiKey))
         .build();
   }
 
-  /** 单次尝试、无退避：见 buildOne 内 023 R8 注释。 */
-  static org.springframework.retry.support.RetryTemplate noRetryTemplate() {
-    return org.springframework.retry.support.RetryTemplate.builder().maxAttempts(1).build();
+  /** 同步 OpenAI 兼容客户端：超时 + 禁重定向 + 零 SDK 重试。 */
+  static OpenAIClient syncClient(String normalizedBaseUrl, String apiKey) {
+    return clientBuilder(normalizedBaseUrl, apiKey).build();
   }
 
-  /** 带连接/读取超时的请求工厂：默认 RestClient 无超时，端点挂死会把同步 ReAct 循环连带会话永久卡住。构建时读属性，不在类加载期固化。 */
-  static JdkClientHttpRequestFactory timeoutFactory() {
-    Duration connectTimeout =
+  /** 异步客户端与同步共用同一套凭证/超时，避免 Spring AI 回退读 {@code OPENAI_API_KEY} 环境变量。 */
+  static OpenAIClientAsync asyncClient(String normalizedBaseUrl, String apiKey) {
+    return asyncClientBuilder(normalizedBaseUrl, apiKey).build();
+  }
+
+  /** 包可见：单测断言 followRedirects / timeout 装配。 */
+  static OpenAIOkHttpClient.Builder clientBuilder(String normalizedBaseUrl, String apiKey) {
+    return OpenAIOkHttpClient.builder()
+        .baseUrl(normalizedBaseUrl)
+        .apiKey(apiKey)
+        .timeout(requestTimeout())
+        .maxRetries(0)
+        .followRedirects(false);
+  }
+
+  static OpenAIOkHttpClientAsync.Builder asyncClientBuilder(
+      String normalizedBaseUrl, String apiKey) {
+    return OpenAIOkHttpClientAsync.builder()
+        .baseUrl(normalizedBaseUrl)
+        .apiKey(apiKey)
+        .timeout(requestTimeout())
+        .maxRetries(0)
+        .followRedirects(false);
+  }
+
+  /** 连接/读取超时：默认 RestClient 时代无超时会把同步 ReAct 循环连带会话永久卡住。 */
+  static Timeout requestTimeout() {
+    Duration connect =
         Duration.ofSeconds(Long.getLong(CONNECT_TIMEOUT_PROP, DEFAULT_CONNECT_TIMEOUT_SECONDS));
-    Duration readTimeout =
+    Duration read =
         Duration.ofSeconds(Long.getLong(READ_TIMEOUT_PROP, DEFAULT_READ_TIMEOUT_SECONDS));
-    JdkClientHttpRequestFactory factory =
-        new JdkClientHttpRequestFactory(httpClient(connectTimeout));
-    factory.setReadTimeout(readTimeout);
-    return factory;
+    return Timeout.builder().connect(connect).read(read).write(read).request(read).build();
   }
 
   /**
-   * 构造带连接超时的 {@link HttpClient}，强制 HTTP/1.1：JDK 21 HttpClient 默认尝试 HTTP/2 升级（Upgrade: h2c +
-   * Transfer-Encoding: chunked），vLLM/Ollama（uvicorn）不认 h2c 升级，导致请求体丢失（'input': None）、服务端返回 400。
-   *
-   * <p>同时 {@code followRedirects(NEVER)}：默认 NORMAL 会跟随 302，恶意 provider baseUrl 可把管理台 /models 或
-   * ReAct chat 请求拐到元数据/内网（与 Skill import、HttpTools 策略对齐）。
+   * openai-java 以 {@code .../v1} 为 base，再追加 {@code /chat/completions}。用户配置历史上常不含 /v1（旧 OpenAiApi
+   * 会自动补），此处补齐；GLM 等版本已在 path 末尾的端点不补。
    */
-  static HttpClient httpClient(Duration connectTimeout) {
-    return HttpClient.newBuilder()
-        .connectTimeout(connectTimeout)
-        .version(HttpClient.Version.HTTP_1_1)
-        .followRedirects(HttpClient.Redirect.NEVER)
-        .build();
+  static String normalizeBaseUrl(String baseUrl) {
+    String u = stripTrailingSlash(baseUrl == null ? "" : baseUrl.strip());
+    if (u.isEmpty()) {
+      return u;
+    }
+    if (TRAILING_VERSION.matcher(u).matches()) {
+      return u;
+    }
+    if (u.endsWith(PATH_V1)) {
+      return u;
+    }
+    return u + PATH_V1;
   }
 
-  /**
-   * 剥离 baseUrl 末尾的 {@code /} 与 {@code /v1}，与 {@link
-   * io.oryxos.web.provider.ProviderModelsService#modelsUrl} 对齐。
-   */
-  private static String stripTrailingV1(String baseUrl) {
-    String u = baseUrl == null ? "" : baseUrl.strip();
-    while (u.endsWith(SLASH) || u.endsWith(PATH_V1)) {
-      if (u.endsWith(SLASH)) {
-        u = u.substring(0, u.length() - SLASH.length());
-      } else {
-        u = u.substring(0, u.length() - PATH_V1.length());
-      }
+  private static String stripTrailingSlash(String baseUrl) {
+    String u = baseUrl;
+    while (u.endsWith(SLASH)) {
+      u = u.substring(0, u.length() - SLASH.length());
     }
     return u;
   }

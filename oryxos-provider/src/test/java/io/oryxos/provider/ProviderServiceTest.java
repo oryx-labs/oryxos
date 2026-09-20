@@ -122,7 +122,7 @@ class ProviderServiceTest {
     ArgumentCaptor<Prompt> captor = ArgumentCaptor.forClass(Prompt.class);
     verify(deepseek).call(captor.capture());
     OpenAiChatOptions options = (OpenAiChatOptions) captor.getValue().getOptions();
-    assertFalse(options.getInternalToolExecutionEnabled()); // 坑二的回归：一旦有人改回自动执行，这里立刻红
+    // Spring AI 2.0 已移除 ChatModel 内置工具循环；保留 schema 透传断言
     assertFalse(options.getToolCallbacks().isEmpty()); // 翻译过的 schema 确实带上了
     assertEquals("http_get", options.getToolCallbacks().get(0).getToolDefinition().name());
   }
@@ -345,13 +345,10 @@ class ProviderServiceTest {
 
   @Test
   void multimodal被400拒绝_降级纯文本重试成功() {
-    org.springframework.web.client.HttpClientErrorException reject =
-        org.springframework.web.client.HttpClientErrorException.create(
-            org.springframework.http.HttpStatus.BAD_REQUEST,
-            "bad request",
-            org.springframework.http.HttpHeaders.EMPTY,
-            new byte[0],
-            null);
+    com.openai.errors.BadRequestException reject =
+        com.openai.errors.BadRequestException.builder()
+            .headers(com.openai.core.http.Headers.builder().build())
+            .build();
     when(deepseek.call(any(Prompt.class))).thenThrow(reject).thenReturn(textResponse("仅看到链接说明"));
 
     Message user =
