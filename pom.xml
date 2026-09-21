@@ -42,7 +42,7 @@
         <commons-lang3.version>3.18.0</commons-lang3.version>
         <logstash-logback.version>7.4</logstash-logback.version>
         <!-- Boot 3.5.x line; 2.9+/3.x need Boot 4 -->
-        <springdoc.version>2.8.17</springdoc.version>
+        <springdoc.version>3.1.1</springdoc.version>
         <!-- springdoc 2.8.17 still ships older swagger-ui; override for DOMPurify CVEs -->
         <swagger-ui.version>5.32.15</swagger-ui.version>
 
