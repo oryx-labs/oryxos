@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
       - name: Compare suppressions and root POM to base
@@ -95,17 +95,53 @@ jobs:
     name: Build & quality gate
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: write # upload-artifact (jacoco aggregate HTML/XML)
+      checks: write # dorny/test-reporter check run
+      pull-requests: write # dorny/test-reporter PR annotations
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
       # Full quality gate: spotless → checkstyle → compile → test → pmd/p3c →
-      # spotbugs+findsecbugs. Any violation fails the job.
+      # spotbugs+findsecbugs → JaCoCo report/check. Any violation fails the job.
       - name: mvn verify
         run: mvn -B clean verify
+      # #453：PR / Checks 上展示 Surefire（及 Failsafe 若存在）JUnit XML
+      - name: Publish Surefire / Failsafe test report
+        if: always()
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          name: Surefire Tests
+          # TEST-*.xml 避免匹配 failsafe-summary.xml（非 JUnit）
+          path: "**/target/surefire-reports/TEST-*.xml,**/target/failsafe-reports/TEST-*.xml"
+          reporter: java-junit
+          fail-on-empty: "false"
+      # Artifact for test-report.yml (workflow_run): fork PRs get read-only
+      # GITHUB_TOKEN, so Checks must be published from a base-repo workflow.
+      - name: Upload Surefire / Failsafe JUnit XML
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: surefire-junit-xml
+          path: |
+            **/target/surefire-reports/TEST-*.xml
+            **/target/failsafe-reports/TEST-*.xml
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload JaCoCo aggregate report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: jacoco-aggregate
+          path: |
+            oryxos-boot/target/site/jacoco-aggregate/
+          if-no-files-found: ignore
+          retention-days: 14
 
   dependency-check:
     name: OWASP Dependency-Check (CVE scan)
@@ -115,8 +151,8 @@ jobs:
       contents: read
       actions: write # upload-artifact
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '21'
@@ -144,7 +180,7 @@ jobs:
         run: mvn -B -Dowasp.skip=false org.owasp:dependency-check-maven:aggregate
       - name: Upload Dependency-Check report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dependency-check-report
           path: |
@@ -157,8 +193,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '21'
@@ -175,13 +211,124 @@ jobs:
       - name: docker build
         run: docker build -t oryxos:ci .
 
+  # #453：对 CI 镜像跑 Trivy（CRITICAL 门禁 + HIGH 报告）。
+  # 自包含 package+build（与 helm 同模式）：跨 job 传本地镜像需 artifact，体积大且易碎。
+  trivy-image:
+    name: Trivy container image scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write # SARIF → code scanning
+      actions: write # upload-artifact fallback
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: package (skip tests & quality plugins)
+        run: >-
+          mvn -B clean package -DskipTests
+          -Dspotless.check.skip=true
+          -Dcheckstyle.skip=true
+          -Dpmd.skip=true
+          -Dspotbugs.skip=true
+      - name: docker build
+        run: docker build -t oryxos:ci .
+      # Report CRITICAL+HIGH in the job log (non-blocking).
+      - name: Trivy report (CRITICAL+HIGH table)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: oryxos:ci
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+      # SARIF for GitHub code scanning / artifact (non-blocking).
+      - name: Trivy SARIF (CRITICAL+HIGH)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: oryxos:ci
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+          ignore-unfixed: true
+          exit-code: '0'
+          skip-setup-trivy: true
+      - name: Upload Trivy SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@3ea06614dafe36dec890db3446326e0d40ce53d4 # v3.38.1
+        continue-on-error: true
+        with:
+          sarif_file: trivy-results.sarif
+      - name: Upload Trivy SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-image-sarif
+          path: trivy-results.sarif
+          if-no-files-found: ignore
+      # Gate: fail the job only on CRITICAL findings.
+      - name: Fail on CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: oryxos:ci
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          skip-setup-trivy: true
+
+  # #453：独立 CycloneDX aggregate SBOM（不拖慢 build 关键路径）。
+  # 生成失败 fail-closed；SBOM 本身不含 advisory 门禁（CVE 仍由 OWASP/Trivy 负责）。
+  sbom:
+    name: CycloneDX SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write # upload-artifact
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # Install reactor so makeAggregateBom resolves first-party modules.
+      # Skip quality plugins already covered by `build`.
+      - name: install current reactor (skip tests & quality)
+        run: >-
+          mvn -B clean install -DskipTests
+          -Dspotless.check.skip=true
+          -Dcheckstyle.skip=true
+          -Dpmd.skip=true
+          -Dspotbugs.skip=true
+      - name: Generate CycloneDX aggregate BOM
+        run: mvn -B org.cyclonedx:cyclonedx-maven-plugin:makeAggregateBom
+      - name: Upload CycloneDX SBOM artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cyclonedx-sbom
+          path: |
+            target/bom.json
+            target/bom.xml
+          if-no-files-found: error
+
   integration-tests:
     name: Integration tests (*IT, embedded PG)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: write # upload-artifact (IT JUnit XML)
+      checks: write # dorny/test-reporter check run
+      pull-requests: write # dorny/test-reporter PR annotations
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '21'
@@ -202,14 +349,30 @@ jobs:
           -Dsurefire.failIfNoSpecifiedTests=false
           -Dspotless.check.skip=true -Dcheckstyle.skip=true
           -Dpmd.skip=true -Dspotbugs.skip=true
+      - name: Publish integration test report
+        if: always()
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          name: Integration Tests (*IT)
+          path: "**/target/surefire-reports/TEST-*.xml"
+          reporter: java-junit
+          fail-on-empty: "false"
+      - name: Upload IT JUnit XML
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: surefire-it-junit-xml
+          path: "**/target/surefire-reports/TEST-*.xml"
+          if-no-files-found: ignore
+          retention-days: 7
 
   helm:
     name: Helm chart lint + kind install smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v6
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: '21'
@@ -229,7 +392,7 @@ jobs:
       - name: docker build
         run: docker build --build-arg JAR_FILE=oryxos-boot/target/oryxos-boot-*.jar -t oryxos:ci .
       - name: create kind cluster
-        uses: helm/kind-action@v1
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
           cluster_name: oryxos-ci
       - name: kind install smoke

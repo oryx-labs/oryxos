@@ -57,6 +57,12 @@
         <spotbugs.version>4.10.4</spotbugs.version>
         <findsecbugs.version>1.14.0</findsecbugs.version>
         <dependency-check.version>13.0.0</dependency-check.version>
+        <!-- #453：CycloneDX SBOM；CI 显式调用 makeAggregateBom，不绑 package 以免拖慢本地 verify -->
+        <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
+        <!-- #453：JaCoCo UT coverage; LINE COVEREDRATIO gate (aggregate report on boot) -->
+        <jacoco.version>0.8.13</jacoco.version>
+        <!-- Tip measured aggregate LINE ~66.93% (2026-09-21); floor slightly below. Override: -Djacoco.line.coverage.minimum= -->
+        <jacoco.line.coverage.minimum>0.65</jacoco.line.coverage.minimum>
         <nvd.datafeed.url>https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/</nvd.datafeed.url>
 
         <!-- OWASP Dependency-Check is skipped by default for fast local builds and enabled in CI. -->
@@ -515,6 +521,49 @@
                     </executions>
                 </plugin>
 
+
+                <!-- #453：JaCoCo — instrument Surefire UTs + per-module report.
+                     Aggregate HTML/XML + jacoco:check LINE gate live on oryxos-boot
+                     (per-module check at aggregate floor would fail sparse channel modules). -->
+                <plugin>
+                    <groupId>org.jacoco</groupId>
+                    <artifactId>jacoco-maven-plugin</artifactId>
+                    <version>${jacoco.version}</version>
+                    <executions>
+                        <execution>
+                            <id>jacoco-prepare-agent</id>
+                            <goals>
+                                <goal>prepare-agent</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>jacoco-report</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>report</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <!-- #453：CycloneDX aggregate SBOM（CI 调用 makeAggregateBom；不绑定生命周期） -->
+                <plugin>
+                    <groupId>org.cyclonedx</groupId>
+                    <artifactId>cyclonedx-maven-plugin</artifactId>
+                    <version>${cyclonedx-maven-plugin.version}</version>
+                    <configuration>
+                        <projectType>application</projectType>
+                        <schemaVersion>1.6</schemaVersion>
+                        <includeBomSerialNumber>true</includeBomSerialNumber>
+                        <includeCompileScope>true</includeCompileScope>
+                        <includeProvidedScope>true</includeProvidedScope>
+                        <includeRuntimeScope>true</includeRuntimeScope>
+                        <includeSystemScope>true</includeSystemScope>
+                        <includeTestScope>false</includeTestScope>
+                        <outputReactorProjects>false</outputReactorProjects>
+                        <outputFormat>all</outputFormat>
+                    </configuration>
+                </plugin>
+
                 <!-- Security: OWASP Dependency-Check (CVE scan of third-party deps) -->
                 <plugin>
                     <groupId>org.owasp</groupId>
@@ -546,6 +595,10 @@
 
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+            </plugin>
+            <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
             </plugin>
@@ -564,6 +617,10 @@
             <plugin>
                 <groupId>org.owasp</groupId>
                 <artifactId>dependency-check-maven</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

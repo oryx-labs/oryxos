@@ -173,6 +173,79 @@
 
     <build>
         <plugins>
+
+            <!-- #453：reactor aggregate coverage HTML/XML + LINE COVEREDRATIO gate.
+                 Skip when -DskipTests (install/package jobs): no Surefire data → 0% aggregate. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>jacoco-report-aggregate</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report-aggregate</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${skipTests}</skip>
+                        </configuration>
+                    </execution>
+                    <!--
+                      jacoco:check is BUNDLE-scoped to this module. Boot LINE is ~95% tip, so the
+                      same floor as the aggregate gate is a non-regressing sanity check. The
+                      authoritative reactor floor is scripts/jacoco-aggregate-line-gate.py below
+                      (parses jacoco-aggregate/jacoco.xml LINE counters).
+                    -->
+                    <execution>
+                        <id>jacoco-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${skipTests}</skip>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${jacoco.line.coverage.minimum}</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>jacoco-aggregate-line-gate</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${skipTests}</skip>
+                            <executable>python3</executable>
+                            <workingDirectory>${maven.multiModuleProjectDirectory}</workingDirectory>
+                            <arguments>
+                                <argument>${maven.multiModuleProjectDirectory}/scripts/jacoco-aggregate-line-gate.py</argument>
+                                <argument>--xml</argument>
+                                <argument>${project.build.directory}/site/jacoco-aggregate/jacoco.xml</argument>
+                                <argument>--minimum</argument>
+                                <argument>${jacoco.line.coverage.minimum}</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

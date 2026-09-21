@@ -1,0 +1,46 @@
+# #453：在 base repo 上发布测试 Checks（fork PR 的 CI token 只有 read）。
+# 由 CI workflow 完成后触发；从 artifact 读取 Surefire / Failsafe JUnit XML。
+name: Test Report
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  surefire:
+    name: Publish Surefire Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Always attempt publish when CI produced artifacts (incl. failed verify).
+    if: github.event.workflow_run.conclusion != 'cancelled'
+    steps:
+      - name: Publish Surefire / Failsafe from artifact
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          artifact: surefire-junit-xml
+          name: Surefire Tests
+          path: "**/TEST-*.xml"
+          reporter: java-junit
+          fail-on-empty: "false"
+
+  integration:
+    name: Publish IT Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event.workflow_run.conclusion != 'cancelled'
+    steps:
+      - name: Publish Integration Tests from artifact
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          artifact: surefire-it-junit-xml
+          name: Integration Tests (*IT)
+          path: "**/TEST-*.xml"
+          reporter: java-junit
+          fail-on-empty: "false"
