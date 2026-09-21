@@ -52,7 +52,7 @@
         <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
         <pmd.version>7.27.0</pmd.version>
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
-        <checkstyle.version>10.18.2</checkstyle.version>
+        <checkstyle.version>14.1.0</checkstyle.version>
         <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
         <spotbugs.version>4.10.4</spotbugs.version>
         <findsecbugs.version>1.14.0</findsecbugs.version>
