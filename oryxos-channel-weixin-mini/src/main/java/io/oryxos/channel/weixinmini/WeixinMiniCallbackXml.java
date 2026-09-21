@@ -14,7 +14,9 @@ final class WeixinMiniCallbackXml {
     if (start >= 0) {
       start += openCdata.length();
       int end = xml.indexOf("]]></" + tag + ">", start);
-      if (end > start) {
+      // end >= start：空 CDATA 段（<tag><![CDATA[]]></tag>，end == start）也是合法输入，
+      // 必须返回空串；用 > 会落空到普通文本分支，把 "<![CDATA[]]>" 包装残骸当内容返回（#615）
+      if (end >= start) {
         return xml.substring(start, end).strip();
       }
     }
