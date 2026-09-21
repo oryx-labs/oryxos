@@ -52,7 +52,7 @@
         <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
         <pmd.version>7.27.0</pmd.version>
         <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
-        <checkstyle.version>10.18.2</checkstyle.version>
+        <checkstyle.version>14.1.0</checkstyle.version>
         <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
         <spotbugs.version>4.10.4</spotbugs.version>
         <findsecbugs.version>1.14.0</findsecbugs.version>
@@ -60,7 +60,7 @@
         <!-- #453：CycloneDX SBOM；CI 显式调用 makeAggregateBom，不绑 package 以免拖慢本地 verify -->
         <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
         <!-- #453：JaCoCo UT coverage; LINE COVEREDRATIO gate (aggregate report on boot) -->
-        <jacoco.version>0.8.13</jacoco.version>
+        <jacoco.version>0.8.15</jacoco.version>
         <!-- Tip measured aggregate LINE ~66.93% (2026-09-21); floor slightly below. Override: -Djacoco.line.coverage.minimum= -->
         <jacoco.line.coverage.minimum>0.65</jacoco.line.coverage.minimum>
         <nvd.datafeed.url>https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/</nvd.datafeed.url>
