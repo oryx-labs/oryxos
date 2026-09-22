@@ -88,7 +88,7 @@ OryxOS ships with three demo agents under `.oryxos/agents/` that show the model 
 | `daily-tech-digest` | Pulls headlines from `hn.algolia.com`, reads an on-demand skill file, and notifies a digest |
 | `github-daily` | Runs a trusted local Python script via `shell` and notifies a GitHub trending report (requires explicitly allowing `python3`) |
 
-All three use provider `deepseek` / `deepseek-v4-flash` and reference a notify channel by name.
+All three use provider `deepseek` (model `deepseek-v4-flash`) and reference a notify channel by name.
 
 > `github-daily` is an opt-in trusted-script demo. `python3` is deliberately absent from the default shell whitelist because an interpreter grants arbitrary code execution. Review the script before explicitly adding `python3`; do not enable it for untrusted agent input.
 
