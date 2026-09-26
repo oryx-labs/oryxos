@@ -10,13 +10,25 @@ public record TeamTaskPlan(List<SubTask> subtasks) {
     subtasks = subtasks == null ? List.of() : List.copyOf(subtasks);
   }
 
-  public record SubTask(String agent, String message) {
+  /**
+   * @param remote optional peer base URL for cross-node A2A ({@code a2a_send} path); blank = local
+   */
+  public record SubTask(String agent, String message, String remote) {
+    public SubTask(String agent, String message) {
+      this(agent, message, "");
+    }
+
     public SubTask {
       agent = Objects.requireNonNull(agent, "agent").strip();
       message = message == null ? "" : message.strip();
+      remote = remote == null ? "" : remote.strip().replaceAll("/+$", "");
       if (agent.isEmpty()) {
         throw new IllegalArgumentException("subtask agent must not be blank");
       }
+    }
+
+    public boolean hasRemote() {
+      return !remote.isBlank();
     }
   }
 }

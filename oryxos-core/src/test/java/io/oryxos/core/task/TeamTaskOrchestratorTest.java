@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.oryxos.core.a2a.A2aRemoteClient;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -194,5 +195,100 @@ class TeamTaskOrchestratorTest {
     assertEquals(1, r.workers().size());
     assertTrue(r.workers().get(0).failed());
     assertEquals(0, replanCalls.get());
+  }
+
+  @Test
+  @DisplayName("parsePlan reads optional remote")
+  void parsePlan_remote() {
+    TeamTaskPlan plan =
+        TeamTaskOrchestrator.parsePlan(
+            "{\"subtasks\":[{\"agent\":\"writer\",\"message\":\"draft\",\"remote\":\"http://peer:8080/\"}]}");
+    assertEquals("http://peer:8080", plan.subtasks().get(0).remote());
+    assertTrue(plan.subtasks().get(0).hasRemote());
+  }
+
+  @Test
+  @DisplayName("remote subtask uses A2aRemoteClient")
+  void remote_subtask() throws Exception {
+    com.sun.net.httpserver.HttpServer server =
+        com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+    String origin = "http://127.0.0.1:" + server.getAddress().getPort();
+    server.createContext(
+        "/.well-known/agent-card.json",
+        ex -> {
+          byte[] body =
+              ("{\"protocolVersion\":\"0.3.0\",\"name\":\"P\",\"description\":\"t\",\"url\":\""
+                      + origin
+                      + "/api/v1/a2a\",\"preferredTransport\":\"JSONRPC\",\"version\":\"1\","
+                      + "\"capabilities\":{\"streaming\":false,\"pushNotifications\":false,"
+                      + "\"stateTransitionHistory\":false},\"defaultInputModes\":[\"text/plain\"],"
+                      + "\"defaultOutputModes\":[\"text/plain\"],\"skills\":[]}")
+                  .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+          ex.getResponseHeaders().add("Content-Type", "application/json");
+          ex.sendResponseHeaders(200, body.length);
+          try (java.io.OutputStream out = ex.getResponseBody()) {
+            out.write(body);
+          }
+        });
+    server.createContext(
+        "/api/v1/a2a",
+        ex -> {
+          byte[] body =
+              "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"kind\":\"message\",\"role\":\"agent\","
+                  .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+          // build full body
+          body =
+              ("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"kind\":\"message\",\"role\":\"agent\","
+                      + "\"messageId\":\"m\",\"parts\":[{\"kind\":\"text\",\"text\":\"remote-ok\"}]}}")
+                  .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+          ex.getResponseHeaders().add("Content-Type", "application/json");
+          ex.sendResponseHeaders(200, body.length);
+          try (java.io.OutputStream out = ex.getResponseBody()) {
+            out.write(body);
+          }
+        });
+    server.start();
+    try {
+      A2aRemoteClient remote =
+          A2aRemoteClient.create(
+              java.time.Duration.ofSeconds(5), uri -> "127.0.0.1".equals(uri.getHost()));
+      String remoteJson =
+          "{\"subtasks\":[{\"agent\":\"writer\",\"message\":\"hi\",\"remote\":\""
+              + origin
+              + "\"}]}";
+      TeamAgentRunner local =
+          (agent, msg) -> {
+            if (msg.contains("ONLY a JSON")) {
+              return remoteJson;
+            }
+            if (msg.startsWith("Summarize")) {
+              return "SUM";
+            }
+            return "local";
+          };
+      TeamTaskOrchestrator orch =
+          new TeamTaskOrchestrator(local, "c", 4, true, false, 0, null, null, remote);
+      TeamTaskResult r = orch.run("goal");
+      assertEquals("remote-ok", r.workers().get(0).reply());
+      assertFalse(r.workers().get(0).failed());
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  @DisplayName("remote without client fails worker")
+  void remote_without_client() {
+    TeamAgentRunner local =
+        (agent, msg) -> {
+          if (msg.contains("ONLY a JSON")) {
+            return "{\"subtasks\":[{\"agent\":\"writer\",\"message\":\"hi\",\"remote\":\"http://peer\"}]}";
+          }
+          return "SUM";
+        };
+    TeamTaskResult r =
+        new TeamTaskOrchestrator(local, "c", 4, true, false, 0, null, null, null).run("g");
+    assertTrue(r.workers().get(0).failed());
+    assertTrue(r.workers().get(0).error().contains("A2A client"));
   }
 }

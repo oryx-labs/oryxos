@@ -3,6 +3,8 @@ package io.oryxos.core.task;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.oryxos.core.a2a.A2aRemoteClient;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -18,8 +20,9 @@ import java.util.regex.Pattern;
 /**
  * Direction I: coordinator agent produces a JSON plan, then specialists run (bounded). Fan-out is
  * parallel by default (virtual threads); set parallel=false for sequential. On worker failure,
- * optional bounded replan asks the coordinator for replacement subtasks (Vision「有界迭代」). No A2A.
- * Persists when a {@link TeamTaskRunStore} is provided.
+ * optional bounded replan asks the coordinator for replacement subtasks (Vision「有界迭代」). Subtasks
+ * may set {@code remote} (peer base URL) to run via {@link A2aRemoteClient}. Persists when a {@link
+ * TeamTaskRunStore} is provided.
  */
 public final class TeamTaskOrchestrator {
 
@@ -35,6 +38,7 @@ public final class TeamTaskOrchestrator {
   private final int maxReplanRounds;
   private final TeamTaskRunStore runStore;
   private final TeamAgentCatalog agentCatalog;
+  private final A2aRemoteClient remoteClient;
 
   public TeamTaskOrchestrator(TeamAgentRunner runner, String defaultCoordinator, int maxSubtasks) {
     this(runner, defaultCoordinator, maxSubtasks, true, true, 1, null, null);
@@ -68,6 +72,28 @@ public final class TeamTaskOrchestrator {
       int maxReplanRounds,
       TeamTaskRunStore runStore,
       TeamAgentCatalog agentCatalog) {
+    this(
+        runner,
+        defaultCoordinator,
+        maxSubtasks,
+        parallel,
+        replanOnFailure,
+        maxReplanRounds,
+        runStore,
+        agentCatalog,
+        null);
+  }
+
+  public TeamTaskOrchestrator(
+      TeamAgentRunner runner,
+      String defaultCoordinator,
+      int maxSubtasks,
+      boolean parallel,
+      boolean replanOnFailure,
+      int maxReplanRounds,
+      TeamTaskRunStore runStore,
+      TeamAgentCatalog agentCatalog,
+      A2aRemoteClient remoteClient) {
     this.runner = Objects.requireNonNull(runner, "runner");
     this.defaultCoordinator =
         defaultCoordinator == null || defaultCoordinator.isBlank()
@@ -79,6 +105,7 @@ public final class TeamTaskOrchestrator {
     this.maxReplanRounds = maxReplanRounds <= 0 ? 0 : Math.min(maxReplanRounds, 3);
     this.runStore = runStore;
     this.agentCatalog = agentCatalog;
+    this.remoteClient = remoteClient;
   }
 
   public TeamTaskResult run(String goal) {
@@ -97,8 +124,9 @@ public final class TeamTaskOrchestrator {
     String planPrompt =
         """
         You are the team coordinator. For the user goal below, reply with ONLY a JSON object:
-        {"subtasks":[{"agent":"<existing-agent-name>","message":"<concrete subtask>"}]}
-        At most MAX_SUBTASKS subtasks. Use real agent directory names the platform already has.
+        {"subtasks":[{"agent":"<agent-name>","message":"<concrete subtask>","remote":"<optional-peer-base-url>"}]}
+        At most MAX_SUBTASKS subtasks. Omit remote for local agents; set remote to a peer base URL
+        (http://host:port) for cross-node A2A when that host is allowlisted.
         Known agents:
         KNOWN_AGENTS
         Goal:
@@ -192,7 +220,7 @@ public final class TeamTaskOrchestrator {
     return """
         Some specialist subtasks failed. Reply with ONLY a JSON object of replacement subtasks
         (different agents and/or clearer messages):
-        {"subtasks":[{"agent":"<existing-agent-name>","message":"<concrete subtask>"}]}
+        {"subtasks":[{"agent":"<agent-name>","message":"<concrete subtask>","remote":"<optional-peer-base-url>"}]}
         At most MAX_SUBTASKS subtasks. Known agents:
         KNOWN_AGENTS
         Goal:
@@ -274,11 +302,30 @@ public final class TeamTaskOrchestrator {
 
   private TeamTaskResult.WorkerResult runOne(TeamTaskPlan.SubTask sub) {
     try {
-      String reply = runner.run(sub.agent(), sub.message());
+      String reply = invoke(sub);
       return new TeamTaskResult.WorkerResult(sub.agent(), sub.message(), reply, null);
     } catch (RuntimeException e) {
       String err = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
       return new TeamTaskResult.WorkerResult(sub.agent(), sub.message(), "", err);
+    }
+  }
+
+  private String invoke(TeamTaskPlan.SubTask sub) {
+    if (!sub.hasRemote()) {
+      return runner.run(sub.agent(), sub.message());
+    }
+    if (remoteClient == null) {
+      throw new IllegalStateException(
+          "remote subtask requires A2A client; set oryxos.a2a.enabled=true");
+    }
+    try {
+      return remoteClient.sendToBase(URI.create(sub.remote()), sub.agent(), sub.message());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("remote A2A interrupted", e);
+    } catch (Exception e) {
+      String msg = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+      throw new IllegalStateException("remote A2A failed: " + msg, e);
     }
   }
 
@@ -300,7 +347,11 @@ public final class TeamTaskOrchestrator {
         if (agent.isBlank()) {
           continue;
         }
-        list.add(new TeamTaskPlan.SubTask(agent, message));
+        String remote = text(n, "remote");
+        if (remote.isBlank()) {
+          remote = text(n, "remoteBaseUrl");
+        }
+        list.add(new TeamTaskPlan.SubTask(agent, message, remote));
       }
       if (list.isEmpty()) {
         throw new IllegalStateException("plan subtasks had no usable agent entries");

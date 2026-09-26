@@ -188,7 +188,7 @@ OryxOS 是**企业自己的 Agent 运行底座（Agent Harness OS）**。
 | 语义记忆（mem0 / Letta 式） | ✅ 015 语义召回 / 可选 Mem0 | B |
 | 主体画像记忆（Honcho 式用户 / 团队建模） | 🔜 规划中 | B |
 | Flow 声明式编排 | ✅ DSL+引擎（045–047）；AGENT→processStateless 已 Boot 接线 | C |
-| 子 Agent 委托 / A2A | ⚠️ delegate_agent + Card/send/stream + `a2a_send` + shared-token 鉴权；多跳续刀 | C |
+| 子 Agent 委托 / A2A | ⚠️ delegate_agent + Card/send/stream + `a2a_send` + shared-token + 团队 remote 子任务；跳数上限续刀 | C |
 | `execute_code` 代码化编排（降本） | ✅ docker ProcessStarter Runner（默认关） | C |
 | 自动沉淀 Skill（自我进化） | 🔜 规划中 | D |
 | 开放标准 Skill 生态（agentskills.io / Hub） | 🔜 规划中 | D / G |
@@ -204,7 +204,7 @@ OryxOS 是**企业自己的 Agent 运行底座（Agent Harness OS）**。
 | **审计 → 数据飞轮（评测 / 蒸馏 / RL）** | ⚠️ 审计 trace→EvalCase 导出已落地；蒸馏/RL 仍规划中 | **H** |
 | **成本治理 + 弹性休眠** | 🔜 规划中 | **H** |
 | **智能模型路由（选型 / fallback / 负载均衡）** | ⚠️ 部分（023/051，默认关） | **H** |
-| **任务发布 + 多 Agent 自组织交付（Agent 团队）** | ⚠️ MVP+并行+JPA+有界重规划+A2A send/stream/出站+shared-token；团队多跳续刀 | **I** |
+| **任务发布 + 多 Agent 自组织交付（Agent 团队）** | ⚠️ MVP+并行+JPA+有界重规划+A2A+shared-token+remote 子任务；跳数/编排续刀 | **I** |
 
 ---
 

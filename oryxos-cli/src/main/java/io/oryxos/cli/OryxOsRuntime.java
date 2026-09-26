@@ -1211,7 +1211,8 @@ public class OryxOsRuntime {
       TeamTaskProperties teamTaskProperties,
       io.oryxos.core.task.TeamTaskRunStore teamTaskRunStore,
       org.springframework.beans.factory.ObjectProvider<io.oryxos.core.agent.AgentLifecycleService>
-          lifecycleProvider) {
+          lifecycleProvider,
+      org.springframework.beans.factory.ObjectProvider<A2aRemoteClient> a2aRemoteClientProvider) {
     io.oryxos.core.task.TeamAgentCatalog catalog =
         () -> {
           io.oryxos.core.agent.AgentLifecycleService life = lifecycleProvider.getIfAvailable();
@@ -1228,7 +1229,8 @@ public class OryxOsRuntime {
         teamTaskProperties.replanOnFailure(),
         teamTaskProperties.maxReplanRounds(),
         teamTaskRunStore,
-        catalog);
+        catalog,
+        a2aRemoteClientProvider.getIfAvailable());
   }
 
   @Bean
