@@ -18,6 +18,8 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
 import java.util.EnumSet;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,11 +27,14 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** Exercises the real MCP SDK transports and JSON serialization against local protocol fixtures. */
 class McpTransportCompatibilityTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final String FIXTURE_AUTHORIZATION = "Bearer fixture-token";
 
   @TempDir Path dir;
 
@@ -60,6 +65,78 @@ class McpTransportCompatibilityTest {
     }
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"http", "sse"})
+  @Timeout(30)
+  void sseUsesConfiguredEndpointPathAndQuery(String transport) throws Exception {
+    try (SseFixture server = new SseFixture()) {
+      McpClientService service =
+          serviceFor(transport, null, server.baseUrl() + "/tenant/events?tenant=x%2Fy");
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        assertRoundTrip(registry, transport);
+        assertEquals(List.of("/tenant/events?tenant=x%2Fy"), server.eventRequests);
+        assertTrue(server.requestHeaders.stream().allMatch(FIXTURE_AUTHORIZATION::equals));
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"/tenant/rpc?tenant=x%2Fy", "/tenant%20space/rpc/?tenant=one&mode=a%2Fb"})
+  @Timeout(30)
+  void streamableUsesConfiguredEndpointPathAndQuery(String endpoint) throws Exception {
+    try (StreamableFixture server = new StreamableFixture()) {
+      McpClientService service = serviceFor("streamable", null, server.baseUrl() + endpoint);
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        assertRoundTrip(registry, "streamable");
+        assertTrue(server.postRequests.size() >= 3);
+        assertTrue(
+            server.postRequests.stream().allMatch(endpoint::equals),
+            server.postRequests.toString());
+        assertTrue(server.requestHeaders.stream().allMatch(FIXTURE_AUTHORIZATION::equals));
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
+  @Test
+  @Timeout(30)
+  void streamableRootAddressKeepsDefaultEndpoint() throws Exception {
+    try (StreamableFixture server = new StreamableFixture()) {
+      McpClientService service = serviceFor("streamable", null, server.baseUrl() + "/");
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        assertRoundTrip(registry, "streamable");
+        assertTrue(server.postRequests.stream().allMatch(uri -> "/mcp".equals(uri)));
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
+  @Test
+  @Timeout(30)
+  void customSseEndpointAcceptsSameOriginAbsoluteMessageEndpoint() throws Exception {
+    try (SseFixture server = new SseFixture(true)) {
+      McpClientService service = serviceFor("sse", null, server.baseUrl() + "/tenant/events");
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        assertRoundTrip(registry, "absolute-messages");
+        assertEquals(List.of("/tenant/events"), server.eventRequests);
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
   private McpClientService serviceFor(String transport, String command, String url)
       throws IOException {
     Path config = dir.resolve(transport + ".yaml");
@@ -72,7 +149,10 @@ class McpTransportCompatibilityTest {
             + "\n"
             + (command == null ? "" : "    command: " + command + "\n")
             + (url == null ? "" : "    url: " + url + "\n")
-            + "    request_timeout: 5\n");
+            + "    request_timeout: 5\n"
+            + "    headers:\n      Authorization: "
+            + FIXTURE_AUTHORIZATION
+            + "\n");
     return new McpClientService(new McpConfigLoader(config));
   }
 
@@ -132,11 +212,20 @@ class McpTransportCompatibilityTest {
     private final HttpServer server;
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final CountDownLatch closed = new CountDownLatch(1);
+    private final List<String> eventRequests = new CopyOnWriteArrayList<>();
+    private final List<String> requestHeaders = new CopyOnWriteArrayList<>();
+    private final boolean absoluteMessageEndpoint;
     private volatile OutputStream events;
 
     private SseFixture() throws IOException {
+      this(false);
+    }
+
+    private SseFixture(boolean absoluteMessageEndpoint) throws IOException {
+      this.absoluteMessageEndpoint = absoluteMessageEndpoint;
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       server.createContext("/sse", this::openEvents);
+      server.createContext("/tenant/events", this::openEvents);
       server.createContext("/messages", this::receiveMessage);
       server.setExecutor(executor);
       server.start();
@@ -147,11 +236,13 @@ class McpTransportCompatibilityTest {
     }
 
     private void openEvents(HttpExchange exchange) throws IOException {
+      eventRequests.add(exchange.getRequestURI().toString());
+      requestHeaders.add(exchange.getRequestHeaders().getFirst("Authorization"));
       exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
       exchange.sendResponseHeaders(200, 0);
       try (OutputStream output = exchange.getResponseBody()) {
         events = output;
-        sendEvent("endpoint", "/messages");
+        sendEvent("endpoint", (absoluteMessageEndpoint ? baseUrl() : "") + "/messages");
         try {
           closed.await();
         } catch (InterruptedException e) {
@@ -163,6 +254,7 @@ class McpTransportCompatibilityTest {
     }
 
     private void receiveMessage(HttpExchange exchange) throws IOException {
+      requestHeaders.add(exchange.getRequestHeaders().getFirst("Authorization"));
       JsonNode request = MAPPER.readTree(exchange.getRequestBody());
       exchange.sendResponseHeaders(202, -1);
       exchange.close();
@@ -222,6 +314,97 @@ class McpTransportCompatibilityTest {
     @Override
     public void close() throws Exception {
       closed.countDown();
+      server.stop(0);
+      executor.shutdownNow();
+      assertTrue(
+          executor.awaitTermination(Duration.ofSeconds(2).toMillis(), TimeUnit.MILLISECONDS));
+    }
+  }
+
+  private static final class StreamableFixture implements AutoCloseable {
+    private final HttpServer server;
+    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final List<String> postRequests = new CopyOnWriteArrayList<>();
+    private final List<String> requestHeaders = new CopyOnWriteArrayList<>();
+
+    private StreamableFixture() throws IOException {
+      server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+      server.createContext("/", this::receive);
+      server.setExecutor(executor);
+      server.start();
+    }
+
+    private String baseUrl() {
+      return "http://127.0.0.1:" + server.getAddress().getPort();
+    }
+
+    private void receive(HttpExchange exchange) throws IOException {
+      try {
+        if (!"POST".equals(exchange.getRequestMethod())) {
+          exchange.sendResponseHeaders(405, -1);
+          return;
+        }
+        postRequests.add(exchange.getRequestURI().toString());
+        requestHeaders.add(exchange.getRequestHeaders().getFirst("Authorization"));
+        JsonNode request = MAPPER.readTree(exchange.getRequestBody());
+        if (!request.has("id")) {
+          exchange.sendResponseHeaders(202, -1);
+          return;
+        }
+        JsonNode result;
+        String method = request.path("method").asText();
+        if ("initialize".equals(method)) {
+          result =
+              MAPPER.readTree(
+                  """
+                  {"protocolVersion":"2025-11-25","capabilities":{"tools":{}},
+                   "serverInfo":{"name":"streamable-fixture","version":"1"}}
+                  """);
+        } else if ("tools/list".equals(method)) {
+          result =
+              MAPPER.readTree(
+                  """
+                  {"tools":[{"name":"echo","description":"echo",
+                              "inputSchema":{"type":"object"}}]}
+                  """);
+        } else if ("tools/call".equals(method)) {
+          result =
+              MAPPER
+                  .createObjectNode()
+                  .set(
+                      "content",
+                      MAPPER
+                          .createArrayNode()
+                          .add(
+                              MAPPER
+                                  .createObjectNode()
+                                  .put("type", "text")
+                                  .put(
+                                      "text",
+                                      "reply:"
+                                          + request
+                                              .path("params")
+                                              .path("arguments")
+                                              .path("value")
+                                              .asText())));
+        } else {
+          result = MAPPER.createObjectNode();
+        }
+        var response = MAPPER.createObjectNode();
+        response.put("jsonrpc", "2.0");
+        response.set("id", request.get("id"));
+        response.set("result", result);
+        byte[] body = MAPPER.writeValueAsBytes(response);
+        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        exchange.sendResponseHeaders(200, body.length);
+        exchange.getResponseBody().write(body);
+      } finally {
+        exchange.close();
+      }
+    }
+
+    @Override
+    public void close() throws Exception {
       server.stop(0);
       executor.shutdownNow();
       assertTrue(

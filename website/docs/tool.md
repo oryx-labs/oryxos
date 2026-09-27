@@ -124,6 +124,8 @@ servers:
 
 OryxOS connects each MCP server at startup: `stdio` launches a local subprocess; `http` / `sse` connect to a remote SSE server; `streamable` connects via Streamable HTTP. Tools exposed by the server are registered in `ToolRegistry` under their declared names.
 
+For remote transports, `url` may contain a complete endpoint path and query, such as `https://mcp.example.com/team/mcp?tenant=example`; both are preserved on requests. A root-only URL (with no path or just `/`) keeps the legacy default endpoint: `/sse` for `http`/`sse`, or `/mcp` for `streamable`. The admin console supports all four transport choices and preserves remote URLs, headers, and request timeouts when creating or editing a server.
+
 > **Config schema.** `McpConfigLoader` parses a top-level `servers:` list. Each entry has `name` and `transport`, plus `command`/`env` for `stdio` or `url`/`headers` for remote HTTP transports (`http`/`sse` = legacy SSE endpoint; `streamable` = Streamable HTTP endpoint). `command` is a single whitespace-split string; there is **no separate `args:` field**. Optional `request_timeout` is an integer number of seconds from 1 to 3600 and defaults to 30; a non-integer or out-of-range value is a configuration error that prevents startup. It controls regular requests such as `tools/call`, but does not change the SDK's separate 20-second initialization timeout. The startup/admin `tools/list` connection probe waits at most `min(request_timeout, 60)` seconds so an unhealthy server cannot block the control plane for an hour. `${ENV_VAR}` placeholders are resolved only in `env` and `headers` values, so secrets must not be embedded in `command` or `url`.
 
 ## Recommended MCP servers

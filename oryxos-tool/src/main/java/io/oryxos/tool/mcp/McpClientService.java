@@ -11,6 +11,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.oryxos.core.mcp.McpServerConfig;
 import io.oryxos.core.mcp.McpServerStatus;
 import io.oryxos.tool.ToolRegistry;
+import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -197,8 +198,9 @@ public class McpClientService {
 
   /** Remote SSE ({@code http}/{@code sse}): SDK SSE client to {@code url}, with headers. */
   private static McpSyncClient connectHttpSse(McpServerConfig config) {
+    HttpEndpoint endpoint = httpEndpoint(config.url(), "/sse");
     HttpClientSseClientTransport.Builder transport =
-        HttpClientSseClientTransport.builder(config.url());
+        HttpClientSseClientTransport.builder(endpoint.baseUrl()).sseEndpoint(endpoint.requestUrl());
     if (!config.headers().isEmpty()) {
       transport.httpRequestCustomizer(
           (request, method, uri, body, context) -> config.headers().forEach(request::header));
@@ -208,14 +210,33 @@ public class McpClientService {
 
   /** Remote Streamable HTTP ({@code streamable}): SDK Streamable client to {@code url}. */
   private static McpSyncClient connectStreamable(McpServerConfig config) {
+    HttpEndpoint endpoint = httpEndpoint(config.url(), "/mcp");
     HttpClientStreamableHttpTransport.Builder transport =
-        HttpClientStreamableHttpTransport.builder(config.url());
+        HttpClientStreamableHttpTransport.builder(endpoint.baseUrl())
+            .endpoint(endpoint.requestUrl());
     if (!config.headers().isEmpty()) {
       transport.httpRequestCustomizer(
           (request, method, uri, body, context) -> config.headers().forEach(request::header));
     }
     return McpClient.sync(transport.build()).requestTimeout(config.requestTimeout()).build();
   }
+
+  /** SDK 的 base URI 和 endpoint 分开传入；完整端点保留 raw path/query，根地址沿用旧默认路径。 */
+  private static HttpEndpoint httpEndpoint(String url, String defaultPath) {
+    URI uri = URI.create(url);
+    String path = uri.getRawPath();
+    if (path == null || path.isEmpty() || "/".equals(path)) {
+      path = defaultPath;
+    }
+    if (uri.getRawQuery() != null) {
+      path += "?" + uri.getRawQuery();
+    }
+    String baseUrl = uri.resolve("/").toString();
+    // 传入绝对端点 URL，让 SDK 按同源校验后直接使用，避免再次解释相对路径。
+    return new HttpEndpoint(baseUrl, baseUrl.substring(0, baseUrl.length() - 1) + path);
+  }
+
+  private record HttpEndpoint(String baseUrl, String requestUrl) {}
 
   private static String s(String value) {
     return value == null ? "" : value.replace('\r', '_').replace('\n', '_');

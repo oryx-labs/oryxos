@@ -14,6 +14,8 @@
 #   servers:
 #     - name:      <string>   # unique id for this server
 #       transport: stdio      # "stdio" | "http"|"sse" (SSE url/headers) | "streamable" (Streamable HTTP url/headers)
+#       url: https://host/team/mcp?tenant=example  # Remote transports use the full path/query.
+#                             # Root-only URLs keep /sse (http/sse) or /mcp (streamable).
 #       command:   <string>   # ONE line. It is split on whitespace: the first
 #                             # token is the executable, the rest are its args.
 #                             # There is NO separate `args:` field.

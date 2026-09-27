@@ -1397,7 +1397,7 @@ async function saveMcp() {
     const payload = {
       name: mcpForm.name, transport: mcpForm.transport,
       command: mcpForm.transport === 'stdio' ? mcpForm.command : null,
-      url: mcpForm.transport === 'http' ? mcpForm.url : null,
+      url: mcpForm.transport === 'stdio' ? null : mcpForm.url,
       requestTimeoutSeconds,
       env: textToMap(mcpForm.envText), headers: textToMap(mcpForm.headersText),
     }
@@ -4071,7 +4071,9 @@ const outputRows = computed(() =>
                   <input v-model="mcpForm.name" class="gen-input" :disabled="!!mcpForm.editing" placeholder="server 名（唯一标识）" />
                   <select v-model="mcpForm.transport" class="gen-input">
                     <option value="stdio">stdio（本地子进程）</option>
-                    <option value="http">http（远程 server）</option>
+                    <option value="http">http（旧版 SSE）</option>
+                    <option value="sse">sse（旧版 SSE，http 别名）</option>
+                    <option value="streamable">streamable（Streamable HTTP）</option>
                   </select>
                   <input v-if="mcpForm.transport === 'stdio'" v-model="mcpForm.command" class="gen-input" placeholder="command，如 npx -y @modelcontextprotocol/server-github" />
                   <input v-else v-model="mcpForm.url" class="gen-input" placeholder="url，如 https://api.githubcopilot.com/mcp/" />
@@ -4079,7 +4081,7 @@ const outputRows = computed(() =>
                   <input v-model.number="mcpForm.requestTimeoutSeconds" class="gen-input" type="number" min="1" max="3600" step="1" />
                   <label class="empty" style="display:block">env（每行一条 KEY=VALUE，支持 ${ENV_VAR} 占位）</label>
                   <textarea v-model="mcpForm.envText" class="gen-draft mono" rows="3" placeholder="GITHUB_PERSONAL_ACCESS_TOKEN=${GITHUB_TOKEN}"></textarea>
-                  <label class="empty" style="display:block">headers（每行一条 KEY=VALUE；当前 http 传输暂不支持自定义请求头，仅作记录）</label>
+                  <label class="empty" style="display:block">headers（远程 HTTP 请求头，每行一条 KEY=VALUE，支持 ${ENV_VAR} 占位）</label>
                   <textarea v-model="mcpForm.headersText" class="gen-draft mono" rows="2" placeholder="Authorization=Bearer ${TOKEN}"></textarea>
                   <p v-if="mcpForm.error" class="error">{{ mcpForm.error }}</p>
                 </div>
