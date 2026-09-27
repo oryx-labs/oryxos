@@ -1,6 +1,8 @@
 package io.oryxos.tool.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -137,6 +139,169 @@ class McpTransportCompatibilityTest {
     }
   }
 
+  @Test
+  @Timeout(30)
+  void autoUsesStreamableWithoutLegacyProbe() throws Exception {
+    try (StreamableFixture server = new StreamableFixture()) {
+      McpClientService service = serviceFor("auto", null, server.baseUrl() + "/team/mcp?x=a%2Fb");
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        assertRoundTrip(registry, "auto-streamable");
+        assertTrue(server.postRequests.stream().allMatch("/team/mcp?x=a%2Fb"::equals));
+        assertTrue(server.requestHeaders.stream().allMatch(FIXTURE_AUTHORIZATION::equals));
+        assertTrue(server.legacyProbeRequests.isEmpty());
+        assertEquals(1, server.methods.stream().filter("initialize"::equals).count());
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {400, 404, 405})
+  @Timeout(30)
+  void autoFallsBackAtSameEndpointAfterLegacyHttpRejection(int status) throws Exception {
+    try (SseFixture server = new SseFixture(status, "legacy endpoint")) {
+      String endpoint = "/tenant/events?tenant=x%2Fy";
+      McpClientService service = serviceFor("auto", null, server.baseUrl() + endpoint);
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        assertRoundTrip(registry, "auto-sse");
+        assertEquals(List.of(endpoint), server.probeRequests);
+        assertEquals(List.of(endpoint), server.eventRequests);
+        assertEquals(List.of("2024-11-05"), server.eventVersions);
+        assertTrue(server.requestHeaders.stream().allMatch(FIXTURE_AUTHORIZATION::equals));
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {401, 403, 429, 500, 503})
+  @Timeout(30)
+  void autoDoesNotFallbackOnAuthRateLimitOrServerFailure(int status) throws Exception {
+    assertAutoRejectedWithoutFallback(status, "unavailable");
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {400, 404, 405})
+  @Timeout(30)
+  void autoDoesNotFallbackOnJsonRpcError(int status) throws Exception {
+    assertAutoRejectedWithoutFallback(
+        status,
+        """
+        {"jsonrpc":"2.0","id":0,"error":{"code":-32601,"message":"Unknown method"}}
+        """);
+  }
+
+  @Test
+  @Timeout(30)
+  void autoDoesNotFallbackWhenErrorBodyCannotBeInspectedWithinLimit() throws Exception {
+    assertAutoRejectedWithoutFallback(405, "x".repeat(100_000));
+  }
+
+  @Test
+  @Timeout(30)
+  void autoDoesNotFallbackAfterTruncatedHttpResponse() throws Exception {
+    assertAutoRejectedWithoutFallback(400, "legacy endpoint", true);
+  }
+
+  @Test
+  @Timeout(30)
+  void explicitSseNeverProbesStreamable() throws Exception {
+    try (StreamableFixture server = new StreamableFixture()) {
+      McpClientService service = serviceFor("sse", null, server.baseUrl() + "/mcp");
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        assertFalse(service.status("fixture").connected());
+        assertTrue(server.postRequests.isEmpty());
+        assertEquals(List.of("/mcp"), server.legacyProbeRequests);
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
+  @Test
+  @Timeout(30)
+  void failedLegacyFallbackLeavesNoConnectedClientOrTools() throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    List<String> requests = new CopyOnWriteArrayList<>();
+    server.createContext(
+        "/mcp",
+        exchange -> {
+          requests.add(exchange.getRequestMethod());
+          exchange.sendResponseHeaders("POST".equals(exchange.getRequestMethod()) ? 405 : 403, -1);
+          exchange.close();
+        });
+    server.start();
+    McpClientService service =
+        serviceFor("auto", null, "http://127.0.0.1:" + server.getAddress().getPort() + "/mcp");
+    ToolRegistry registry = new ToolRegistry();
+    try {
+      service.connectAll(registry);
+      assertFalse(service.status("fixture").connected());
+      assertTrue(registry.all().isEmpty());
+      assertEquals(List.of("POST", "GET"), requests);
+    } finally {
+      service.disconnect("fixture", registry);
+      server.stop(0);
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"tools/list", "tools/call"})
+  @Timeout(30)
+  void autoNeverSwitchesTransportOrReplaysAfterInitialization(String failingMethod)
+      throws Exception {
+    try (StreamableFixture server = new StreamableFixture(failingMethod)) {
+      McpClientService service = serviceFor("auto", null, server.baseUrl() + "/mcp");
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        if ("tools/call".equals(failingMethod)) {
+          assertTrue(service.status("fixture").connected());
+          assertThrows(
+              RuntimeException.class,
+              () -> registry.get("echo").orElseThrow().execute(MAPPER.createObjectNode()));
+        } else {
+          assertFalse(service.status("fixture").connected());
+          assertTrue(registry.all().isEmpty());
+        }
+        assertEquals(1, server.methods.stream().filter(failingMethod::equals).count());
+        assertTrue(server.legacyProbeRequests.isEmpty());
+        assertEquals(1, server.methods.stream().filter("initialize"::equals).count());
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
+  private void assertAutoRejectedWithoutFallback(int status, String body) throws Exception {
+    assertAutoRejectedWithoutFallback(status, body, false);
+  }
+
+  private void assertAutoRejectedWithoutFallback(int status, String body, boolean truncated)
+      throws Exception {
+    try (SseFixture server = new SseFixture(status, body, truncated)) {
+      McpClientService service = serviceFor("auto", null, server.baseUrl() + "/tenant/events");
+      ToolRegistry registry = new ToolRegistry();
+      try {
+        service.connectAll(registry);
+        assertFalse(service.status("fixture").connected());
+        assertTrue(registry.all().isEmpty());
+        assertEquals(List.of("/tenant/events"), server.probeRequests);
+        assertTrue(server.eventRequests.isEmpty());
+      } finally {
+        service.disconnect("fixture", registry);
+      }
+    }
+  }
+
   private McpClientService serviceFor(String transport, String command, String url)
       throws IOException {
     Path config = dir.resolve(transport + ".yaml");
@@ -213,8 +378,13 @@ class McpTransportCompatibilityTest {
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final CountDownLatch closed = new CountDownLatch(1);
     private final List<String> eventRequests = new CopyOnWriteArrayList<>();
+    private final List<String> eventVersions = new CopyOnWriteArrayList<>();
     private final List<String> requestHeaders = new CopyOnWriteArrayList<>();
+    private final List<String> probeRequests = new CopyOnWriteArrayList<>();
     private final boolean absoluteMessageEndpoint;
+    private final int rejectionStatus;
+    private final String rejectionBody;
+    private final boolean truncatedBody;
     private volatile OutputStream events;
 
     private SseFixture() throws IOException {
@@ -222,7 +392,28 @@ class McpTransportCompatibilityTest {
     }
 
     private SseFixture(boolean absoluteMessageEndpoint) throws IOException {
+      this(absoluteMessageEndpoint, 405, "", false);
+    }
+
+    private SseFixture(int rejectionStatus, String rejectionBody) throws IOException {
+      this(false, rejectionStatus, rejectionBody, false);
+    }
+
+    private SseFixture(int rejectionStatus, String rejectionBody, boolean truncatedBody)
+        throws IOException {
+      this(false, rejectionStatus, rejectionBody, truncatedBody);
+    }
+
+    private SseFixture(
+        boolean absoluteMessageEndpoint,
+        int rejectionStatus,
+        String rejectionBody,
+        boolean truncatedBody)
+        throws IOException {
       this.absoluteMessageEndpoint = absoluteMessageEndpoint;
+      this.rejectionStatus = rejectionStatus;
+      this.rejectionBody = rejectionBody;
+      this.truncatedBody = truncatedBody;
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       server.createContext("/sse", this::openEvents);
       server.createContext("/tenant/events", this::openEvents);
@@ -236,8 +427,18 @@ class McpTransportCompatibilityTest {
     }
 
     private void openEvents(HttpExchange exchange) throws IOException {
-      eventRequests.add(exchange.getRequestURI().toString());
       requestHeaders.add(exchange.getRequestHeaders().getFirst("Authorization"));
+      if ("POST".equals(exchange.getRequestMethod())) {
+        probeRequests.add(exchange.getRequestURI().toString());
+        byte[] body = rejectionBody.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(
+            rejectionStatus, body.length == 0 ? -1 : body.length + (truncatedBody ? 1 : 0));
+        exchange.getResponseBody().write(body);
+        exchange.close();
+        return;
+      }
+      eventRequests.add(exchange.getRequestURI().toString());
+      eventVersions.add(exchange.getRequestHeaders().getFirst("MCP-Protocol-Version"));
       exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
       exchange.sendResponseHeaders(200, 0);
       try (OutputStream output = exchange.getResponseBody()) {
@@ -326,8 +527,16 @@ class McpTransportCompatibilityTest {
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final List<String> postRequests = new CopyOnWriteArrayList<>();
     private final List<String> requestHeaders = new CopyOnWriteArrayList<>();
+    private final List<String> legacyProbeRequests = new CopyOnWriteArrayList<>();
+    private final List<String> methods = new CopyOnWriteArrayList<>();
+    private final String failingMethod;
 
     private StreamableFixture() throws IOException {
+      this("");
+    }
+
+    private StreamableFixture(String failingMethod) throws IOException {
+      this.failingMethod = failingMethod;
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       server.createContext("/", this::receive);
       server.setExecutor(executor);
@@ -341,6 +550,12 @@ class McpTransportCompatibilityTest {
     private void receive(HttpExchange exchange) throws IOException {
       try {
         if (!"POST".equals(exchange.getRequestMethod())) {
+          // 本 fixture 的 Streamable 协议为 2025-11-25；SDK legacy SSE GET 固定为 2024-11-05。
+          if ("GET".equals(exchange.getRequestMethod())
+              && "2024-11-05"
+                  .equals(exchange.getRequestHeaders().getFirst("MCP-Protocol-Version"))) {
+            legacyProbeRequests.add(exchange.getRequestURI().toString());
+          }
           exchange.sendResponseHeaders(405, -1);
           return;
         }
@@ -353,6 +568,11 @@ class McpTransportCompatibilityTest {
         }
         JsonNode result;
         String method = request.path("method").asText();
+        methods.add(method);
+        if (failingMethod.equals(method)) {
+          exchange.sendResponseHeaders(405, -1);
+          return;
+        }
         if ("initialize".equals(method)) {
           result =
               MAPPER.readTree(

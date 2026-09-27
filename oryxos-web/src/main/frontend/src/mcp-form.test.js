@@ -36,7 +36,7 @@ async function submitForm(transport, editing = null) {
   return requests[0]
 }
 
-for (const transport of ['http', 'sse', 'streamable']) {
+for (const transport of ['http', 'sse', 'streamable', 'auto']) {
   for (const editing of [null, 'fixture']) {
     test(`MCP ${transport} ${editing ? '编辑' : '新建'}保留完整 URL、请求头和超时`, async () => {
       const request = await submitForm(transport, editing)
@@ -57,7 +57,7 @@ test('MCP stdio 表单保留 command，忽略远程 URL', async () => {
   assert.equal(request.body.url, null)
 })
 
-test('MCP 管理台渲染四种已支持的传输选项', async () => {
+test('MCP 管理台渲染五种已支持的传输选项', async () => {
   const start = component.indexOf('<select v-model="mcpForm.transport"')
   const select = component.slice(start, component.indexOf('</select>', start) + '</select>'.length)
   const app = createSSRApp({
@@ -66,5 +66,5 @@ test('MCP 管理台渲染四种已支持的传输选项', async () => {
   })
   const html = await renderToString(app)
   assert.deepEqual([...html.matchAll(/<option value="([^"]+)"/g)].map(match => match[1]),
-    ['stdio', 'http', 'sse', 'streamable'])
+    ['stdio', 'http', 'sse', 'streamable', 'auto'])
 })

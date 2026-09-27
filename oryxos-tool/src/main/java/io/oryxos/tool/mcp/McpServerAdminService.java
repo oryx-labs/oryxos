@@ -112,7 +112,7 @@ public class McpServerAdminService implements McpServerAdmin {
       }
     } else {
       throw new IllegalArgumentException(
-          "未知 transport（仅支持 stdio/http/sse/streamable）: " + config.transport());
+          "未知 transport（仅支持 stdio/http/sse/streamable/auto）: " + config.transport());
     }
   }
 }

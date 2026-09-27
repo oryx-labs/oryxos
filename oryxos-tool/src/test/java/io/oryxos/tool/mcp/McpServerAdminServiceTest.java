@@ -1,5 +1,6 @@
 package io.oryxos.tool.mcp;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -111,5 +112,35 @@ class McpServerAdminServiceTest {
   void catalog_returnsBuiltInEntries() {
     McpServerAdminService service = serviceWith(c -> goodClient());
     assertFalse(service.catalog().isEmpty());
+  }
+
+  @Test
+  @DisplayName("auto 配置经管理服务和 YAML 往返保留 URL、headers 与 timeout")
+  void auto_persistsUpdatesAndConnects() {
+    McpServerAdminService service = serviceWith(c -> goodClient());
+    McpServerConfig config =
+        new McpServerConfig(
+            "remote",
+            "auto",
+            null,
+            Map.of(),
+            "https://example.invalid/team/mcp?x=a%2Fb",
+            Map.of("Authorization", "Bearer ${MCP_TOKEN}"),
+            120);
+    assertDoesNotThrow(() -> service.add(config));
+    assertEquals(config, service.list().get(0));
+    assertTrue(service.status().get(0).connected());
+    McpServerConfig changed =
+        new McpServerConfig(
+            "remote",
+            "auto",
+            null,
+            Map.of(),
+            "https://example.invalid/team/events?x=c%2Fd",
+            config.headers(),
+            240);
+    assertDoesNotThrow(() -> service.update("remote", changed));
+    assertEquals(changed, service.list().get(0));
+    assertTrue(service.status().get(0).connected());
   }
 }

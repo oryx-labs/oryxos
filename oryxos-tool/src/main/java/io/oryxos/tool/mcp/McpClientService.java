@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>失联的 server 只 WARN 跳过——外部依赖的可用性不是自己的可用性，不能变成自己的启动故障。 连接工厂构造可注入（测试替身），生产默认按 transport 分派：{@code
  * stdio} 起本地子进程，{@code http}/{@code sse} 连远程 SSE，{@code streamable} 连 Streamable HTTP，并透传配置的请求头。其余
- * transport 一律跳过。
+ * transport 一律跳过。{@code auto} 优先 Streamable，仅初始化阶段的明确 legacy 响应允许同端点 SSE 回退，工具调用不切换或重放。
  */
 public class McpClientService {
 
@@ -46,7 +46,8 @@ public class McpClientService {
           McpServerConfig.TRANSPORT_STDIO,
           McpServerConfig.TRANSPORT_HTTP,
           McpServerConfig.TRANSPORT_SSE,
-          McpServerConfig.TRANSPORT_STREAMABLE);
+          McpServerConfig.TRANSPORT_STREAMABLE,
+          McpServerConfig.TRANSPORT_AUTO);
 
   private final McpConfigLoader configLoader;
   private final Function<McpServerConfig, McpSyncClient> clientFactory;
@@ -90,7 +91,19 @@ public class McpClientService {
     List<String> toolNames = new ArrayList<>();
     try {
       client = clientFactory.apply(config);
-      client.initialize();
+      try {
+        client.initialize();
+      } catch (RuntimeException e) {
+        if (!McpServerConfig.TRANSPORT_AUTO.equals(config.transport()) || !isLegacyEndpoint(e)) {
+          throw e;
+        }
+        closeQuietly(config.name(), client);
+        client = null;
+        LOG.info("MCP server {} 初次连接回退到 legacy SSE", s(config.name()));
+        // 与 Streamable 探测使用同一端点；仅配置根地址时也不猜测另一个 /sse 路径。
+        client = connectHttpSse(config, "/mcp");
+        client.initialize();
+      }
       for (var tool : listToolsForConnect(client, config).tools()) {
         registry.registerMcpTool(config.name(), new McpToolAdapter(client, tool));
         toolNames.add(tool.name());
@@ -175,7 +188,8 @@ public class McpClientService {
   }
 
   private static McpSyncClient connectDefault(McpServerConfig config) {
-    if (McpServerConfig.isStreamable(config.transport())) {
+    if (McpServerConfig.isStreamable(config.transport())
+        || McpServerConfig.TRANSPORT_AUTO.equals(config.transport())) {
       return connectStreamable(config);
     }
     if (McpServerConfig.isHttpSse(config.transport())) {
@@ -198,7 +212,11 @@ public class McpClientService {
 
   /** Remote SSE ({@code http}/{@code sse}): SDK SSE client to {@code url}, with headers. */
   private static McpSyncClient connectHttpSse(McpServerConfig config) {
-    HttpEndpoint endpoint = httpEndpoint(config.url(), "/sse");
+    return connectHttpSse(config, "/sse");
+  }
+
+  private static McpSyncClient connectHttpSse(McpServerConfig config, String defaultPath) {
+    HttpEndpoint endpoint = httpEndpoint(config.url(), defaultPath);
     HttpClientSseClientTransport.Builder transport =
         HttpClientSseClientTransport.builder(endpoint.baseUrl()).sseEndpoint(endpoint.requestUrl());
     if (!config.headers().isEmpty()) {
@@ -214,6 +232,9 @@ public class McpClientService {
     HttpClientStreamableHttpTransport.Builder transport =
         HttpClientStreamableHttpTransport.builder(endpoint.baseUrl())
             .endpoint(endpoint.requestUrl());
+    if (McpServerConfig.TRANSPORT_AUTO.equals(config.transport())) {
+      transport.clientBuilder(McpAutoHttpClient.builder());
+    }
     if (!config.headers().isEmpty()) {
       transport.httpRequestCustomizer(
           (request, method, uri, body, context) -> config.headers().forEach(request::header));
@@ -237,6 +258,18 @@ public class McpClientService {
   }
 
   private record HttpEndpoint(String baseUrl, String requestUrl) {}
+
+  private static boolean isLegacyEndpoint(Throwable failure) {
+    for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+      if (cause instanceof McpAutoHttpClient.LegacyEndpointException) {
+        return true;
+      }
+      if (cause.getCause() == cause) {
+        break;
+      }
+    }
+    return false;
+  }
 
   private static String s(String value) {
     return value == null ? "" : value.replace('\r', '_').replace('\n', '_');

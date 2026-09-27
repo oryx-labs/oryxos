@@ -13,9 +13,13 @@
 # SCHEMA (exactly what McpConfigLoader parses — do not add other fields)
 #   servers:
 #     - name:      <string>   # unique id for this server
-#       transport: stdio      # "stdio" | "http"|"sse" (SSE url/headers) | "streamable" (Streamable HTTP url/headers)
+#       transport: stdio      # "stdio" | "http"|"sse" | "streamable" | "auto" (remote URL/headers)
 #       url: https://host/team/mcp?tenant=example  # Remote transports use the full path/query.
-#                             # Root-only URLs keep /sse (http/sse) or /mcp (streamable).
+#                             # Root-only URLs keep /sse (http/sse) or /mcp (streamable/auto).
+#                             # auto: initial Streamable POST, then same-URL legacy SSE only
+#                             # for eligible 400/404/405 responses without a JSON-RPC error.
+#                             # Use the actual endpoint (/mcp or /sse), not a guessed base path.
+#                             # Auth/network/server errors and tool-call errors never fall back.
 #       command:   <string>   # ONE line. It is split on whitespace: the first
 #                             # token is the executable, the rest are its args.
 #                             # There is NO separate `args:` field.

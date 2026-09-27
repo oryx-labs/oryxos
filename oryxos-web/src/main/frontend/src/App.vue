@@ -4074,6 +4074,7 @@ const outputRows = computed(() =>
                     <option value="http">http（旧版 SSE）</option>
                     <option value="sse">sse（旧版 SSE，http 别名）</option>
                     <option value="streamable">streamable（Streamable HTTP）</option>
+                    <option value="auto">auto（优先 Streamable，兼容 legacy SSE）</option>
                   </select>
                   <input v-if="mcpForm.transport === 'stdio'" v-model="mcpForm.command" class="gen-input" placeholder="command，如 npx -y @modelcontextprotocol/server-github" />
                   <input v-else v-model="mcpForm.url" class="gen-input" placeholder="url，如 https://api.githubcopilot.com/mcp/" />

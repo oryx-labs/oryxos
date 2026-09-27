@@ -124,7 +124,11 @@ servers:
 
 OryxOS 在启动时连接每个 MCP server：`stdio` 启动本地子进程；`http` / `sse` 连远程 SSE；`streamable` 走 Streamable HTTP。server 暴露的工具以其声明的名称注册到 `ToolRegistry` 中。
 
-远程传输的 `url` 可以包含完整的端点路径和 query，例如 `https://mcp.example.com/team/mcp?tenant=example`，请求时两者都会保留。只填写服务根地址（没有路径或路径仅为 `/`）时，保持旧默认端点：`http`/`sse` 使用 `/sse`，`streamable` 使用 `/mcp`。管理台支持四种传输选项，新建或编辑 server 时会保留远程 URL、headers 和请求超时。
+远程传输的 `url` 可以包含完整的端点路径和 query，例如 `https://mcp.example.com/team/mcp?tenant=example`，请求时两者都会保留。只填写服务根地址（没有路径或路径仅为 `/`）时，使用默认端点：`http`/`sse` 为 `/sse`，`streamable`/`auto` 为 `/mcp`。管理台支持五种传输选项，新建或编辑 server 时会保留远程 URL、headers 和请求超时。
+
+`transport: auto` 在初始化阶段优先尝试 Streamable HTTP。仅当初始 HTTP 响应为 `400`、`404` 或 `405`，且正文不是 JSON-RPC 错误时，才尝试 legacy SSE。回退前先关闭失败客户端，并使用**同一个端点 URL**、query 和 headers，不自动寻找另一个 `/sse` 路径。因此应填写实际 MCP 端点，例如 `/team/mcp` 或 `/team/events`。显式配置 `http`/`sse`/`streamable` 时不自动切换。
+
+鉴权失败、限流、网络/TLS 错误、超时、其他 HTTP 失败及 JSON-RPC 错误均不触发回退。错误正文只做有界读取；过大或未完整收到的正文按失败处理，不猜测传输。初始化成功后，自动传输选择层不因 `tools/list` 或 `tools/call` 失败切换传输或新增重试。SDK 既有的 session/重连行为保持不变，这个选项不构成工具执行的 exactly-once 保证。`auto` 不实现 Tasks 或新版无状态协议，沿用已有的单客户端初始化超时与请求超时。
 
 > **配置 Schema。** `McpConfigLoader` 解析顶层的 `servers:` 列表。每个条目包含 `name`、`transport`，并按传输类型使用 `command`/`env`（`stdio`）或 `url`/`headers`（远程 HTTP：`http`/`sse` = legacy SSE 端点；`streamable` = Streamable HTTP 端点）。`command` 是按空白切分的单个字符串，**没有独立的 `args:` 字段**。可选的 `request_timeout` 是 1–3600 之间的整数秒数，缺省保持 30 秒；非整数或越界会被当作配置错误并阻止启动。它控制 `tools/call` 等普通请求，但不改变 SDK 独立的 20 秒初始化超时。启动和管理 API 写操作中的 `tools/list` 连接探测最多等待 `min(request_timeout, 60)` 秒，避免故障 server 长时间阻塞控制面。`${ENV_VAR}` 占位符只在 `env` 和 `headers` 的值里解析，密钥不得内联写进 `command` 或 `url`。
 

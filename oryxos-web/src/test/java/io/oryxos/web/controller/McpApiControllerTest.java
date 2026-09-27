@@ -81,6 +81,52 @@ class McpApiControllerTest {
   }
 
   @Test
+  @DisplayName("auto 配置经管理 API 新建与编辑保留传输、完整端点和超时")
+  void auto_createAndUpdateRoundTrip() throws Exception {
+    when(admin.add(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    when(admin.update(eq("remote"), any())).thenAnswer(invocation -> invocation.getArgument(1));
+    when(admin.list())
+        .thenReturn(
+            List.of(
+                new McpServerConfig(
+                    "remote",
+                    "auto",
+                    null,
+                    Map.of(),
+                    "https://example.invalid/team/mcp?tenant=a%2Fb",
+                    Map.of("Authorization", "Bearer ${MCP_TOKEN}"),
+                    120)));
+    String body =
+        """
+        {"name":"remote","transport":"auto","url":"https://example.invalid/team/mcp?tenant=a%2Fb",
+         "headers":{"Authorization":"Bearer ${MCP_TOKEN}"},"requestTimeoutSeconds":120}
+        """;
+    mvc.perform(post("/api/v1/mcp-servers").contentType(MediaType.APPLICATION_JSON).content(body))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.transport").value("auto"))
+        .andExpect(jsonPath("$.data.url").value("https://example.invalid/team/mcp?tenant=a%2Fb"))
+        .andExpect(jsonPath("$.data.headers.Authorization").value("****KEN}"))
+        .andExpect(jsonPath("$.data.requestTimeoutSeconds").value(120));
+    ArgumentCaptor<McpServerConfig> created = ArgumentCaptor.forClass(McpServerConfig.class);
+    verify(admin).add(created.capture());
+    Assertions.assertEquals(
+        "Bearer ${MCP_TOKEN}", created.getValue().headers().get("Authorization"));
+    mvc.perform(
+            put("/api/v1/mcp-servers/remote")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body.replace("Bearer ${MCP_TOKEN}", "****KEN}")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.transport").value("auto"))
+        .andExpect(jsonPath("$.data.url").value("https://example.invalid/team/mcp?tenant=a%2Fb"))
+        .andExpect(jsonPath("$.data.headers.Authorization").value("****KEN}"))
+        .andExpect(jsonPath("$.data.requestTimeoutSeconds").value(120));
+    ArgumentCaptor<McpServerConfig> updated = ArgumentCaptor.forClass(McpServerConfig.class);
+    verify(admin).update(eq("remote"), updated.capture());
+    Assertions.assertEquals(
+        "Bearer ${MCP_TOKEN}", updated.getValue().headers().get("Authorization"));
+  }
+
+  @Test
   @DisplayName("update 回传掩码 env 值_视为未修改_保留原 token")
   void update_maskedEnvValue_keepsOriginal() throws Exception {
     McpServerConfig existing =
