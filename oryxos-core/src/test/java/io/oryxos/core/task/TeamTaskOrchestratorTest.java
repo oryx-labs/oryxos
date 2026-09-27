@@ -7,10 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.oryxos.core.a2a.A2aRemoteClient;
 import io.oryxos.core.cost.CostContext;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -62,7 +62,10 @@ class TeamTaskOrchestratorTest {
   @Test
   @DisplayName("maxSubtasks caps fan-out")
   void maxCaps() {
-    List<String> workers = new ArrayList<>();
+    List<String> workers = new CopyOnWriteArrayList<>();
+    // 刻意让第二个 worker 先记录调用，避免测试依赖碰巧一致的线程调度顺序。
+    java.util.concurrent.CountDownLatch secondWorkerRecorded =
+        new java.util.concurrent.CountDownLatch(1);
     TeamAgentRunner runner =
         (agent, msg) -> {
           if (msg.contains("ONLY a JSON")) {
@@ -73,13 +76,28 @@ class TeamTaskOrchestratorTest {
                 + "]}";
           }
           if (!msg.startsWith("Summarize")) {
+            if ("a1".equals(agent)) {
+              try {
+                assertTrue(
+                    secondWorkerRecorded.await(2, java.util.concurrent.TimeUnit.SECONDS),
+                    "第二个 worker 应能在第一个 worker 等待时执行");
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("worker 等待被中断", e);
+              }
+            }
             workers.add(agent);
+            if ("a2".equals(agent)) {
+              secondWorkerRecorded.countDown();
+            }
           }
           return "ok";
         };
     TeamTaskResult r = new TeamTaskOrchestrator(runner, "c", 2).run("goal");
     assertEquals(2, r.workers().size());
-    assertEquals(List.of("a1", "a2"), workers);
+    assertEquals(List.of("a1", "a2"), workers.stream().sorted().toList());
+    assertEquals(
+        List.of("a1", "a2"), r.workers().stream().map(TeamTaskResult.WorkerResult::agent).toList());
   }
 
   @Test
