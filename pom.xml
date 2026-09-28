@@ -41,7 +41,7 @@
         <tomcat.version>10.1.59</tomcat.version>
         <!-- CVE-2025-48924: ClassUtils.getClass StackOverflowError before 3.18.0 -->
         <commons-lang3.version>3.18.0</commons-lang3.version>
-        <logstash-logback.version>7.4</logstash-logback.version>
+        <logstash-logback.version>9.0</logstash-logback.version>
         <!-- Boot 3.5.x line; 2.9+/3.x need Boot 4 -->
         <springdoc.version>2.8.17</springdoc.version>
         <!-- springdoc 2.8.17 still ships older swagger-ui; override for DOMPurify CVEs -->
