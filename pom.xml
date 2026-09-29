@@ -79,25 +79,7 @@
         <module>oryxos-memory</module>
         <module>oryxos-knowledge</module>
         <module>oryxos-tool</module>
-        <module>oryxos-channel-cli</module>
-        <module>oryxos-channel-feishu</module>
-        <module>oryxos-channel-wecom</module>
-        <module>oryxos-channel-dingtalk</module>
-        <module>oryxos-channel-slack</module>
-        <module>oryxos-channel-discord</module>
-        <module>oryxos-channel-telegram</module>
-        <module>oryxos-channel-whatsapp</module>
-        <module>oryxos-channel-teams</module>
-        <module>oryxos-channel-gchat</module>
-        <module>oryxos-channel-mattermost</module>
-        <module>oryxos-channel-matrix</module>
-        <module>oryxos-channel-qq</module>
-        <module>oryxos-channel-douyin</module>
-        <module>oryxos-channel-weixin</module>
-        <module>oryxos-channel-weixin-kf</module>
-        <module>oryxos-channel-weixin-mp</module>
-        <module>oryxos-channel-weixin-mini</module>
-        <module>oryxos-channel-alipay</module>
+        <module>channels</module>
         <module>oryxos-web</module>
         <module>oryxos-storage</module>
         <module>oryxos-cli</module>
