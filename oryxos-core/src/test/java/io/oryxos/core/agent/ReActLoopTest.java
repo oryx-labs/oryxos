@@ -149,6 +149,44 @@ class ReActLoopTest {
   }
 
   @Test
+  @DisplayName("开启收尾_转满后追加一次无工具最终答复并写入Session_仍返回哨兵串")
+  void summarizeOnMaxIterations_appendsFinalAnswerAndStillReturnsSentinel() {
+    ReActLoop gracefulLoop =
+        new ReActLoop(promptBuilder, providerService, toolExecutor, null, null, true);
+    java.util.concurrent.atomic.AtomicInteger calls =
+        new java.util.concurrent.atomic.AtomicInteger();
+    when(providerService.chat(any(), any(), any()))
+        .thenAnswer(
+            inv ->
+                calls.incrementAndGet() <= 3
+                    ? responseWithToolCall(HTTP_GET_CALL) // 前 3 轮永不收敛
+                    : finalAnswer("基于已查到的信息：今天多云")); // 第 4 次 = 无工具收尾调用
+    when(toolExecutor.execute(any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+
+    String reply = gracefulLoop.run(session, "持续调查", profileWithMaxIterations(3));
+
+    // 3 轮循环全在调工具 + 1 次无工具收尾 = 4 次模型调用
+    verify(providerService, times(4)).chat(eq("s-1"), any(), any());
+    assertTrue(reply.contains("达到最大轮数")); // 哨兵串不变，上层据此仍标记失败
+    Message last = session.messages().get(session.messages().size() - 1);
+    assertEquals(Message.ROLE_ASSISTANT, last.role());
+    assertTrue(last.toolCalls().isEmpty()); // 收尾答复不带工具调用
+    assertEquals("基于已查到的信息：今天多云", last.content());
+  }
+
+  @Test
+  @DisplayName("默认不收尾_转满仅返回哨兵串且不追加额外模型调用")
+  void withoutSummarize_onlySentinelNoExtraCall() {
+    when(providerService.chat(any(), any(), any())).thenReturn(responseWithToolCall(HTTP_GET_CALL));
+    when(toolExecutor.execute(any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+
+    String reply = loop.run(session, "持续调查", profileWithMaxIterations(3));
+
+    verify(providerService, times(3)).chat(eq("s-1"), any(), any()); // 无第 4 次收尾调用
+    assertTrue(reply.contains("达到最大轮数"));
+  }
+
+  @Test
   @DisplayName("最大轮数为 6 时第 5、6 轮注入收敛提示，仍返回达到最大轮数")
   void remainingTwoIterationsReceiveConvergenceHint() {
     when(providerService.chat(any(), any(), any()))

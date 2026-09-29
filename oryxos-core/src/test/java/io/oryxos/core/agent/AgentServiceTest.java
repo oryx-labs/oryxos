@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
+import io.oryxos.core.provider.ProviderResponse;
 import io.oryxos.core.session.Message;
 import io.oryxos.core.session.Session;
 import io.oryxos.core.session.SessionManager;
@@ -125,6 +126,36 @@ class AgentServiceTest {
     assertEquals("最终答复", reply);
     verify(sessionManager).saveIfUnchanged(session, List.of());
     assertNull(ProfileContext.current()); // 正常路径同样清干净
+  }
+
+  @Test
+  @DisplayName("达到最大轮数_收尾答复拼进失败信息_且仍含达到最大轮数")
+  void maxIterations_bestEffortAnswerCarriedInException() {
+    when(reActLoop.run(any(), any(), any()))
+        .thenAnswer(
+            invocation -> {
+              // 模拟 ReActLoop 开启收尾后：把最终答复以无工具 assistant 消息写回 session
+              Session s = invocation.getArgument(0);
+              s.appendAssistant(new ProviderResponse("我尽力给出的答复", List.of(), null));
+              return ReActLoop.MAX_ITERATIONS_REPLY;
+            });
+
+    AgentMaxIterationsExceededException ex =
+        assertThrows(
+            AgentMaxIterationsExceededException.class, () -> agentService.process(session, "hi"));
+    assertTrue(ex.getMessage().contains("达到最大轮数")); // 分类短语保留，仍标记失败
+    assertTrue(ex.getMessage().contains("我尽力给出的答复")); // 用户能看到尽力而为的答复
+  }
+
+  @Test
+  @DisplayName("达到最大轮数_无收尾答复时退回纯哨兵串")
+  void maxIterations_withoutBestEffort_fallsBackToSentinel() {
+    when(reActLoop.run(any(), any(), any())).thenReturn(ReActLoop.MAX_ITERATIONS_REPLY);
+
+    AgentMaxIterationsExceededException ex =
+        assertThrows(
+            AgentMaxIterationsExceededException.class, () -> agentService.process(session, "hi"));
+    assertEquals(ReActLoop.MAX_ITERATIONS_REPLY, ex.getMessage());
   }
 
   @Test

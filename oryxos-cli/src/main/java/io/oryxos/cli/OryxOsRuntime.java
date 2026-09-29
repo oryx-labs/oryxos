@@ -1596,9 +1596,17 @@ public class OryxOsRuntime {
       ProviderService providerService,
       ToolExecutor toolExecutor,
       AgentRunEventPublisher agentRunEventPublisher,
-      InterruptManager interruptManager) {
+      InterruptManager interruptManager,
+      @org.springframework.beans.factory.annotation.Value(
+              "${oryxos.react.summarize-on-max-iterations:false}")
+          boolean summarizeOnMaxIterations) {
     return new ReActLoop(
-        promptBuilder, providerService, toolExecutor, agentRunEventPublisher, interruptManager);
+        promptBuilder,
+        providerService,
+        toolExecutor,
+        agentRunEventPublisher,
+        interruptManager,
+        summarizeOnMaxIterations);
   }
 
   @Bean

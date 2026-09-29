@@ -23,6 +23,9 @@ public class ReActLoop {
 
   static final String CONVERGENCE_HINT = "预算即将耗尽：停止扩大调查范围，优先基于已有工具结果形成最终回答，不要再发起非必要的工具调用。";
 
+  /** 转满后强制收尾时给模型的最后一程提示：禁止再调工具，基于已有信息给出最佳答复。 */
+  static final String FINAL_ANSWER_HINT = "已达到最大工具调用轮数，不能再调用任何工具。请仅基于以上已获得的信息，直接给出你能给出的最佳最终答复。";
+
   private static final int CONVERGENCE_REMAINING_THRESHOLD = 2;
 
   /** 用户手动中断的收尾答复（进度流据此走取消态而非绿卡「回答」）。 */
@@ -33,6 +36,12 @@ public class ReActLoop {
   private final ToolExecutor toolExecutor;
   private final AgentRunEventPublisher events;
   private final InterruptManager interruptManager;
+
+  /**
+   * 转满最大轮数时，是否再追加一次「无工具」的最终收尾调用，让模型基于已有工具结果给出尽力而为的答复 （默认 false = 老行为：直接返回哨兵串）。开启后收尾答复写入
+   * session，供上层拼进失败信息展示给用户， 但本轮仍按「达到最大轮数」标记为失败（不掩盖未真正收敛的事实）。
+   */
+  private final boolean summarizeOnMaxIterations;
 
   public ReActLoop(
       PromptBuilder promptBuilder, ProviderService providerService, ToolExecutor toolExecutor) {
@@ -55,6 +64,15 @@ public class ReActLoop {
     this(promptBuilder, providerService, toolExecutor, null, interruptManager);
   }
 
+  public ReActLoop(
+      PromptBuilder promptBuilder,
+      ProviderService providerService,
+      ToolExecutor toolExecutor,
+      AgentRunEventPublisher events,
+      InterruptManager interruptManager) {
+    this(promptBuilder, providerService, toolExecutor, events, interruptManager, false);
+  }
+
   @edu.umd.cs.findbugs.annotations.SuppressFBWarnings(
       value = "EI_EXPOSE_REP2",
       justification =
@@ -65,12 +83,14 @@ public class ReActLoop {
       ProviderService providerService,
       ToolExecutor toolExecutor,
       AgentRunEventPublisher events,
-      InterruptManager interruptManager) {
+      InterruptManager interruptManager,
+      boolean summarizeOnMaxIterations) {
     this.promptBuilder = promptBuilder;
     this.providerService = providerService;
     this.toolExecutor = toolExecutor;
     this.events = events;
     this.interruptManager = interruptManager;
+    this.summarizeOnMaxIterations = summarizeOnMaxIterations;
   }
 
   public String run(Session session, String userMessage, Profile profile) {
@@ -159,6 +179,27 @@ public class ReActLoop {
               i + 1,
               "durationMs",
               System.currentTimeMillis() - stepStarted));
+    }
+    // 转满兜底：默认直接返回哨兵串（老行为）。开启 summarizeOnMaxIterations 时，再做一次「无工具」的
+    // 收尾调用——禁止模型继续调工具，逼它基于已累积的工具结果给出最佳答复，写回 session 供上层展示。
+    // 无论是否收尾都仍返回哨兵串：上层据此把本轮标记为失败（未真正收敛的事实不被掩盖）。
+    if (summarizeOnMaxIterations) {
+      ProviderRequest base = promptBuilder.build(session, profile);
+      String system =
+          (base.systemPrompt() == null ? "" : base.systemPrompt()) + "\n" + FINAL_ANSWER_HINT;
+      ProviderRequest finalPrompt = new ProviderRequest(system, base.messages(), List.of());
+      ProviderResponse summary =
+          listener == StreamListener.NOOP
+              ? providerService.chat(session.sessionId(), profile, finalPrompt)
+              : providerService.chatStream(
+                  session.sessionId(), profile, finalPrompt, listener::onToken);
+      session.appendAssistant(summary);
+      String text = summary.text() == null ? "" : summary.text();
+      if (!text.isEmpty()) {
+        publish(
+            AgentRunEventTypes.MESSAGE_CONTENT,
+            java.util.Map.of("messageId", "run-answer", "delta", text));
+      }
     }
     return MAX_ITERATIONS_REPLY;
   }
