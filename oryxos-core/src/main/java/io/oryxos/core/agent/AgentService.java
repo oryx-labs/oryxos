@@ -132,7 +132,7 @@ public class AgentService {
         // 无论正常结束还是迭代耗尽都保存现场；条件更新确保跨进程旧快照不会覆盖新历史。
         sessionManager.saveIfUnchanged(activeSession, expectedMessages);
         if (exhausted) {
-          throw new AgentMaxIterationsExceededException(reply);
+          throw new AgentMaxIterationsExceededException(maxIterationsMessage(activeSession, reply));
         }
         turnSuccess = true;
         return reply;
@@ -224,7 +224,7 @@ public class AgentService {
           reply = reActLoop.run(session, userMessage, parts, profile, listener);
         }
         if (ReActLoop.MAX_ITERATIONS_REPLY.equals(reply)) {
-          throw new AgentMaxIterationsExceededException(reply);
+          throw new AgentMaxIterationsExceededException(maxIterationsMessage(session, reply));
         }
         turnSuccess = true;
         return reply;
@@ -241,6 +241,25 @@ public class AgentService {
       outputScope.close();
       ProfileContext.clear();
     }
+  }
+
+  /**
+   * 达到最大轮数的失败信息：消息始终以哨兵串 {@code sentinel} 打头（仍含「达到最大轮数」， {@code
+   * AgentExecutionService.isMaxIterationsError} 据此归类为 MAX_ITERATIONS）；若 session 末条是 ReActLoop
+   * 收尾追加的「无工具调用 assistant 文本」，则把它拼在后面，让用户看到尽力而为的答复。 未开启收尾时末条不满足条件，退回纯哨兵串——与旧行为完全一致。
+   */
+  private static String maxIterationsMessage(Session session, String sentinel) {
+    List<Message> msgs = session.messages();
+    if (!msgs.isEmpty()) {
+      Message last = msgs.get(msgs.size() - 1);
+      if (Message.ROLE_ASSISTANT.equals(last.role()) && last.toolCalls().isEmpty()) {
+        String text = last.content() == null ? "" : last.content().strip();
+        if (!text.isEmpty()) {
+          return sentinel + "\n\n" + text;
+        }
+      }
+    }
+    return sentinel;
   }
 
   private static String profileNameOrFallback(Session session) {

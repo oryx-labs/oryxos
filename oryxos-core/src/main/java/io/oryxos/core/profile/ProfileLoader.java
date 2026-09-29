@@ -349,7 +349,9 @@ public class ProfileLoader {
             map.get("max_history_turns"),
             defaults.maxHistoryTurns(),
             "settings.max_history_turns",
-            profileName));
+            profileName),
+        MaxIterationsMode.fromConfig(
+            map.get("max_iterations_mode") instanceof String s ? s : null));
   }
 
   /** 递归解析 ${ENV} 占位；环境变量缺失时保留原样并 WARN（凭证必填校验属全局层职责）。 */

@@ -1,6 +1,7 @@
 package io.oryxos.core.agent;
 
 import io.oryxos.core.ToolResult;
+import io.oryxos.core.profile.MaxIterationsMode;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.provider.ProviderResponse;
@@ -22,6 +23,9 @@ public class ReActLoop {
   static final String MAX_ITERATIONS_REPLY = "达到最大轮数，已停止";
 
   static final String CONVERGENCE_HINT = "预算即将耗尽：停止扩大调查范围，优先基于已有工具结果形成最终回答，不要再发起非必要的工具调用。";
+
+  /** 转满后强制收尾时给模型的最后一程提示：禁止再调工具，基于已有信息给出最佳答复。 */
+  static final String FINAL_ANSWER_HINT = "已达到最大工具调用轮数，不能再调用任何工具。请仅基于以上已获得的信息，直接给出你能给出的最佳最终答复。";
 
   private static final int CONVERGENCE_REMAINING_THRESHOLD = 2;
 
@@ -159,6 +163,27 @@ public class ReActLoop {
               i + 1,
               "durationMs",
               System.currentTimeMillis() - stepStarted));
+    }
+    // 转满兜底：默认（ERROR）直接返回哨兵串（老行为）。Agent 声明 SUMMARIZE 时，再做一次「无工具」的
+    // 收尾调用——禁止模型继续调工具，逼它基于已累积的工具结果给出最佳答复，写回 session 供上层展示。
+    // 无论哪种 mode 都仍返回哨兵串：上层据此把本轮标记为失败（未真正收敛的事实不被掩盖）。
+    if (profile.settings().maxIterationsMode() == MaxIterationsMode.SUMMARIZE) {
+      ProviderRequest base = promptBuilder.build(session, profile);
+      String system =
+          (base.systemPrompt() == null ? "" : base.systemPrompt()) + "\n" + FINAL_ANSWER_HINT;
+      ProviderRequest finalPrompt = new ProviderRequest(system, base.messages(), List.of());
+      ProviderResponse summary =
+          listener == StreamListener.NOOP
+              ? providerService.chat(session.sessionId(), profile, finalPrompt)
+              : providerService.chatStream(
+                  session.sessionId(), profile, finalPrompt, listener::onToken);
+      session.appendAssistant(summary);
+      String text = summary.text() == null ? "" : summary.text();
+      if (!text.isEmpty()) {
+        publish(
+            AgentRunEventTypes.MESSAGE_CONTENT,
+            java.util.Map.of("messageId", "run-answer", "delta", text));
+      }
     }
     return MAX_ITERATIONS_REPLY;
   }
