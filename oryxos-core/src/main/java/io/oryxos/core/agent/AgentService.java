@@ -1,5 +1,8 @@
 package io.oryxos.core.agent;
 
+import io.oryxos.core.capability.CapabilityAssembly;
+import io.oryxos.core.capability.CapabilityAssemblyContext;
+import io.oryxos.core.capability.CapabilityRef;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.session.Message;
@@ -165,6 +168,18 @@ public class AgentService {
         agentName, userMessage, STATELESS_EXECUTION_TAG + ":" + UUID.randomUUID());
   }
 
+  /** Direction C：无状态调用 + 能力装配覆盖（Flow TEAM_TASK / AGENT 节点 capabilities）。空列表等价于无覆盖。 */
+  public String processStateless(
+      String agentName, String userMessage, java.util.List<CapabilityRef> capabilities) {
+    return processStateless(
+        agentName,
+        userMessage,
+        java.util.List.of(),
+        STATELESS_EXECUTION_TAG + ":" + UUID.randomUUID(),
+        StreamListener.NOOP,
+        capabilities);
+  }
+
   /** 带流式观察者的无状态调用（019）：临时会话标识自动生成，其余语义同上。 */
   public String processStateless(String agentName, String userMessage, StreamListener listener) {
     return processStateless(
@@ -203,13 +218,28 @@ public class AgentService {
       List<Message.MediaPart> media,
       String statelessSessionId,
       StreamListener listener) {
+    return processStateless(
+        agentName, userMessage, media, statelessSessionId, listener, java.util.List.of());
+  }
+
+  /** 无状态调用全参 + Direction C 能力装配。 */
+  public String processStateless(
+      String agentName,
+      String userMessage,
+      List<Message.MediaPart> media,
+      String statelessSessionId,
+      StreamListener listener,
+      List<CapabilityRef> capabilities) {
     Profile profile =
         profileRegistry
             .get(agentName)
             .orElseThrow(() -> new IllegalStateException("Agent 不存在: " + agentName));
+    CapabilityAssembly assembly = CapabilityAssembly.from(capabilities);
+    profile = profile.withCapabilityAssembly(assembly);
     Session session = new Session(statelessSessionId, profile.name());
     RunOutputContext.Scope outputScope = RunOutputContext.open(profile.name());
     ProfileContext.set(profile);
+    CapabilityAssemblyContext.set(assembly);
     // 021：同 process——兜底开启 trace，已开启则复用
     try (TraceContext.Scope traceScope = TraceContext.openIfAbsent()) {
       // 039：无状态一轮同样补记 turn 根 span（invoke/群聊问答路径；真机走查实测缺口）
@@ -240,6 +270,7 @@ public class AgentService {
     } finally {
       outputScope.close();
       ProfileContext.clear();
+      CapabilityAssemblyContext.clear();
     }
   }
 

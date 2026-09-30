@@ -1075,9 +1075,9 @@ public class OryxOsRuntime {
             sandbox, shellStarter, executionBackendProperties, executeCodeProperties.enabled()));
     registry.registerAnnotated(
         new DelegateAgentTools(
-            (agent, msg) -> {
+            (agent, msg, caps) -> {
               AgentService svc = agentServiceProvider.getObject();
-              return svc.processStateless(agent, msg);
+              return svc.processStateless(agent, msg, caps);
             },
             delegateAgentProperties.enabled(),
             delegateAgentProperties.maxDepth()));
@@ -1451,9 +1451,12 @@ public class OryxOsRuntime {
       org.springframework.beans.factory.ObjectProvider<io.oryxos.core.task.TeamTaskOrchestrator>
           teamTaskOrchestrator) {
     // #684 AGENT → AgentService；Direction I TEAM_TASK → TeamTaskOrchestrator（若启用）。
+    io.oryxos.core.flow.FlowAgentRunner agentRunner =
+        (agentName, userMessage, capabilities) ->
+            agentService.processStateless(agentName, userMessage, capabilities);
     io.oryxos.core.flow.FlowNodeHandler nodes =
         new io.oryxos.core.flow.AgentAwareFlowNodeHandler(
-            new io.oryxos.core.flow.DefaultFlowNodeHandler(), agentService::processStateless);
+            new io.oryxos.core.flow.DefaultFlowNodeHandler(), agentRunner);
     io.oryxos.core.task.TeamTaskOrchestrator orch = teamTaskOrchestrator.getIfAvailable();
     if (orch != null) {
       nodes = new io.oryxos.core.flow.TeamTaskAwareFlowNodeHandler(nodes, orch::run);

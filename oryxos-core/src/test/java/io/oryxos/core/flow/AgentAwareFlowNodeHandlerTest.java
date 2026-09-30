@@ -42,7 +42,7 @@ class AgentAwareFlowNodeHandlerTest {
     AtomicReference<String> seenAgent = new AtomicReference<>();
     AtomicReference<String> seenMsg = new AtomicReference<>();
     FlowAgentRunner runner =
-        (agent, msg) -> {
+        (agent, msg, caps) -> {
           seenAgent.set(agent);
           seenMsg.set(msg);
           return "draft:" + msg;
@@ -75,7 +75,7 @@ class AgentAwareFlowNodeHandlerTest {
             Map.of("message", new FlowPort("message", FlowPortType.STRING, null, true)),
             List.of());
     FlowNodeHandler handler =
-        new AgentAwareFlowNodeHandler(new DefaultFlowNodeHandler(), (a, m) -> "x");
+        new AgentAwareFlowNodeHandler(new DefaultFlowNodeHandler(), (a, m, caps) -> "x");
     FlowNodeOutcome out = handler.execute(node, Map.of(), dummyRun());
     assertTrue(out.failed());
     assertTrue(out.error().contains("ref"));
@@ -98,7 +98,8 @@ class AgentAwareFlowNodeHandlerTest {
     FlowNode node =
         new FlowNode("approve", FlowNodeType.HUMAN, null, Map.of(), Map.of(), List.of());
     FlowNodeHandler handler =
-        new AgentAwareFlowNodeHandler(new DefaultFlowNodeHandler(), (a, m) -> "should-not-run");
+        new AgentAwareFlowNodeHandler(
+            new DefaultFlowNodeHandler(), (a, m, caps) -> "should-not-run");
     FlowNodeOutcome out = handler.execute(node, Map.of(), dummyRun());
     assertTrue(out.waiting());
   }

@@ -1,5 +1,6 @@
 package io.oryxos.core.profile;
 
+import io.oryxos.core.capability.CapabilityAssembly;
 import java.util.List;
 import java.util.Map;
 
@@ -134,6 +135,30 @@ public record Profile(
       String sampleStyle) {}
 
   /** fallbacks（023）：有序备用 Provider 列表，单次 LLM 调用故障时按序切换；空=零变化。 */
+
+  /** Direction C：按能力装配覆盖本回合 tools / mcpServers；其它字段不变。空装配返回 this。 */
+  public Profile withCapabilityAssembly(CapabilityAssembly assembly) {
+    if (assembly == null || assembly.isEmpty()) {
+      return this;
+    }
+    List<String> nextTools = assembly.constrainsTools() ? assembly.tools() : tools;
+    List<String> nextMcp = assembly.constrainsMcp() ? assembly.mcpServers() : mcpServers;
+    return new Profile(
+        name,
+        description,
+        identity,
+        persona,
+        provider,
+        nextTools,
+        nextMcp,
+        channels,
+        notifyChannels,
+        schedules,
+        bootstrap,
+        settings,
+        sandbox);
+  }
+
   public record ProviderRef(
       String name, String model, Double temperature, List<FallbackRef> fallbacks) {
 
