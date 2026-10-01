@@ -44,6 +44,28 @@ class TeamTaskWaveScheduleTest {
   }
 
   @Test
+  @DisplayName("scheduleWaves waits for every subtask on an agent named twice")
+  void wavesWithDuplicateAgent() {
+    // `after` names agents, so a plan may reuse one. The first subtask on "a" entering wave0 must
+    // not satisfy `after:["a"]` while a second subtask on "a" is still queued.
+    List<TeamTaskPlan.SubTask> work =
+        List.of(
+            new TeamTaskPlan.SubTask("a", "first-a"),
+            new TeamTaskPlan.SubTask("a", "second-a", "", List.of("b")),
+            new TeamTaskPlan.SubTask("b", "bee"),
+            new TeamTaskPlan.SubTask("c", "see", "", List.of("a")));
+    List<List<TeamTaskPlan.SubTask>> waves = TeamTaskOrchestrator.scheduleWaves(work);
+    assertEquals(3, waves.size(), waves.toString());
+    assertEquals(List.of("first-a", "bee"), messages(waves.get(0)));
+    assertEquals(List.of("second-a"), messages(waves.get(1)));
+    assertEquals(List.of("see"), messages(waves.get(2)));
+  }
+
+  private static List<String> messages(List<TeamTaskPlan.SubTask> wave) {
+    return wave.stream().map(TeamTaskPlan.SubTask::message).toList();
+  }
+
+  @Test
   @DisplayName("run respects after: writer waits for researcher")
   void run_afterDependency() throws Exception {
     ConcurrentLinkedQueue<String> order = new ConcurrentLinkedQueue<>();
