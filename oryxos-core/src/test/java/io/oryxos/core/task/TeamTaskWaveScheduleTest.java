@@ -1,6 +1,7 @@
 package io.oryxos.core.task;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,19 @@ class TeamTaskWaveScheduleTest {
     assertEquals(List.of(), plan.subtasks().get(0).after());
     assertEquals(List.of("research"), plan.subtasks().get(1).after());
     assertEquals(List.of("writer"), plan.subtasks().get(2).after());
+  }
+
+  @Test
+  @DisplayName("parsePlan tolerates prose containing braces before the plan")
+  void parseAfterWithProseBraces() {
+    // The plan is extracted by brace balancing, not by a greedy match from the leftmost `{`.
+    TeamTaskPlan plan =
+        TeamTaskOrchestrator.parsePlan(
+            "Plan {step 1}:\n"
+                + "{\"subtasks\":[{\"agent\":\"a\",\"message\":\"m\"},"
+                + "{\"agent\":\"b\",\"message\":\"n\",\"after\":[\"a\"]}]}");
+    assertEquals(2, plan.subtasks().size());
+    assertEquals(List.of("a"), plan.subtasks().get(1).after());
   }
 
   @Test
@@ -72,6 +87,7 @@ class TeamTaskWaveScheduleTest {
     CountDownLatch researchStarted = new CountDownLatch(1);
     CountDownLatch researchRelease = new CountDownLatch(1);
     AtomicInteger writerBeforeResearchDone = new AtomicInteger();
+    AtomicBoolean writerRacedFirst = new AtomicBoolean();
 
     TeamAgentRunner runner =
         (agent, msg) -> {
@@ -114,13 +130,18 @@ class TeamTaskWaveScheduleTest {
         new Thread(
             () -> {
               try {
-                assertTrue(researchStarted.await(3, TimeUnit.SECONDS));
+                if (!researchStarted.await(3, TimeUnit.SECONDS)) {
+                  return;
+                }
                 // Give writer a chance to race incorrectly
                 Thread.sleep(80);
-                assertEquals(0, writerBeforeResearchDone.get());
-                researchRelease.countDown();
+                writerRacedFirst.set(writerBeforeResearchDone.get() != 0);
               } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+              } finally {
+                // Always release. Asserting on this thread reported nothing to JUnit and skipped
+                // the release, which then made the ordering assert below pass on a stale sequence.
+                researchRelease.countDown();
               }
             });
     releaser.start();
@@ -128,6 +149,11 @@ class TeamTaskWaveScheduleTest {
     releaser.join(5000);
     assertEquals(2, result.workers().size());
     List<String> seq = new ArrayList<>(order);
-    assertTrue(seq.indexOf("researcher-end") < seq.indexOf("writer"), seq.toString());
+    assertFalse(writerRacedFirst.get(), "writer started before researcher finished: " + seq);
+    int researchEnd = seq.indexOf("researcher-end");
+    int writer = seq.indexOf("writer");
+    assertTrue(researchEnd >= 0, "researcher never finished: " + seq);
+    assertTrue(writer >= 0, "writer never ran: " + seq);
+    assertTrue(researchEnd < writer, seq.toString());
   }
 }

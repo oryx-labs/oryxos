@@ -21,8 +21,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Direction I: coordinator agent produces a JSON plan, then specialists run (bounded). Fan-out is
@@ -35,8 +33,7 @@ import java.util.regex.Pattern;
  */
 public final class TeamTaskOrchestrator {
 
-  private static final Pattern JSON_BLOCK =
-      Pattern.compile("\\{[\\s\\S]*\"subtasks\"[\\s\\S]*\\}", Pattern.MULTILINE);
+  private static final String SUBTASKS_FIELD = "\"subtasks\"";
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   /** Cost ledger team bucket for Direction I team-task runs (#476 CostContext). */
@@ -509,11 +506,54 @@ public final class TeamTaskOrchestrator {
     if (t.startsWith("{")) {
       return t;
     }
-    Matcher m = JSON_BLOCK.matcher(t);
-    if (m.find()) {
-      return m.group();
+    // The plan is the first balanced object that mentions "subtasks". Matching a greedy regex from
+    // the leftmost `{` instead would start inside any brace the prose happens to contain, producing
+    // a fragment that fails to parse.
+    String candidate = firstBalancedPlanObject(t);
+    if (candidate != null) {
+      return candidate;
     }
     throw new IllegalStateException("coordinator reply contained no JSON plan object");
+  }
+
+  /**
+   * The first brace-balanced object in {@code text} that contains {@code "subtasks"}, or null.
+   * Strings are skipped so a brace inside a message value cannot end the object early.
+   */
+  private static String firstBalancedPlanObject(String text) {
+    for (int start = text.indexOf('{'); start >= 0; start = text.indexOf('{', start + 1)) {
+      int depth = 0;
+      boolean inString = false;
+      boolean escaped = false;
+      for (int i = start; i < text.length(); i++) {
+        char c = text.charAt(i);
+        if (inString) {
+          if (escaped) {
+            escaped = false;
+          } else if (c == '\\') {
+            escaped = true;
+          } else if (c == '"') {
+            inString = false;
+          }
+          continue;
+        }
+        if (c == '"') {
+          inString = true;
+        } else if (c == '{') {
+          depth++;
+        } else if (c == '}') {
+          depth--;
+          if (depth == 0) {
+            String candidate = text.substring(start, i + 1);
+            if (candidate.contains(SUBTASKS_FIELD)) {
+              return candidate;
+            }
+            break;
+          }
+        }
+      }
+    }
+    return null;
   }
 
   static List<String> parseAfter(JsonNode n) {
