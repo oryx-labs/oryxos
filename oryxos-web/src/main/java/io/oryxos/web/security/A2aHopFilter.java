@@ -38,7 +38,7 @@ public final class A2aHopFilter extends OncePerRequestFilter {
       filterChain.doFilter(request, response);
       return;
     }
-    if (!A2aAuthFilter.A2A_PATH.equals(request.getRequestURI())) {
+    if (!A2aAuthFilter.A2A_PATH.equals(A2aAuthFilter.guardedPath(request))) {
       filterChain.doFilter(request, response);
       return;
     }

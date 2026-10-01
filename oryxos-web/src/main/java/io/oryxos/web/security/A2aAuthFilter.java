@@ -14,6 +14,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.UrlPathHelper;
 
 /**
  * Optional A2A shared-bearer gate for {@code POST /api/v1/a2a}. Active only when {@link
@@ -26,6 +27,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public final class A2aAuthFilter extends OncePerRequestFilter {
 
   public static final String A2A_PATH = "/api/v1/a2a";
+  private static final UrlPathHelper PATH_HELPER = UrlPathHelper.defaultInstance;
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String A2A_TOKEN_HEADER = "X-A2A-Token";
 
@@ -47,8 +49,7 @@ public final class A2aAuthFilter extends OncePerRequestFilter {
       filterChain.doFilter(request, response);
       return;
     }
-    String uri = request.getRequestURI();
-    if (!A2A_PATH.equals(uri)) {
+    if (!A2A_PATH.equals(guardedPath(request))) {
       filterChain.doFilter(request, response);
       return;
     }
@@ -62,6 +63,16 @@ public final class A2aAuthFilter extends OncePerRequestFilter {
     response.setContentType(MediaType.APPLICATION_JSON_VALUE);
     response.setCharacterEncoding(StandardCharsets.UTF_8.name());
     response.getWriter().write("{\"error\":\"Unauthorized\"}");
+  }
+
+  /**
+   * The request path as the servlet container maps it: path parameters ({@code ;name=value}) and
+   * context path removed. {@link HttpServletRequest#getRequestURI()} returns the raw request target
+   * instead, so comparing it with {@link #A2A_PATH} let {@code /api/v1/a2a;x=1} reach the handler
+   * with neither the shared token nor the hop limit checked.
+   */
+  static String guardedPath(HttpServletRequest request) {
+    return PATH_HELPER.getPathWithinApplication(request);
   }
 
   static String extractToken(HttpServletRequest request) {

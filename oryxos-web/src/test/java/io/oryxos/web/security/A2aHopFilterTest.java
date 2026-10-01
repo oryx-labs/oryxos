@@ -1,10 +1,12 @@
 package io.oryxos.web.security;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.oryxos.core.a2a.A2aHopContext;
 import io.oryxos.core.a2a.A2aProperties;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,19 @@ class A2aHopFilterTest {
     assertEquals(200, resp.getStatus());
     assertEquals(2, seen.get());
     assertEquals(0, A2aHopContext.current());
+  }
+
+  @Test
+  @DisplayName("path parameters do not skip the hop limit")
+  void pathParametersDoNotSkipTheLimit() throws Exception {
+    A2aHopFilter filter = new A2aHopFilter(props(3));
+    MockHttpServletRequest req = new MockHttpServletRequest("POST", "/api/v1/a2a;x=1");
+    req.addHeader(A2aHopContext.HOP_HEADER, "9");
+    MockHttpServletResponse resp = new MockHttpServletResponse();
+    AtomicBoolean continued = new AtomicBoolean();
+    filter.doFilter(req, resp, (r, s2) -> continued.set(true));
+    assertFalse(continued.get(), "over-limit hop must not reach the chain");
+    assertEquals(403, resp.getStatus());
   }
 
   @Test

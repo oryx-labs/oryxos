@@ -56,6 +56,36 @@ class A2aAuthFilterTest {
   }
 
   @Test
+  @DisplayName("path parameters do not skip the shared token (servlet mapping strips them)")
+  void pathParametersDoNotSkipTheGate() throws Exception {
+    // The container maps /api/v1/a2a;x=1 to this filter, and Spring MVC routes it to the handler,
+    // so the gate has to see the same path the container matched. Comparing getRequestURI() let
+    // every ;suffix through with no token checked.
+    A2aAuthFilter filter = new A2aAuthFilter(withToken("s3cret"));
+    for (String uri :
+        new String[] {"/api/v1/a2a;x=1", "/api/v1/a2a;", "/api/v1/a2a;jsessionid=AB"}) {
+      MockHttpServletRequest req = new MockHttpServletRequest("POST", uri);
+      MockHttpServletResponse resp = new MockHttpServletResponse();
+      AtomicBoolean continued = new AtomicBoolean();
+      filter.doFilter(req, resp, (r, s2) -> continued.set(true));
+      assertFalse(continued.get(), uri + " must not reach the chain without a token");
+      assertEquals(401, resp.getStatus(), uri);
+    }
+  }
+
+  @Test
+  @DisplayName("a valid token still passes when the path carries parameters")
+  void pathParametersWithValidToken() throws Exception {
+    A2aAuthFilter filter = new A2aAuthFilter(withToken("s3cret"));
+    MockHttpServletRequest req = new MockHttpServletRequest("POST", "/api/v1/a2a;x=1");
+    req.addHeader("Authorization", "Bearer s3cret");
+    MockHttpServletResponse resp = new MockHttpServletResponse();
+    MockFilterChain chain = new MockFilterChain();
+    filter.doFilter(req, resp, chain);
+    assertEquals(200, resp.getStatus());
+  }
+
+  @Test
   @DisplayName("X-A2A-Token accepted")
   void xA2aToken() throws Exception {
     A2aAuthFilter filter = new A2aAuthFilter(withToken("s3cret"));
