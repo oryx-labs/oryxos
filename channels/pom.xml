@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.oryxos</groupId>
+        <artifactId>oryxos</artifactId>
+        <version>0.1.6-RELEASE</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>oryxos-channels</artifactId>
+    <packaging>pom</packaging>
+    <name>OryxOS Channels (aggregator)</name>
+    <description>Aggregator for all inbound/outbound channel adapter modules.</description>
+
+    <modules>
+        <module>oryxos-channel-cli</module>
+        <module>oryxos-channel-feishu</module>
+        <module>oryxos-channel-wecom</module>
+        <module>oryxos-channel-dingtalk</module>
+        <module>oryxos-channel-slack</module>
+        <module>oryxos-channel-discord</module>
+        <module>oryxos-channel-telegram</module>
+        <module>oryxos-channel-whatsapp</module>
+        <module>oryxos-channel-teams</module>
+        <module>oryxos-channel-gchat</module>
+        <module>oryxos-channel-mattermost</module>
+        <module>oryxos-channel-matrix</module>
+        <module>oryxos-channel-qq</module>
+        <module>oryxos-channel-douyin</module>
+        <module>oryxos-channel-weixin</module>
+        <module>oryxos-channel-weixin-kf</module>
+        <module>oryxos-channel-weixin-mp</module>
+        <module>oryxos-channel-weixin-mini</module>
+        <module>oryxos-channel-alipay</module>
+    </modules>
+</project>
