@@ -136,12 +136,19 @@ public class ReActLoop {
                 System.currentTimeMillis() - stepStarted));
         return text;
       }
+      boolean interrupted = false;
       for (ToolCallRequest call : response.toolCalls()) {
+        if (interrupted) {
+          session.appendToolResult(call, ToolResult.error("已中断", false));
+          continue;
+        }
         checkCancel();
         // 工具间隙再查一次，避免长工具链整段跑完才响应 /stop
         if (interruptManager != null && interruptManager.isInterrupted(session.sessionId())) {
           interruptManager.clear(session.sessionId());
-          return INTERRUPTED_REPLY;
+          session.appendToolResult(call, ToolResult.error("已中断", false));
+          interrupted = true;
+          continue;
         }
         // 执行权只在 ToolExecutor（宪法 I/II）；失败结果同样回填，模型下一轮自行决定
         // 传 profile.name() 作为 Agent 名：记忆类工具据此落到本 Agent 专属 MEMORY.md（30 节）
@@ -149,6 +156,9 @@ public class ReActLoop {
         ToolResult result = toolExecutor.execute(session.sessionId(), profile.name(), call);
         listener.onToolEnd(call.name(), result.success());
         session.appendToolResult(call, result);
+      }
+      if (interrupted) {
+        return INTERRUPTED_REPLY;
       }
       publish(
           AgentRunEventTypes.STEP_FINISHED,
