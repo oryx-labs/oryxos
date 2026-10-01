@@ -144,8 +144,14 @@ public class McpConfigLoader {
     try {
       Path parent = configFile.getParent();
       if (parent != null) {
+        // Only tighten a directory this call creates. The parent is normally the workspace root,
+        // which other uids may share (shared-posix), and narrowing it to 0700 would cut them off
+        // from agents, knowledge and output — a change that never gets undone.
+        boolean created = !Files.exists(parent);
         Files.createDirectories(parent);
-        restrictToOwner(parent);
+        if (created) {
+          restrictToOwner(parent);
+        }
       }
       Files.writeString(configFile, yaml);
       restrictToOwner(configFile); // env/headers 里可能落了真实凭证（占位符解析不了时）——只给属主可读写
