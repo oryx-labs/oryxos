@@ -1005,7 +1005,7 @@ public class OryxOsRuntime {
   }
 
   /** 31 节：长驻 bean（而非 toolRegistry() 里的一次性局部变量）——管理台增/删一个 server 靠同一个实例的连接状态。 */
-  @Bean
+  @Bean(destroyMethod = "closeAll")
   McpClientService mcpClientService(McpConfigLoader mcpConfigLoader) {
     return new McpClientService(mcpConfigLoader);
   }

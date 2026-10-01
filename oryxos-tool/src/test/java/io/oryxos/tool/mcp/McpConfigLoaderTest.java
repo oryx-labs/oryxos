@@ -69,6 +69,28 @@ class McpConfigLoaderTest {
   }
 
   @Test
+  @DisplayName("server 名重复时 loadRaw 抛 IllegalArgumentException")
+  void duplicateNameFailsLoud() throws IOException {
+    // The name keys the connection everywhere downstream; accepting a duplicate silently replaced
+    // the first client without closing it and left its tools registered with no owner.
+    write(
+        """
+        servers:
+          - name: dup
+            transport: stdio
+            command: alpha
+          - name: dup
+            transport: stdio
+            command: beta
+        """);
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class, () -> new McpConfigLoader(configFile()).loadRaw());
+    assertTrue(ex.getMessage().contains("重复"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("dup"), ex.getMessage());
+  }
+
+  @Test
   @DisplayName("headers/env 非映射时 fail-loud，缺省仍为空 map")
   void envAndHeadersMustBeMaps() throws IOException {
     write(

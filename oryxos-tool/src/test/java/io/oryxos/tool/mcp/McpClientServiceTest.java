@@ -196,6 +196,43 @@ class McpClientServiceTest {
   }
 
   @Test
+  @DisplayName("closeAll 关掉每个连接并注销工具")
+  void closeAllClosesEveryConnection() throws IOException {
+    // Registered as the bean's destroy method: connections open for any command that builds a tool
+    // registry, and a stdio server only exits once its client closes the transport.
+    McpSyncClient alpha = mock(McpSyncClient.class);
+    McpSyncClient beta = mock(McpSyncClient.class);
+    when(alpha.listTools())
+        .thenReturn(new McpSchema.ListToolsResult(List.of(mcpTool("alpha_tool", "a")), null));
+    when(beta.listTools())
+        .thenReturn(new McpSchema.ListToolsResult(List.of(mcpTool("beta_tool", "b")), null));
+    McpConfigLoader loader =
+        loaderWith(
+            """
+            servers:
+              - name: alpha
+                transport: stdio
+                command: a
+              - name: beta
+                transport: stdio
+                command: b
+            """);
+    ToolRegistry registry = new ToolRegistry();
+    McpClientService service =
+        new McpClientService(loader, config -> "alpha".equals(config.name()) ? alpha : beta);
+    service.connectAll(registry);
+    assertTrue(registry.contains("alpha_tool") && registry.contains("beta_tool"));
+
+    service.closeAll();
+
+    verify(alpha).closeGracefully();
+    verify(beta).closeGracefully();
+    assertFalse(service.status("alpha").connected());
+    assertFalse(service.status("beta").connected());
+    assertTrue(registry.mcpToolOwners().isEmpty(), "关闭后不得留下无主的 MCP 工具");
+  }
+
+  @Test
   @DisplayName("initialize 失败也要关掉已构造的客户端")
   void initializeFailure_closesClient() throws IOException {
     McpSyncClient client = mock(McpSyncClient.class);
