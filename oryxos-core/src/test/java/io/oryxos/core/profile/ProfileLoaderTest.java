@@ -106,8 +106,45 @@ class ProfileLoaderTest {
 
     assertEquals(10, profile.settings().maxIterations());
     assertEquals(20, profile.settings().maxHistoryTurns());
+    assertEquals(MaxIterationsMode.ERROR, profile.settings().maxIterationsMode()); // 缺省 = ERROR
     assertNull(profile.provider().temperature()); // 缺省不设，用 provider 侧默认（D6）
     assertTrue(profile.tools().isEmpty());
+  }
+
+  @Test
+  void settings声明max_iterations_mode_解析为对应枚举_大小写不敏感() throws IOException {
+    write(
+        "sum.yaml",
+        """
+        name: sum
+        provider:
+          name: kimi
+          model: moonshot-v1
+        settings:
+          max_iterations_mode: Summarize
+        """);
+
+    Profile profile = loader().loadAll().get("sum").orElseThrow();
+
+    assertEquals(MaxIterationsMode.SUMMARIZE, profile.settings().maxIterationsMode());
+  }
+
+  @Test
+  void max_iterations_mode非法值_回退默认ERROR() throws IOException {
+    write(
+        "bad-mode.yaml",
+        """
+        name: badmode
+        provider:
+          name: kimi
+          model: moonshot-v1
+        settings:
+          max_iterations_mode: nonsense
+        """);
+
+    Profile profile = loader().loadAll().get("badmode").orElseThrow();
+
+    assertEquals(MaxIterationsMode.ERROR, profile.settings().maxIterationsMode());
   }
 
   @Test

@@ -184,12 +184,25 @@ public record Profile(
   /** key locates a configuration within a Profile; name is for display only. */
   public record ScheduleConfig(String key, String name, String cron, String zone, String message) {}
 
-  public record Settings(int maxIterations, int maxHistoryTurns) {
+  public record Settings(
+      int maxIterations, int maxHistoryTurns, MaxIterationsMode maxIterationsMode) {
     private static final int DEFAULT_MAX_ITERATIONS = 10;
     private static final int DEFAULT_MAX_HISTORY_TURNS = 20;
 
+    public Settings {
+      if (maxIterationsMode == null) {
+        maxIterationsMode = MaxIterationsMode.DEFAULT;
+      }
+    }
+
+    /** 兼容既有二参构造：收敛策略取默认 {@link MaxIterationsMode#DEFAULT}（ERROR）。 */
+    public Settings(int maxIterations, int maxHistoryTurns) {
+      this(maxIterations, maxHistoryTurns, MaxIterationsMode.DEFAULT);
+    }
+
     public static Settings defaults() {
-      return new Settings(DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_HISTORY_TURNS);
+      return new Settings(
+          DEFAULT_MAX_ITERATIONS, DEFAULT_MAX_HISTORY_TURNS, MaxIterationsMode.DEFAULT);
     }
   }
 
