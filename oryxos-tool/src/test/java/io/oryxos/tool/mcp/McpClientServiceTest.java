@@ -196,6 +196,34 @@ class McpClientServiceTest {
   }
 
   @Test
+  @DisplayName("连接后进程死掉：status 报未连接、工具注销、错误可见")
+  void statusReflectsAServerThatDiedAfterConnecting() throws IOException {
+    // Nothing else notices: the entry stays in the map and its tools stay registered, so the admin
+    // list and the capability catalogue keep advertising a server that cannot answer.
+    McpSyncClient client = mock(McpSyncClient.class);
+    when(client.listTools())
+        .thenReturn(new McpSchema.ListToolsResult(List.of(mcpTool("gone_tool", "g")), null));
+    // First probe succeeds (the connection is live), later ones fail (the process has died).
+    when(client.ping()).thenReturn(null).thenThrow(new IllegalStateException("transport closed"));
+    McpConfigLoader loader =
+        loaderWith("servers:\n  - name: gone\n    transport: stdio\n    command: c\n");
+    ToolRegistry registry = new ToolRegistry();
+    // Zero cache: a default window would keep reporting the last good probe for its duration.
+    McpClientService service = new McpClientService(loader, config -> client, Duration.ZERO);
+    service.connectAll(registry);
+    assertTrue(service.status("gone").connected(), "先要连上，否则这个测试没测到东西");
+
+    McpServerStatus after = service.status("gone");
+
+    assertFalse(after.connected());
+    assertTrue(
+        after.error() != null && after.error().contains("已断开"), String.valueOf(after.error()));
+    assertTrue(after.toolNames().isEmpty());
+    assertTrue(registry.mcpToolOwners().isEmpty(), "死掉的 server 不得继续占着工具");
+    verify(client).closeGracefully();
+  }
+
+  @Test
   @DisplayName("closeAll 关掉每个连接并注销工具")
   void closeAllClosesEveryConnection() throws IOException {
     // Registered as the bean's destroy method: connections open for any command that builds a tool
