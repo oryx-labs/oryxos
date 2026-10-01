@@ -8,7 +8,6 @@ import io.oryxos.web.controller.dto.TeamTaskView;
 import io.oryxos.web.error.ResourceNotFoundException;
 import java.util.List;
 import java.util.Objects;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,7 +22,13 @@ import org.springframework.web.bind.annotation.RestController;
     justification = "Spring MVC injects orchestrator; same pattern as other controllers.")
 @RestController
 @RequestMapping("/api/v1/team-tasks")
-@ConditionalOnBean(TeamTaskOrchestrator.class)
+// 与它所依赖的 bean 用【同一个】条件。
+// @ConditionalOnBean 在这里永远为 false：组件扫描早于配置类处理，
+// 求值时那个 bean 的定义还没注册（实测 0.1.6-RELEASE，端点 404）。
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+    prefix = "oryxos.task.team",
+    name = "enabled",
+    havingValue = "true")
 public class TeamTaskApiController {
 
   private final TeamTaskOrchestrator orchestrator;

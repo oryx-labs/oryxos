@@ -44,7 +44,7 @@ class DelegateAgentToolsTest {
     AtomicInteger calls = new AtomicInteger();
     DelegateAgentTools tools =
         new DelegateAgentTools(
-            (agent, msg) -> {
+            (agent, msg, caps) -> {
               calls.incrementAndGet();
               assertEquals("helper", agent);
               ProfileContext.clear();
@@ -63,7 +63,7 @@ class DelegateAgentToolsTest {
   @DisplayName("rejects self-delegation")
   void rejectsSelf() {
     ToolExecutionContext.setAgentName("solo");
-    DelegateAgentTools tools = new DelegateAgentTools((a, m) -> "x", true, 3);
+    DelegateAgentTools tools = new DelegateAgentTools((a, m, c) -> "x", true, 3);
     assertThrows(IllegalArgumentException.class, () -> tools.delegateAgent("solo", "task"));
   }
 
@@ -73,7 +73,7 @@ class DelegateAgentToolsTest {
     DelegateAgentTools[] box = new DelegateAgentTools[1];
     box[0] =
         new DelegateAgentTools(
-            (agent, msg) -> box[0].delegateAgent("next-" + agent, msg + "!"), true, 2);
+            (agent, msg, caps) -> box[0].delegateAgent("next-" + agent, msg + "!"), true, 2);
     ToolExecutionContext.setAgentName("root");
     IllegalStateException ex =
         assertThrows(IllegalStateException.class, () -> box[0].delegateAgent("child", "go"));
@@ -83,7 +83,7 @@ class DelegateAgentToolsTest {
   @Test
   @DisplayName("disabled fails loud")
   void disabled() {
-    DelegateAgentTools tools = new DelegateAgentTools((a, m) -> "x", false, 3);
+    DelegateAgentTools tools = new DelegateAgentTools((a, m, c) -> "x", false, 3);
     assertThrows(IllegalStateException.class, () -> tools.delegateAgent("a", "m"));
   }
 }

@@ -33,6 +33,9 @@ class RbacEndpointCoverageTest {
             new MappedEndpoint("PUT", "/api/v1/skills/{name}/governance"),
             new MappedEndpoint("PATCH", "/api/v1/knowledge/{name}"),
             new MappedEndpoint("POST", "/api/v1/agents/{name}/invoke"),
+            // A2A JSON-RPC, registered only when oryxos.a2a.enabled=true. Listing it here is the
+            // regression: an unregistered route makes RbacEndpointCoverageCheck refuse to start.
+            new MappedEndpoint("POST", "/api/v1/a2a"),
             new MappedEndpoint("POST", "/api/v2/agents/{profile}/schedules/{key}/run"),
             new MappedEndpoint("GET", "/api/v2/schedules/{scheduleId}/executions"),
             new MappedEndpoint("GET", "/actuator/prometheus"),

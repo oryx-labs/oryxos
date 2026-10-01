@@ -11,7 +11,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Objects;
 import java.util.Optional;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -28,7 +27,13 @@ import org.springframework.web.bind.annotation.RestController;
         "Spring MVC injects message service / SSE props; A2A JSON-RPC is intentionally public.")
 @RestController
 @RequestMapping("/api/v1/a2a")
-@ConditionalOnBean(A2aMessageService.class)
+// 与它所依赖的 bean 用【同一个】条件。
+// @ConditionalOnBean 在这里永远为 false：组件扫描早于配置类处理，
+// 求值时那个 bean 的定义还没注册（实测 0.1.6-RELEASE，四个端点全 404）。
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
+    prefix = "oryxos.a2a",
+    name = "enabled",
+    havingValue = "true")
 public class A2aJsonRpcController {
 
   private final A2aMessageService messageService;

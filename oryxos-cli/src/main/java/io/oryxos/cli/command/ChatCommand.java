@@ -2,8 +2,12 @@ package io.oryxos.cli.command;
 
 import io.oryxos.channel.cli.CliChannel;
 import io.oryxos.cli.OryxOsRuntime;
+import io.oryxos.core.profile.Profile;
+import io.oryxos.core.profile.ProfileRegistry;
 import io.oryxos.core.provider.ProviderRegistry;
 import io.oryxos.provider.ProviderRegistryValidator;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.boot.Banner;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
@@ -27,8 +31,29 @@ public class ChatCommand implements Runnable {
             .bannerMode(Banner.Mode.OFF)
             .run()) {
       validateProviderRegistry(context);
+      requireProfile(context, profileName);
       context.getBean(CliChannel.class).run(profileName, currentUser());
     }
+  }
+
+  /**
+   * A missing Agent is a configuration error, not a transient turn failure. Checked here so the
+   * session banner never claims a connection that cannot work, and the command exits non-zero
+   * instead of reporting every turn as a per-turn error (specs/003-cli-entry/contracts/cli.md).
+   */
+  static void requireProfile(ConfigurableApplicationContext context, String profileName) {
+    ProfileRegistry registry = context.getBean(ProfileRegistry.class);
+    if (registry.get(profileName).isPresent()) {
+      return;
+    }
+    List<String> available =
+        registry.all().stream().map(Profile::name).sorted().collect(Collectors.toList());
+    throw new IllegalStateException(
+        "Agent 不存在: "
+            + profileName
+            + (available.isEmpty()
+                ? "（没有已定义的 Agent）"
+                : "（可用: " + String.join(", ", available) + "）"));
   }
 
   static void validateProviderRegistry(ConfigurableApplicationContext context) {

@@ -1,0 +1,27 @@
+# Normalize line endings on checkout and commit.
+#
+# Without this, an editor on Windows that saves CRLF rewrites every line of a file, and
+# git reports the whole file as modified even though not a byte of content changed. The
+# frontend sources hit this: two JavaScript files came back with CRLF on every line while
+# their content was identical, which is indistinguishable from a real edit in `git status`
+# and in a diff until you look at the line endings.
+#
+# The repository stores LF. `text=auto` normalizes on the way in, `eol=lf` writes LF back
+# out on every platform, so a checkout on Windows no longer turns the tree into a diff.
+* text=auto eol=lf
+
+# Explicitly binary — never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.jar binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+
+# Generated lockfiles: normalize but do not merge.
+package-lock.json text eol=lf -diff
+pnpm-lock.yaml   text eol=lf -diff

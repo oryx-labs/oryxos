@@ -33,7 +33,10 @@ jobs:
         run: |
           set -euo pipefail
           archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}" \
+          # --retry: the release download has failed transiently in CI, and a single
+          # failed fetch turned the whole scan red without ever running it.
+          curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}" \
             | sudo tar -xz -C /usr/local/bin gitleaks
           gitleaks version
 

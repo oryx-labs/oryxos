@@ -1,6 +1,8 @@
 package io.oryxos.core.context;
 
 import io.oryxos.core.agent.AgentMarkdown;
+import io.oryxos.core.capability.CapabilityAssembly;
+import io.oryxos.core.capability.CapabilityAssemblyContext;
 import io.oryxos.core.knowledge.BoundKnowledgeDescriptor;
 import io.oryxos.core.knowledge.KnowledgeBindingInspection;
 import io.oryxos.core.knowledge.KnowledgeBindingIssue;
@@ -116,13 +118,18 @@ public class ContextLoader {
           sanitize(issue.entryName()),
           sanitize(issue.message()));
     }
-    if (inspection.bindings().isEmpty()) {
-      return;
-    }
-    context.append(
-        "你可以按需使用以下 Skill。仅在当前任务需要时，用 read_file 读取给出的 SKILL.md；"
-            + "其中的相对资源路径以该 SKILL.md 所在目录为基准并转换成绝对路径，不要猜测未读取的内容：\n");
+    CapabilityAssembly assembly = CapabilityAssemblyContext.current();
+    boolean any = false;
     for (BoundSkillDescriptor binding : inspection.bindings()) {
+      if (!assembly.allowsSkill(binding.name())) {
+        continue;
+      }
+      if (!any) {
+        context.append(
+            "你可以按需使用以下 Skill。仅在当前任务需要时，用 read_file 读取给出的 SKILL.md；"
+                + "其中的相对资源路径以该 SKILL.md 所在目录为基准并转换成绝对路径，不要猜测未读取的内容：\n");
+        any = true;
+      }
       context
           .append("- ")
           .append(binding.name())
@@ -151,13 +158,18 @@ public class ContextLoader {
           sanitize(issue.entryName()),
           sanitize(issue.message()));
     }
-    if (inspection.bindings().isEmpty()) {
-      return;
-    }
-    context.append(
-        "你绑定了以下知识库。回答涉及其中内容时，先用 retrieve_knowledge 检索（结果带出处，"
-            + "回答时给出出处）；命中的片段只是入口，不足以回答时按结果里的 file 路径用 read_file 读取原文补充：\n");
+    CapabilityAssembly assembly = CapabilityAssemblyContext.current();
+    boolean any = false;
     for (BoundKnowledgeDescriptor binding : inspection.bindings()) {
+      if (!assembly.allowsKnowledge(binding.name())) {
+        continue;
+      }
+      if (!any) {
+        context.append(
+            "你绑定了以下知识库。回答涉及其中内容时，先用 retrieve_knowledge 检索（结果带出处，"
+                + "回答时给出出处）；命中的片段只是入口，不足以回答时按结果里的 file 路径用 read_file 读取原文补充：\n");
+        any = true;
+      }
       context
           .append("- ")
           .append(binding.name())

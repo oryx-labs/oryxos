@@ -7,9 +7,11 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
@@ -83,13 +85,14 @@ public class McpConfigLoader {
       throw new IllegalArgumentException("mcp_servers.yaml 顶层 servers 必须是列表");
     }
     List<McpServerConfig> configs = new ArrayList<>();
+    Set<String> seen = new HashSet<>();
     for (Object item : (List<Object>) servers) {
       if (!(item instanceof Map)) {
         throw new IllegalArgumentException(
             "mcp_servers.yaml 存在非对象条目: " + sanitize(String.valueOf(item)));
       }
       Map<String, Object> entry = (Map<String, Object>) item;
-      configs.add(
+      McpServerConfig config =
           new McpServerConfig(
               asString(entry.get("name")),
               asString(entry.get("transport")),
@@ -97,7 +100,14 @@ public class McpConfigLoader {
               asStringMap(entry.get("env"), "env"),
               asString(entry.get("url")),
               asStringMap(entry.get("headers"), "headers"),
-              asRequestTimeoutSeconds(entry.get(FIELD_REQUEST_TIMEOUT))));
+              asRequestTimeoutSeconds(entry.get(FIELD_REQUEST_TIMEOUT)));
+      // The name is the connection's identity everywhere downstream: McpClientService keys its
+      // clients by it, and the admin API refuses duplicates. Accepting one here silently replaced
+      // the earlier connection without closing it, and orphaned its tools.
+      if (!seen.add(config.name())) {
+        throw new IllegalArgumentException("mcp_servers.yaml server 名重复: " + config.name());
+      }
+      configs.add(config);
     }
     return configs;
   }
@@ -134,8 +144,14 @@ public class McpConfigLoader {
     try {
       Path parent = configFile.getParent();
       if (parent != null) {
+        // Only tighten a directory this call creates. The parent is normally the workspace root,
+        // which other uids may share (shared-posix), and narrowing it to 0700 would cut them off
+        // from agents, knowledge and output — a change that never gets undone.
+        boolean created = !Files.exists(parent);
         Files.createDirectories(parent);
-        restrictToOwner(parent);
+        if (created) {
+          restrictToOwner(parent);
+        }
       }
       Files.writeString(configFile, yaml);
       restrictToOwner(configFile); // env/headers 里可能落了真实凭证（占位符解析不了时）——只给属主可读写

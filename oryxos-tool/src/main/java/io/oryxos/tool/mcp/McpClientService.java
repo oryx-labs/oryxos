@@ -58,6 +58,9 @@ public class McpClientService {
   private final Map<String, McpSyncClient> activeClients = new ConcurrentHashMap<>();
   private final Map<String, List<String>> registeredTools = new ConcurrentHashMap<>();
   private final Map<String, String> lastErrors = new ConcurrentHashMap<>();
+  // Set by connectAll so the shutdown path can unregister the tools it added; a destroy method
+  // takes no arguments, and leaving them registered would outlive their transport.
+  private volatile ToolRegistry ownRegistry;
 
   public McpClientService(McpConfigLoader configLoader) {
     this(configLoader, McpClientService::connectDefault);
@@ -71,6 +74,7 @@ public class McpClientService {
 
   /** 启动时的全量连接：加载配置逐个 {@link #connect}，单个失败只 WARN 不拖垮其余。 */
   public void connectAll(ToolRegistry registry) {
+    ownRegistry = registry;
     for (McpServerConfig config : configLoader.load()) {
       connect(config, registry);
     }
@@ -134,6 +138,26 @@ public class McpClientService {
     registeredTools.remove(serverName);
     closeQuietly(serverName, activeClients.remove(serverName));
     lastErrors.remove(serverName);
+  }
+
+  /**
+   * Close every open connection. Registered as the bean's destroy method: connections are opened
+   * for any command whose context builds a tool registry, and nothing else releases them — a stdio
+   * server only exits when its client closes the transport.
+   */
+  public void closeAll() {
+    ToolRegistry registry = ownRegistry;
+    for (String serverName : List.copyOf(activeClients.keySet())) {
+      if (registry != null) {
+        for (String toolName : registeredTools.getOrDefault(serverName, List.of())) {
+          registry.unregister(toolName);
+        }
+      }
+      closeQuietly(serverName, activeClients.remove(serverName));
+    }
+    registeredTools.clear();
+    lastErrors.clear();
+    ownRegistry = null;
   }
 
   private static void closeQuietly(String serverName, McpSyncClient client) {

@@ -3,13 +3,18 @@ package io.oryxos.tool.mcp;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import io.oryxos.core.mcp.McpServerConfig;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -66,6 +71,28 @@ class McpConfigLoaderTest {
             IllegalArgumentException.class, () -> new McpConfigLoader(configFile()).loadRaw());
 
     assertTrue(ex.getMessage().contains("非对象条目"));
+  }
+
+  @Test
+  @DisplayName("server 名重复时 loadRaw 抛 IllegalArgumentException")
+  void duplicateNameFailsLoud() throws IOException {
+    // The name keys the connection everywhere downstream; accepting a duplicate silently replaced
+    // the first client without closing it and left its tools registered with no owner.
+    write(
+        """
+        servers:
+          - name: dup
+            transport: stdio
+            command: alpha
+          - name: dup
+            transport: stdio
+            command: beta
+        """);
+    IllegalArgumentException ex =
+        assertThrows(
+            IllegalArgumentException.class, () -> new McpConfigLoader(configFile()).loadRaw());
+    assertTrue(ex.getMessage().contains("重复"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("dup"), ex.getMessage());
   }
 
   @Test
@@ -169,6 +196,25 @@ class McpConfigLoaderTest {
     String saved = Files.readString(configFile());
     assertTrue(saved.contains("request_timeout: 300"));
     assertEquals(300, loader.loadRaw().get(1).requestTimeoutSeconds());
+  }
+
+  @Test
+  @DisplayName("save 不动已存在目录的权限")
+  void saveLeavesAnExistingDirectoryAlone() throws Exception {
+    // The parent is normally the workspace root; shared-posix deployments have other uids reading
+    // agents/ and output/ through it, and narrowing it to 0700 is not undone by anything.
+    // @TempDir arrives as 0700, where the narrowing is a no-op either way, so widen it first —
+    // without this the assertion holds against the old code too and guards nothing.
+    assumeTrue(
+        dir.getFileSystem().supportedFileAttributeViews().contains("posix"),
+        "POSIX permissions are what this asserts");
+    Set<PosixFilePermission> shared = PosixFilePermissions.fromString("rwxrwxr-x");
+    Files.setPosixFilePermissions(dir, shared);
+
+    McpConfigLoader loader = new McpConfigLoader(configFile());
+    loader.save(List.of(new McpServerConfig("s", "stdio", "echo", Map.of(), "", Map.of(), 60)));
+
+    assertEquals(shared, Files.getPosixFilePermissions(dir));
   }
 
   @Test

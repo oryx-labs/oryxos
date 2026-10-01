@@ -39,6 +39,8 @@ public final class RequestActionResolver {
 
   private static final String PATH_ACTUATOR_HEALTH = "/actuator/health";
 
+  private static final String PATH_API_V1_A2A = "/api/v1/a2a";
+
   private static final String PATH_CHANNELS_INBOUND = "/api/v1/channels/inbound";
 
   private static final String PATH_SESSIONS = "/api/v1/sessions";
@@ -148,6 +150,12 @@ public final class RequestActionResolver {
     if (matchesInvoke(p) && HttpMethod.POST.matches(m)) {
       return Resolution.of(
           Action.RUN_AGENT, ResourceRef.agent(segmentAfter(p, PATH_AGENTS_PREFIX)));
+    }
+    // A2A JSON-RPC: a peer drives an Agent turn through message/send, the same capability as
+    // POST /api/v1/agents/{name}/invoke. The Agent is named in the request body, so the resource
+    // is unqualified — as it is for personas and schedules.
+    if (isUnder(p, PATH_API_V1_A2A)) {
+      return Resolution.of(Action.RUN_AGENT, ResourceRef.agent(null));
     }
     if (isUnder(p, PATH_SESSIONS) || isUnder(p, PATH_RUNS)) {
       return Resolution.of(Action.MANAGE_SESSIONS, ResourceRef.session(null));

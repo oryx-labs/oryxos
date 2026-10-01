@@ -39,7 +39,7 @@ public final class AgentAwareFlowNodeHandler implements FlowNodeHandler {
     }
     String userMessage = composeUserMessage(inputs);
     try {
-      String reply = runner.run(agentName, userMessage);
+      String reply = runner.run(agentName, userMessage, node.capabilities());
       if (reply == null) {
         reply = "";
       }
