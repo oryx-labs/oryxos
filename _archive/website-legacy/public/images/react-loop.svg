@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 560" width="800" height="560">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="rgba(0,0,0,0.18)"/>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#6b7280"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#f97316"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#3b82f6"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 Z" fill="#22c55e"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="560" fill="#0a0a0a" rx="12"/>
+
+  <!-- Title -->
+  <text x="400" y="36" font-family="'SF Mono', 'Fira Code', monospace" font-size="14" fill="#f97316" text-anchor="middle" letter-spacing="2">ReAct Loop — Reason + Act</text>
+
+  <!-- Step 1: User Message -->
+  <rect x="300" y="60" width="200" height="48" rx="8" fill="#1a1a1a" stroke="#f97316" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="400" y="80" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" fill="#f97316" text-anchor="middle" font-weight="bold">User Message</text>
+  <text x="400" y="98" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#6b7280" text-anchor="middle">append to session history</text>
+
+  <!-- Arrow down -->
+  <line x1="400" y1="108" x2="400" y2="130" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 2: PromptBuilder -->
+  <rect x="240" y="130" width="320" height="80" rx="8" fill="#111827" stroke="#3b82f6" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="400" y="152" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" fill="#3b82f6" text-anchor="middle" font-weight="bold">PromptBuilder</text>
+  <text x="400" y="170" font-family="'SF Mono', 'Fira Code', monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">system prompt + bootstrap + skills</text>
+  <text x="400" y="186" font-family="'SF Mono', 'Fira Code', monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">+ memory + history + tool list</text>
+
+  <!-- Arrow down -->
+  <line x1="400" y1="210" x2="400" y2="232" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Step 3: LLM Call -->
+  <rect x="270" y="232" width="260" height="56" rx="8" fill="#1a0f00" stroke="#f97316" stroke-width="2" filter="url(#shadow)"/>
+  <text x="400" y="256" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" fill="#f97316" text-anchor="middle" font-weight="bold">LLM Call</text>
+  <text x="400" y="274" font-family="'SF Mono', 'Fira Code', monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">ProviderService → writes llm_calls</text>
+
+  <!-- Arrow down -->
+  <line x1="400" y1="288" x2="400" y2="318" stroke="#6b7280" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- Decision diamond -->
+  <polygon points="400,318 500,360 400,402 300,360" fill="#1a1a1a" stroke="#a855f7" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="400" y="355" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#a855f7" text-anchor="middle" font-weight="bold">tool call</text>
+  <text x="400" y="371" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#a855f7" text-anchor="middle">in response?</text>
+
+  <!-- No branch → Final Response -->
+  <line x1="300" y1="360" x2="160" y2="360" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <text x="228" y="350" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#22c55e" text-anchor="middle">NO</text>
+
+  <rect x="60" y="332" width="100" height="56" rx="8" fill="#0a1a10" stroke="#22c55e" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="110" y="357" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#22c55e" text-anchor="middle" font-weight="bold">Final</text>
+  <text x="110" y="373" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#22c55e" text-anchor="middle">Response</text>
+
+  <!-- Yes branch → ToolExecutor -->
+  <line x1="400" y1="402" x2="400" y2="432" stroke="#f97316" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+  <text x="415" y="420" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#f97316">YES</text>
+
+  <!-- Step 4: ToolExecutor -->
+  <rect x="240" y="432" width="320" height="76" rx="8" fill="#1a0f00" stroke="#f97316" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="400" y="454" font-family="'SF Mono', 'Fira Code', monospace" font-size="11" fill="#f97316" text-anchor="middle" font-weight="bold">ToolExecutor</text>
+  <text x="400" y="472" font-family="'SF Mono', 'Fira Code', monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">SandboxChecker → execute tool</text>
+  <text x="400" y="488" font-family="'SF Mono', 'Fira Code', monospace" font-size="9.5" fill="#9ca3af" text-anchor="middle">→ writes tool_invocations</text>
+  <text x="400" y="503" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#6b7280" text-anchor="middle">builtin / MCP / @Tool bean</text>
+
+  <!-- Loop back arrow -->
+  <path d="M560,470 Q680,470 680,290 Q680,170 560,170" stroke="#f97316" stroke-width="1.5" fill="none" stroke-dasharray="5,3" marker-end="url(#arrow-orange)"/>
+  <text x="700" y="300" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#f97316" text-anchor="middle">loop</text>
+  <text x="700" y="316" font-family="'SF Mono', 'Fira Code', monospace" font-size="10" fill="#6b7280" text-anchor="middle">max 10x</text>
+
+  <!-- Append result note -->
+  <text x="620" y="510" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#6b7280" text-anchor="middle">append result</text>
+  <text x="620" y="524" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#6b7280" text-anchor="middle">to history</text>
+
+  <!-- Legend -->
+  <rect x="30" y="460" width="180" height="82" rx="6" fill="#111111" stroke="#333" stroke-width="1"/>
+  <text x="120" y="478" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#6b7280" text-anchor="middle">LEGEND</text>
+  <rect x="44" y="488" width="10" height="10" rx="2" fill="#1a0f00" stroke="#f97316" stroke-width="1.5"/>
+  <text x="62" y="498" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#9ca3af">ReAct core</text>
+  <rect x="44" y="506" width="10" height="10" rx="2" fill="#111827" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="62" y="516" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#9ca3af">Prompt assembly</text>
+  <rect x="44" y="524" width="10" height="10" rx="2" fill="#0a1a10" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="62" y="534" font-family="'SF Mono', 'Fira Code', monospace" font-size="9" fill="#9ca3af">Terminal state</text>
+</svg>

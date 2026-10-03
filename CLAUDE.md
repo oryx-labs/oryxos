@@ -4,7 +4,38 @@ OryxOS 是用 Java 实现的面向企业场景的 **Distributed AI Agent OS**。
 
 长期目标：走进 Apache 基金会，成为 Apache 顶级项目。
 
-> 详细背景：`docs/DemandAnalysis.md`（需求）、`docs/TechnicalSolution.md`（技术方案）、`docs/IndustryResearch.md`（业界调研）、`docs/AiProgrammingGuide.md`（AI 编程指南）、`docs/oryxos.md`（项目定位）
+## 文档导读
+
+| 文档 | 回答的问题 |
+|------|-----------|
+| `docs/IndustryResearch.md` | Why — 业界调研：Agent OS 定义、OpenClaw/Hermes 格局、Java 生态缺位、OryxOS 定位 |
+| `docs/DemandAnalysis.md` | What — 需求：五大核心能力、核心/扩展/社区三档功能、验收标准 |
+| `docs/TechnicalSolution.md` | How — 技术方案：7 个关键技术决策、9 个模块、数据模型、实施节奏 |
+| `docs/AiProgrammingGuide.md` | 怎么做出来 — AI 编程实施：Spec-Kit 流程、5 个 user story 拆解 |
+| `docs/oryxos.md` | 对外定位页：愿景、路线图三阶段、设计原则 |
+| `docs/oryx-labs.md` | 社区背景：oryx-labs（AI coding 驱动的探索社区） |
+
+## 关键概念：Agent OS ≠ agent runtime
+
+- **agent runtime**：让单个 Agent 跑起来的执行内核（LLM 调用、工具执行、上下文、循环控制）
+- **Agent OS**：runtime 之上，管多个 Agent 的生命周期、统一渠道接入、统一记忆、多租户、审计
+
+一句话：runtime 让一个 Agent 跑起来，Agent OS 让一群 Agent 在企业里被管起来。OryxOS 是后者。
+
+## 交付分两段
+
+1. **核心阶段**：用 Java 把 Agent OS 的**运行时内核**做扎实，能力对齐业界开源 Agent OS 基础层
+2. **扩展阶段 + 社区**：企业级治理层（多租户、SSO、完整审计、Tool Policy、多 Channel、向量检索）
+
+核心阶段是地基，不是终局；不要在核心阶段过度设计治理能力。
+
+## 路线图三阶段
+
+| 阶段 | 形态 | 重点 |
+|------|------|------|
+| 一（当前） | 单机私有部署 | 完整运行时内核，把单机做扎实 |
+| 二（中期） | 底座分布式 | 节点无状态、状态外置（Redis/PG/对象存储）、多副本高可用 |
+| 三（远期） | 跨节点 Agent 协作 | Agent 通信底座、对接 A2A、跨节点发现/委托/协同 |
 
 ---
 
@@ -22,6 +53,20 @@ OryxOS 是用 Java 实现的面向企业场景的 **Distributed AI Agent OS**。
 | 日志 | Logback + SLF4J（结构化 JSON） |
 | 构建 | Maven 多模块 |
 
+## 构建与运行
+
+```bash
+mvn clean package          # 构建全部模块，生成 fat JAR
+java -jar oryxos-boot/target/*.jar   # 或通过 oryxos CLI 入口启动
+
+# 本地验证
+oryxos init                # 初始化 .oryxos/ 工作区
+oryxos chat                # 交互对话
+oryxos serve --port 8080   # 启动 REST API
+```
+
+API key 通过环境变量注入（如 `DEEPSEEK_API_KEY`），不在任何配置文件里明文写死。
+
 ---
 
 ## 模块结构（9 个）
@@ -35,10 +80,10 @@ oryxos/
 ├── oryxos-memory        # 能力三：MemoryService 门面、LongTermMemory、
 │                        #   MemoryTools（save/recall）
 ├── oryxos-tool          # 能力四：内置 Tool（文件/Shell/HTTP）、MCP Client、
-│                        #   ToolRegistry、SandboxChecker
+│                        #   ToolRegistry、SandboxChecker（三合一，不拆）
 ├── oryxos-channel-cli   # CLI Channel：oryxos chat 实现
-├── oryxos-web           # 能力五：WebServer、ApiController、GlobalExceptionHandler、
-│                        #   OpenAPI
+├── oryxos-web           # 能力五：WebServer、ApiController × 6、
+│                        #   GlobalExceptionHandler、OpenAPI
 ├── oryxos-storage       # 持久化：SQLite、SessionRepository、
 │                        #   ToolInvocationRepository、LlmCallRepository
 ├── oryxos-cli           # 命令行入口：Picocli 主入口、12 个子命令、ConfigLoader
@@ -64,7 +109,7 @@ Spring AI 在 OryxOS 里只做：
 1. LLM Provider 协议转换（OpenAI / Anthropic / Gemini 等各家格式差异由它吸收）
 2. `@Tool` 注解的 JSON Schema 生成
 
-**必须禁用** Spring AI 的自动 tool 执行。Tool 的调度和执行完全由 `ReActLoop` + `ToolExecutor` 控制。违反此原则会导致 tool 被调两次。
+**必须禁用** Spring AI 的自动 tool 执行。Tool 的调度和执行完全由 `ReActLoop` + `ToolExecutor` 控制。违反此原则会导致 tool 被调两次。这是**最容易被写错的一条**。
 
 ```java
 // 错误：不得用 Spring AI 自动执行 tool
@@ -110,6 +155,10 @@ Map<String, ChatModel> providerMap = Map.of(
 ### 原则八：Tool 模块三合一
 
 内置 Tool、MCP Client 合并在一个 `oryxos-tool` 模块，**不拆成多个模块**。SKILL.md 加载归 `oryxos-core` 的 `ContextLoader`。
+
+### 原则九：配置与密钥集中校验
+
+敏感配置通过环境变量注入（Profile 里用 `${ENV_VAR}` 占位），`ConfigLoader` 启动时做必填项和格式校验，缺失或非法时给清晰报错，**不静默失败**。
 
 ---
 
@@ -329,33 +378,26 @@ oryxos session list
 
 ---
 
-## 配置加载规则
+## 实施拆解：5 个 user story
 
-敏感配置（API key、MCP server 凭证）通过环境变量注入，**不得**明文写在 Profile YAML 里：
+按依赖关系推进，不按时间排优先级：
 
-```yaml
-provider:
-  name: deepseek
-  api_key: ${DEEPSEEK_API_KEY}   # 从环境变量读取
+```
+US-1 → US-2 → ┌─ US-3 ─┐ → US-5
+               └─ US-4 ─┘
 ```
 
-`ConfigLoader` 启动时做必填项和格式校验，缺失或非法时给清晰报错，不静默失败。
+| User Story | 核心能力 | 依赖 | 验收 Demo |
+|-----------|---------|------|----------|
+| US-1 | 对接 LLM（Provider 抽象） | 无 | —（与 US-2 一起跑 Demo 一） |
+| US-2 | ReAct 循环 | US-1 | Demo 一：`oryxos chat` 查天气穿衣 |
+| US-3 | Memory 三层记忆 | US-2 | Demo 二：跨对话记偏好 |
+| US-4 | Plugin Tool 体系 | US-2 | Demo 三：零代码 PR digest |
+| US-5 | Web Service + 持久化 | US-1~4 | Demo 四+五：REST 端点联动 |
 
----
+每个 user story 完成后必须检查实现与 spec 的一致性（Spec-Kit 流程中对应 `/speckit.analyze`），发现漂移立刻修正。
 
-## 五大核心能力与验收 Demo
-
-| 能力 | 核心组件 | 验收 Demo |
-|------|---------|---------|
-| **一：对接 LLM** | `ProviderService`，显式 provider 映射 | — |
-| **二：ReAct 循环** | `ReActLoop`、`PromptBuilder`、`ToolExecutor` | Demo 一：`oryxos chat` 查天气穿衣 |
-| **三：Memory** | `MemoryService`、`LongTermMemory`、`MEMORY.md` | Demo 二：跨对话记偏好 |
-| **四：Plugin Tool** | `ToolRegistry`、`SandboxChecker`、MCP Client | Demo 三：零代码 PR digest |
-| **五：Web Service** | `WebServer`、`ApiController` × 6 | Demo 四+五：REST 端点联动 |
-
----
-
-## 四周实施节奏
+### 四周节奏（每周 3 小时）
 
 | 周次 | 核心任务 | 涉及模块 | 验收 Demo |
 |------|---------|---------|----------|
@@ -378,6 +420,8 @@ provider:
 | 在 ReAct Loop 里用异步 | 复杂度激增，Virtual Thread 优势消失 | 保持同步阻塞，Virtual Thread 自动处理 IO 等待 |
 | `MEMORY.md` 超过 4000 字不截断 | 注入 system prompt 超 context window | `LongTermMemory.truncateIfNeeded()` 超阈值保留最近内容 |
 | Tool 模块拆成多个 | 模块间依赖混乱 | 内置 Tool + MCP Client 合并为一个 `oryxos-tool` 模块 |
+| Memory 与 Session 合并实现 | 对外没有统一记忆入口 | `MemoryService` 三层统一门面，内部委托 `SessionManager` / `LongTermMemory` |
+| 核心阶段过度设计治理能力 | 范围失控，交付不了 | 多租户/SSO/Tool Policy/向量检索放扩展阶段，核心只做运行时内核 |
 
 ---
 
@@ -390,3 +434,10 @@ provider:
 - **无状态实例，状态外置**：这是未来走向分布式架构而不需要大改设计的前提
 - **安全是地基，不是补丁**：工具来源管控、最小权限、强制沙箱白名单、凭证走环境变量、完整审计记录从第一天就写入 SQLite
 - **分阶段克制**：先构建最小完整的运行时内核；治理和分布式基础设施在真实使用数据验证后再做
+
+## 定位边界（不做什么）
+
+- **不做编排平台**：不做可视化 workflow、任务分解、多 Agent 显式协作；Dify 类平台可以跑在 OryxOS 之上（互补，不是竞争）
+- **不做框架**：OryxOS 是装好就跑的底座，不是库/SDK；内部复用 Spring AI 等框架
+- **不锁生态**：不绑定任何云厂商，数据不出企业
+- **核心阶段不做**：认证、SSE 流式、WebSocket、限流、RBAC、多租户、Provider fallback、Tool 并行调用、语义检索

@@ -1,7 +1,7 @@
 ---
 layout: home
-title: OryxOS — Enterprise Agent OS
-description: Enterprise Agent OS built on Java — run multiple AI agents on your own infrastructure
+title: OryxOS — Distributed AI Agent OS
+description: One config file defines one agent; one platform runs a fleet — on your own infrastructure.
 ---
 
 <Home />

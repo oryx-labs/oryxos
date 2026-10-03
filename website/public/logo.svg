@@ -1,15 +1,47 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 60" width="256" height="60">
-  <!-- ── Mark: two stylized oryx horns ── -->
-  <!-- Left horn -->
-  <path d="M 13,3 C 12,3 6,28 5,56 L 17,56 C 18,28 14,3 13,3 Z" fill="#f97316"/>
-  <!-- Right horn -->
-  <path d="M 31,3 C 30,3 36,28 39,56 L 27,56 C 26,28 32,3 31,3 Z" fill="#ea6a00"/>
-  <!-- Base connector -->
-  <rect x="5" y="52" width="34" height="5" rx="2.5" fill="#f97316" opacity="0.3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#292524"/>
+      <stop offset="1" stop-color="#1c1917"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdba74"/>
+      <stop offset="0.5" stop-color="#f97316"/>
+      <stop offset="1" stop-color="#c2410c"/>
+    </linearGradient>
+    <linearGradient id="horn" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#b45309"/>
+      <stop offset="1" stop-color="#fb923c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f97316" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#f97316" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="lift" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
 
-  <!-- ── Wordmark ── -->
-  <text x="52" y="46"
-        font-family="'Arial Black','Helvetica Neue',Arial,sans-serif"
-        font-size="43" font-weight="900" letter-spacing="-1.5"
-        fill="#f97316">Oryx<tspan fill="#ea6a00">OS</tspan></text>
+  <!-- badge -->
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)" stroke="#f97316" stroke-opacity="0.3" stroke-width="2"/>
+
+  <!-- ambient glow behind the mark -->
+  <circle cx="128" cy="146" r="92" fill="url(#glow)"/>
+
+  <!-- the "O" — OS kernel ring (hero layer) -->
+  <g filter="url(#lift)">
+    <circle cx="128" cy="146" r="54" fill="none" stroke="url(#ring)" stroke-width="16"/>
+  </g>
+  <!-- top-left rim highlight for dimension -->
+  <path d="M 89.8 107.8 A 54 54 0 0 1 142 93.9" fill="none" stroke="#ffedd5" stroke-opacity="0.35" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- oryx horns — attached at the ring's outer edge, mirrored (secondary layer) -->
+  <g filter="url(#lift)">
+    <line x1="90" y1="94" x2="57" y2="34" stroke="url(#horn)" stroke-width="14" stroke-linecap="round"/>
+    <line x1="166" y1="94" x2="199" y2="34" stroke="url(#horn)" stroke-width="14" stroke-linecap="round"/>
+  </g>
+
+  <!-- the agent, running inside the OS -->
+  <circle cx="128" cy="146" r="22" fill="#f97316" fill-opacity="0.18"/>
+  <circle cx="128" cy="146" r="12" fill="#fde68a"/>
 </svg>

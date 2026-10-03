@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "OryxOS 系统架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1290, 640],
+    "views": [
+      { "id": "react-main-path", "label": "ReAct 主链路", "focus": ["cli", "rest", "loop", "prompt", "provider"], "note": "一条消息从入口进入自实现 ReAct 循环，每轮组装 Prompt 并调用 LLM。" },
+      { "id": "tool-path", "label": "工具执行链", "focus": ["loop", "executor", "tool", "mcp"], "note": "LLM 决定调用工具后，经白名单校验执行，MCP 工具通过 JSON-RPC 转发。" },
+      { "id": "state-and-audit", "label": "状态与审计", "focus": ["provider", "executor", "tool", "sqlite", "fs"], "note": "审计表 day one 落库；用户可维护的数据留在文件系统，可直接编辑、git 跟踪。" }
+    ]
+  },
+  "components": [
+    { "id": "llm", "type": "external", "label": "LLM Providers", "sublabel": "DeepSeek · Qwen · Kimi · Ollama", "pos": [180, 8], "size": [170, 56] },
+    { "id": "cli", "type": "frontend", "label": "CLI Channel", "sublabel": "oryxos chat · oryxos-channel-cli", "pos": [180, 130], "size": [170, 64] },
+    { "id": "rest", "type": "frontend", "label": "Web Service", "sublabel": "REST /api/v1 · Spring MVC", "pos": [180, 330], "size": [170, 64] },
+    { "id": "mcp", "type": "external", "label": "MCP Servers", "sublabel": "github-mcp · 自定义 server", "pos": [180, 552], "size": [170, 60] },
+    { "id": "prompt", "type": "backend", "label": "PromptBuilder", "sublabel": "system + 记忆 + 历史 + 工具", "pos": [440, 110], "size": [180, 64] },
+    { "id": "loop", "type": "backend", "label": "ReActLoop", "sublabel": "自实现循环 · oryxos-core", "pos": [440, 225], "size": [180, 72], "tag": "自实现，非框架" },
+    { "id": "executor", "type": "backend", "label": "ToolExecutor", "sublabel": "先白名单校验，再执行", "pos": [440, 430], "size": [180, 64] },
+    { "id": "provider", "type": "backend", "label": "ProviderService", "sublabel": "Spring AI Alibaba · 显式映射", "pos": [720, 180], "size": [180, 72] },
+    { "id": "memory", "type": "backend", "label": "MemoryService", "sublabel": "会话记忆 + MEMORY.md", "pos": [720, 320], "size": [180, 64] },
+    { "id": "tool", "type": "backend", "label": "ToolRegistry", "sublabel": "内置 Tool · @Tool · MCP Client", "pos": [720, 460], "size": [180, 64] },
+    { "id": "sqlite", "type": "database", "label": "SQLite oryxos.db", "sublabel": "sessions · 审计表", "pos": [1020, 180], "size": [190, 72] },
+    { "id": "fs", "type": "database", "label": "文件系统 .oryxos/", "sublabel": "profiles · skills · bootstrap", "pos": [1020, 320], "size": [190, 64] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "OryxOS 进程 · Spring Boot 3.x / JDK 21 虚拟线程", "wraps": ["cli", "rest", "prompt", "loop", "executor", "provider", "memory", "tool", "sqlite", "fs"], "pad": 16 },
+    { "kind": "security-group", "label": "SandboxChecker 白名单", "wraps": ["executor", "tool"], "pad": 12 }
+  ],
+  "connections": [
+    { "id": "cli-to-loop", "from": "cli", "to": "loop", "label": "chat 触发" },
+    { "id": "rest-to-loop", "from": "rest", "to": "loop", "label": "HTTP 触发" },
+    { "id": "loop-to-prompt", "from": "loop", "to": "prompt", "label": "组装 Prompt" },
+    { "id": "loop-to-executor", "from": "loop", "to": "executor", "label": "调度 Tool", "labelAt": [530, 386] },
+    { "id": "prompt-to-provider", "from": "prompt", "to": "provider", "label": "调用 LLM", "via": [[690, 142], [690, 216]], "labelAt": [655, 127] },
+    { "id": "prompt-to-memory", "from": "prompt", "to": "memory", "label": "注入记忆" },
+    { "id": "executor-to-tool", "from": "executor", "to": "tool", "label": "注册表查找" },
+    { "id": "llm-to-provider", "from": "llm", "to": "provider", "label": "OpenAI 兼容协议", "variant": "dashed", "fromSide": "right", "toSide": "top" },
+    { "id": "mcp-to-tool", "from": "mcp", "to": "tool", "label": "JSON-RPC", "variant": "dashed", "fromSide": "right", "toSide": "bottom" },
+    { "id": "provider-audit", "from": "provider", "to": "sqlite", "label": "审计 llm_calls", "variant": "dashed" },
+    { "id": "tool-audit", "from": "tool", "to": "sqlite", "label": "审计 tool_invocations", "variant": "dashed", "toSide": "right", "via": [[1265, 492], [1265, 216]], "labelAt": [1080, 492] },
+    { "id": "memory-to-fs", "from": "memory", "to": "fs", "label": "MEMORY.md 读写", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "orange", "title": "引擎（oryxos-core）", "items": [
+      "ReActLoop 自实现，禁用 Spring AI 自动工具执行",
+      "PromptBuilder 每轮组装 system、记忆、历史与工具列表",
+      "达到 max_iterations（默认 10）强制结束"
+    ] },
+    { "dot": "violet", "title": "能力层", "items": [
+      "ProviderService 维护 provider name → ChatModel 显式映射",
+      "MemoryService 统一门面：会话记忆 + MEMORY.md 长期记忆",
+      "ToolRegistry 统一注册内置 Tool、@Tool Bean 与 MCP 工具"
+    ] },
+    { "dot": "rose", "title": "安全 · 审计 · 状态", "items": [
+      "ToolExecutor 执行前过 SandboxChecker 白名单（路径/命令/域名）",
+      "tool_invocations 与 llm_calls 审计表 day one 写入 SQLite；凭证只经环境变量注入",
+      "sessions 在 SQLite，profiles / skills / MEMORY.md 在 .oryxos/ 文件系统，可直接编辑、git 跟踪"
+    ] }
+  ]
+}

@@ -1,0 +1,277 @@
+/* ─── Brand tokens ────────────────────────────────────────────── */
+:root {
+  --vp-nav-bg-color: rgba(0, 0, 0, 0.92);
+  --vp-local-nav-bg-color: #000000;
+  --vp-sidebar-bg-color: #000000;
+  --vp-c-brand-1: #c2550a;
+  --vp-c-brand-2: #ea6a00;
+  --vp-c-brand-3: #f97316;
+  --vp-c-brand-soft: rgba(249, 115, 22, 0.12);
+
+  --vp-font-family-base: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+
+  --vp-c-bg: #000000;
+  --vp-c-bg-soft: #111111;
+  --vp-c-bg-mute: #1a1a1a;
+
+  --vp-c-text-1: #f5f5f5;
+  --vp-c-text-2: #a3a3a3;
+  --vp-c-text-3: #666666;
+
+  --vp-c-divider: #222222;
+  --vp-c-border: #222222;
+}
+
+/* ─── Global black background ─────────────────────────────────── */
+html, body, #app {
+  background: #000000 !important;
+}
+
+/* ─── Hide dark mode toggle ──────────────────────────────────── */
+.VPNavBarAppearance,
+.VPSwitchAppearance {
+  display: none !important;
+}
+
+/* ─── Nav ─────────────────────────────────────────────────────── */
+.VPNav {
+  border-bottom: 1px solid #1e1e1e !important;
+  background: rgba(0, 0, 0, 0.92) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.VPNavBar {
+  background: transparent !important;
+}
+
+.VPNavBarTitle .logo {
+  height: 36px;
+  width: auto;
+}
+
+.VPNavBarTitle .title {
+  color: #f5f5f5 !important;
+}
+
+.VPNavBarTitle .title:hover {
+  opacity: 0.8;
+}
+
+.VPNavBarMenu .VPNavBarMenuLink {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #a3a3a3 !important;
+  transition: color 0.15s;
+}
+
+.VPNavBarMenu .VPNavBarMenuLink:hover {
+  color: #f97316 !important;
+}
+
+/* ─── Nav dropdown ────────────────────────────────────────────── */
+.VPFlyout .menu,
+.VPFlyout .panel,
+.VPNavBarMenuGroup .panel,
+.VPNavBarMenuGroup .menu,
+.VPMenu,
+.VPFlyout > .menu,
+.VPNavBarMenuGroup > .menu {
+  background: #111111 !important;
+  border: 1px solid #222222 !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6) !important;
+}
+
+.VPMenu .item .VPMenuLink,
+.VPMenu .item .link,
+.VPFlyout .VPMenuLink,
+.VPFlyout .link {
+  color: #f5f5f5 !important;
+}
+
+.VPMenu .item .VPMenuLink:hover,
+.VPMenu .item .link:hover,
+.VPFlyout .VPMenuLink:hover,
+.VPFlyout .link:hover {
+  background: #1a1a1a !important;
+  color: #f97316 !important;
+}
+
+/* ─── Content page ──────────── */
+.VPDoc {
+  background: #000000 !important;
+}
+
+.VPDoc .container {
+  max-width: 1200px !important;
+}
+
+.VPDoc .content {
+  max-width: 1000px !important;
+}
+
+.VPDoc h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: #f5f5f5;
+  margin-bottom: 0.5rem;
+}
+
+.VPDoc h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  border-top: 1px solid #222222;
+  padding-top: 2rem;
+  margin-top: 2rem;
+  color: #f5f5f5;
+}
+
+.VPDoc h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f5f5f5;
+}
+
+.VPDoc p {
+  line-height: 1.75;
+  color: #a3a3a3;
+}
+
+.VPDoc a {
+  color: #f97316 !important;
+}
+
+.VPDoc a:hover {
+  color: #ea6a00 !important;
+}
+
+/* Code blocks */
+.vp-code-group,
+div[class*='language-'] {
+  border-radius: 8px !important;
+  border: 1px solid #222222 !important;
+  background: #0d0d0d !important;
+}
+
+div[class*='language-'] pre,
+div[class*='language-'] pre code {
+  background: #0d0d0d !important;
+}
+
+div[class*='language-'] code,
+div[class*='language-'] code span {
+  font-size: 0.82rem;
+  color: #d4d4d4 !important;
+}
+
+div[class*='language-'] > span.lang {
+  color: #555555 !important;
+}
+
+div[class*='language-'] > button.copy {
+  color: #555555 !important;
+}
+
+/* Inline code */
+:not(pre) > code {
+  background: #111111 !important;
+  border: 1px solid #222222 !important;
+  border-radius: 4px !important;
+  padding: 0.1em 0.35em !important;
+  font-size: 0.85em !important;
+  color: #f97316 !important;
+}
+
+/* Tables */
+.vp-doc table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.vp-doc table th {
+  background: #111111;
+  font-weight: 600;
+  color: #f5f5f5;
+  text-align: left;
+  padding: 0.5rem 1rem;
+  border-bottom: 2px solid #222222;
+}
+
+.vp-doc table td {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #1a1a1a;
+  color: #a3a3a3;
+}
+
+.vp-doc table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ─── Sidebar ─────────────────────────────────────────────────── */
+.VPSidebarItem.level-0:first-child {
+  padding-top: 24px !important;
+}
+
+.VPSidebar {
+  background: #000000 !important;
+  border-right: 1px solid #1a1a1a !important;
+}
+
+.VPSidebarItem .item .link {
+  color: #a3a3a3 !important;
+}
+
+.VPSidebarItem .item .link:hover {
+  color: #f97316 !important;
+}
+
+.VPSidebarItem .item .link.is-active,
+.VPSidebarItem .item .link.is-active:hover {
+  color: #f97316 !important;
+  font-weight: 600 !important;
+}
+
+.VPSidebarItem .item .link.is-active .text {
+  color: #f97316 !important;
+  font-weight: 600 !important;
+}
+
+.VPSidebarItem.is-active > .item > .link,
+.VPSidebarItem.is-active > .item > .link:hover {
+  background: rgba(249, 115, 22, 0.1) !important;
+  border-radius: 6px !important;
+  color: #f97316 !important;
+  font-weight: 600 !important;
+}
+
+.VPSidebarItem.level-1.is-active > .item > .indicator {
+  background: #f97316 !important;
+}
+
+/* ─── Home page layout overrides ─────────────────────────────── */
+.VPHome {
+  padding-bottom: 0 !important;
+  padding-top: 0 !important;
+  background: #000000 !important;
+}
+
+.VPPage,
+.VPContent,
+.VPLayout {
+  background: #000000 !important;
+  padding-bottom: 0 !important;
+}
+
+/* Hide default VitePress home hero */
+.VPHero {
+  display: none;
+}
+
+/* Hide VitePress default footer — custom footer in Home.vue */
+.VPFooter {
+  display: none !important;
+}

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 60" width="256" height="60">
+  <!-- ── Mark: two stylized oryx horns ── -->
+  <!-- Left horn -->
+  <path d="M 13,3 C 12,3 6,28 5,56 L 17,56 C 18,28 14,3 13,3 Z" fill="#f97316"/>
+  <!-- Right horn -->
+  <path d="M 31,3 C 30,3 36,28 39,56 L 27,56 C 26,28 32,3 31,3 Z" fill="#ea6a00"/>
+  <!-- Base connector -->
+  <rect x="5" y="52" width="34" height="5" rx="2.5" fill="#f97316" opacity="0.3"/>
+
+  <!-- ── Wordmark ── -->
+  <text x="52" y="46"
+        font-family="'Arial Black','Helvetica Neue',Arial,sans-serif"
+        font-size="43" font-weight="900" letter-spacing="-1.5"
+        fill="#f97316">Oryx<tspan fill="#ea6a00">OS</tspan></text>
+</svg>

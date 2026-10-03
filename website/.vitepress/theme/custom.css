@@ -1,61 +1,49 @@
-/* ─── Brand tokens ────────────────────────────────────────────── */
-:root {
-  --vp-nav-bg-color: rgba(0, 0, 0, 0.92);
-  --vp-local-nav-bg-color: #000000;
+/* ─── OryxOS theme: pure black, forced dark ──────────────────── */
+:root,
+.dark {
+  --vp-nav-bg-color: rgba(0, 0, 0, 0.88);
+  --vp-local-nav-bg-color: rgba(0, 0, 0, 0.88);
   --vp-sidebar-bg-color: #000000;
-  --vp-c-brand-1: #c2550a;
-  --vp-c-brand-2: #ea6a00;
-  --vp-c-brand-3: #f97316;
-  --vp-c-brand-soft: rgba(249, 115, 22, 0.12);
 
-  --vp-font-family-base: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --vp-font-family-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  --vp-c-brand-1: #f5f5f5;
+  --vp-c-brand-2: #d4d4d4;
+  --vp-c-brand-3: #a3a3a3;
+  --vp-c-brand-soft: rgba(255, 255, 255, 0.08);
+
+  --vp-font-family-base: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
   --vp-c-bg: #000000;
-  --vp-c-bg-soft: #111111;
-  --vp-c-bg-mute: #1a1a1a;
+  --vp-c-bg-soft: #0d0d0d;
+  --vp-c-bg-mute: #111111;
 
   --vp-c-text-1: #f5f5f5;
   --vp-c-text-2: #a3a3a3;
-  --vp-c-text-3: #666666;
+  --vp-c-text-3: #737373;
 
-  --vp-c-divider: #222222;
-  --vp-c-border: #222222;
+  --vp-c-divider: #262626;
+  --vp-c-border: #262626;
+
+  --vp-nav-logo-height: 56px;
 }
 
-/* ─── Global black background ─────────────────────────────────── */
-html, body, #app {
-  background: #000000 !important;
-}
-
-/* ─── Hide dark mode toggle ──────────────────────────────────── */
+/* ─── hide the appearance toggle (always dark) ───────────────── */
 .VPNavBarAppearance,
 .VPSwitchAppearance {
   display: none !important;
 }
 
-/* ─── Nav ─────────────────────────────────────────────────────── */
+/* ─── nav ────────────────────────────────────────────────────── */
 .VPNav {
-  border-bottom: 1px solid #1e1e1e !important;
-  background: rgba(0, 0, 0, 0.92) !important;
+  border-bottom: 1px solid #262626 !important;
+  background: rgba(0, 0, 0, 0.88) !important;
   backdrop-filter: blur(12px) !important;
 }
 
-.VPNavBar {
-  background: transparent !important;
-}
-
 .VPNavBarTitle .logo {
-  height: 36px;
+  height: var(--vp-nav-logo-height);
   width: auto;
-}
-
-.VPNavBarTitle .title {
-  color: #f5f5f5 !important;
-}
-
-.VPNavBarTitle .title:hover {
-  opacity: 0.8;
 }
 
 .VPNavBarMenu .VPNavBarMenuLink {
@@ -66,42 +54,10 @@ html, body, #app {
 }
 
 .VPNavBarMenu .VPNavBarMenuLink:hover {
-  color: #f97316 !important;
-}
-
-/* ─── Nav dropdown ────────────────────────────────────────────── */
-.VPFlyout .menu,
-.VPFlyout .panel,
-.VPNavBarMenuGroup .panel,
-.VPNavBarMenuGroup .menu,
-.VPMenu,
-.VPFlyout > .menu,
-.VPNavBarMenuGroup > .menu {
-  background: #111111 !important;
-  border: 1px solid #222222 !important;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6) !important;
-}
-
-.VPMenu .item .VPMenuLink,
-.VPMenu .item .link,
-.VPFlyout .VPMenuLink,
-.VPFlyout .link {
   color: #f5f5f5 !important;
 }
 
-.VPMenu .item .VPMenuLink:hover,
-.VPMenu .item .link:hover,
-.VPFlyout .VPMenuLink:hover,
-.VPFlyout .link:hover {
-  background: #1a1a1a !important;
-  color: #f97316 !important;
-}
-
-/* ─── Content page ──────────── */
-.VPDoc {
-  background: #000000 !important;
-}
-
+/* ─── doc pages ──────────────────────────────────────────────── */
 .VPDoc .container {
   max-width: 1200px !important;
 }
@@ -123,15 +79,9 @@ html, body, #app {
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  border-top: 1px solid #222222;
+  border-top: 1px solid #262626;
   padding-top: 2rem;
   margin-top: 2rem;
-  color: #f5f5f5;
-}
-
-.VPDoc h3 {
-  font-size: 1rem;
-  font-weight: 600;
   color: #f5f5f5;
 }
 
@@ -140,19 +90,11 @@ html, body, #app {
   color: #a3a3a3;
 }
 
-.VPDoc a {
-  color: #f97316 !important;
-}
-
-.VPDoc a:hover {
-  color: #ea6a00 !important;
-}
-
-/* Code blocks */
+/* code blocks — dark background, light text */
 .vp-code-group,
 div[class*='language-'] {
   border-radius: 8px !important;
-  border: 1px solid #222222 !important;
+  border: 1px solid #262626 !important;
   background: #0d0d0d !important;
 }
 
@@ -168,24 +110,23 @@ div[class*='language-'] code span {
 }
 
 div[class*='language-'] > span.lang {
-  color: #555555 !important;
+  color: #737373 !important;
 }
 
 div[class*='language-'] > button.copy {
-  color: #555555 !important;
+  color: #737373 !important;
 }
 
-/* Inline code */
 :not(pre) > code {
   background: #111111 !important;
-  border: 1px solid #222222 !important;
+  border: 1px solid #262626 !important;
   border-radius: 4px !important;
   padding: 0.1em 0.35em !important;
   font-size: 0.85em !important;
-  color: #f97316 !important;
+  color: #f5f5f5 !important;
 }
 
-/* Tables */
+/* tables */
 .vp-doc table {
   border-collapse: collapse;
   width: 100%;
@@ -193,17 +134,17 @@ div[class*='language-'] > button.copy {
 }
 
 .vp-doc table th {
-  background: #111111;
+  background: #0d0d0d;
   font-weight: 600;
   color: #f5f5f5;
   text-align: left;
   padding: 0.5rem 1rem;
-  border-bottom: 2px solid #222222;
+  border-bottom: 2px solid #262626;
 }
 
 .vp-doc table td {
   padding: 0.5rem 1rem;
-  border-bottom: 1px solid #1a1a1a;
+  border-bottom: 1px solid #262626;
   color: #a3a3a3;
 }
 
@@ -211,67 +152,70 @@ div[class*='language-'] > button.copy {
   border-bottom: none;
 }
 
-/* ─── Sidebar ─────────────────────────────────────────────────── */
+/* ─── dropdown menus ─────────────────────────────────────────── */
+.VPFlyout .menu,
+.VPFlyout .panel,
+.VPNavBarMenuGroup .panel,
+.VPNavBarMenuGroup .menu,
+.VPMenu {
+  background: #0d0d0d !important;
+  border: 1px solid #262626 !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6) !important;
+}
+
+.VPMenu .item .VPMenuLink,
+.VPMenu .item .link {
+  color: #f5f5f5 !important;
+}
+
+.VPMenu .item .VPMenuLink:hover,
+.VPMenu .item .link:hover {
+  background: #111111 !important;
+}
+
+/* ─── sidebar ────────────────────────────────────────────────── */
+.VPSidebar {
+  background: #000000 !important;
+  border-right: 1px solid #262626 !important;
+}
+
 .VPSidebarItem.level-0:first-child {
   padding-top: 24px !important;
 }
 
-.VPSidebar {
-  background: #000000 !important;
-  border-right: 1px solid #1a1a1a !important;
-}
-
-.VPSidebarItem .item .link {
-  color: #a3a3a3 !important;
-}
-
-.VPSidebarItem .item .link:hover {
-  color: #f97316 !important;
-}
-
 .VPSidebarItem .item .link.is-active,
 .VPSidebarItem .item .link.is-active:hover {
-  color: #f97316 !important;
+  color: #f5f5f5 !important;
   font-weight: 600 !important;
 }
 
 .VPSidebarItem .item .link.is-active .text {
-  color: #f97316 !important;
+  color: #f5f5f5 !important;
   font-weight: 600 !important;
 }
 
 .VPSidebarItem.is-active > .item > .link,
 .VPSidebarItem.is-active > .item > .link:hover {
-  background: rgba(249, 115, 22, 0.1) !important;
+  background: #111111 !important;
   border-radius: 6px !important;
-  color: #f97316 !important;
-  font-weight: 600 !important;
 }
 
 .VPSidebarItem.level-1.is-active > .item > .indicator {
-  background: #f97316 !important;
+  background: #f5f5f5 !important;
 }
 
-/* ─── Home page layout overrides ─────────────────────────────── */
+/* ─── home page: the custom Home component owns everything ───── */
 .VPHome {
-  padding-bottom: 0 !important;
   padding-top: 0 !important;
-  background: #000000 !important;
+  padding-bottom: 0 !important;
 }
 
 .VPPage,
-.VPContent,
-.VPLayout {
-  background: #000000 !important;
+.VPContent {
   padding-bottom: 0 !important;
 }
 
-/* Hide default VitePress home hero */
-.VPHero {
-  display: none;
-}
-
-/* Hide VitePress default footer — custom footer in Home.vue */
+.VPHero,
 .VPFooter {
   display: none !important;
 }

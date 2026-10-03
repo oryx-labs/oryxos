@@ -1,67 +1,75 @@
 # What is OryxOS
 
-***A Java-native Agent OS that runs and manages a fleet of business agents on your own infrastructure — shared channels, LLM routing, memory, tools, and auditable execution, all in one deployable binary.***
+**A Distributed AI Agent OS — the foundation for running all kinds of agents.** OryxOS is an open-source Agent OS built in Java: one config file defines one agent; one foundation runs a fleet. Deploy privately, data never leaves your domain. Native integration with the MCP and A2A open protocols covers the five core capabilities: model access, reasoning loop, memory, tool calling, and external services. It lets a fleet of agents run and collaborate as reliably as a fleet of processes on an operating system.
 
-![OryxOS Architecture](/images/architecture.svg)
+## Vision
 
-## What it is
+To become the runtime foundation of the agent era — where every business agent, cross-team agent, and cross-node agent in an enterprise runs, is managed, and collaborates on the same foundation. The long-term goal is to enter the Apache Software Foundation as a top-level project.
 
-OryxOS is a Spring Boot 3.x application that runs on JDK 21 as a unified Agent platform for enterprise deployments. You write a YAML Profile to define an Agent — its identity, which LLM it talks to, which tools it can use, which memory it shares. OryxOS handles everything else: the reasoning loop, context assembly, tool execution, sandbox enforcement, session persistence, and REST API exposure. Multiple Agents run inside a single instance simultaneously. Business systems integrate via HTTP. Data stays on your own infrastructure.
+## Why OryxOS
 
-## Agent OS vs Agent Runtime
+Agents are already proven by mature open-source projects, and multi-agent orchestration frameworks flourish. But most existing solutions are built on Python and cloud-native stacks, shipped as development frameworks or hosted platforms. For enterprises where Java is the backend standard and private deployment is a compliance requirement, those solutions either mismatch the language stack, lock into a specific cloud, or remain experimental prototypes. In the Java ecosystem, a native, privately deployable, out-of-the-box agent foundation still has no mature open-source implementation.
 
-These terms are frequently conflated. They describe fundamentally different scopes.
+The deeper judgment: **the bottleneck for agents working reliably in production is usually not the model — it's the agent's runtime environment.** Whether an agent can actually do work depends on whether it has a reliable foundation: the right context, controlled tools, isolated and auditable invocations, and message delivery that neither drops nor duplicates across nodes. OryxOS is not another agent — it is the foundation that lets a fleet of agents run and collaborate reliably.
 
-| | Agent Runtime | Agent OS |
-| --- | --- | --- |
-| Scope | Single agent | Fleet of agents |
-| Manages | Reasoning loop, context, tool execution | Lifecycle, channels, memory, governance |
-| Entry point | Library or framework call | Deployable binary with REST API |
-| Multi-agent | Not in scope | First-class: multiple Profiles, shared capabilities |
-| Analogy | Process execution environment | The OS layer above processes |
+## Agent Runtime vs. Agent OS
 
-A runtime gets one agent running. An Agent OS gets a fleet of agents running and managed.
+An agent runtime is the execution kernel that runs a single agent: model calls, tool execution, context management, loop control. An agent OS sits above the runtime and manages a fleet of agents: lifecycle, unified external channels and internal access, shared memory, multi-tenancy and governance, and cross-node collaboration in distributed form.
 
-OryxOS contains a runtime (the self-implemented ReAct loop) but is designed as the OS layer above it: unified channel ingestion, shared memory, centralized tool registry, auditable invocation records, and REST API exposure that any language can call.
+By analogy with operating systems: the runtime is like the execution environment of a single process; the agent OS is the layer that manages a fleet of processes, schedules resources, and provides shared services. In one sentence: the runtime makes one agent run; the agent OS makes a fleet of agents run and be managed. **OryxOS is the latter.**
 
 ## Five Core Capabilities
 
-### LLM Routing
+| Capability | Description |
+| --- | --- |
+| **LLM Access** | A provider abstraction unifies mainstream models. Agents are vendor-agnostic, switchable at runtime, no lock-in; local inference supported; multiple providers coexist via explicit mapping |
+| **ReAct Loop** | The agent's reasoning engine, self-implemented — no external framework. The LLM decides whether and which tool to call; OryxOS executes and feeds results back until a final response or the iteration limit. Loop behavior fully controllable |
+| **Memory** | Agents keep state across conversations. Two layers: session memory + long-term memory. Long-term memory is file-based with keyword retrieval; the interface reserves room for a vector-search upgrade |
+| **Tool System** | Built-in file, shell, HTTP tools. Three extension tiers by rising effort: zero-code SKILL.md reusing existing MCP servers, light-code custom MCP servers, heavy-code native methods |
+| **External Services** | Every capability exposed via REST API — business systems integrate over HTTP, in any language |
 
-Provider abstraction over mainstream models: DeepSeek, Qwen, Kimi, Zhipu, Hunyuan, Doubao, Anthropic, OpenAI, and any OpenAI-protocol-compatible endpoint. Agents are provider-agnostic — the Profile declares which provider to use; the agent never knows which vendor is behind the call. Switch providers at config time with no code change. Multiple providers co-exist via explicit name-to-`ChatModel` mapping, not bean scanning. Local inference via Ollama or vLLM is supported.
+## Key Features
 
-### ReAct Loop
+- 🤖 **Config as Agent** — one Profile defines one agent, no code; multiple agents coexist on one instance
+- ☕ **Java Native** — Java / JDK 21, single executable JAR, fits your existing Java ops toolchain
+- 🔒 **Private & Controlled** — runs on your own K8s, VMs, or bare metal; data never leaves the domain; no cloud lock-in
+- 🛡️ **Security Isolation** — every tool call passes file/command/network whitelist checks, enforced sandbox isolation, credentials via enterprise key systems never on disk, full-chain audit
+- 🧠 **Self-implemented ReAct** — the core reasoning loop is hand-written, not an external agent framework; fully controllable
+- 🔌 **Open Standards** — MCP for tools, A2A for agent collaboration, SKILL.md for skills; interoperate, don't reinvent protocols
+- 🧩 **Three-tier Tool Extension** — from zero-code SKILL.md to custom MCP servers to native methods
+- 💾 **Cross-conversation Memory** — session + long-term memory so agents remember context
+- 🌐 **Stateless & Scalable** — stateless instances with externalized state, architecting for distribution from day one
 
-Self-implemented reasoning engine — no external Agent framework wrapping. Each iteration: assemble prompt (system prompt + bootstrap context + long-term memory + conversation history + available tools), call LLM, inspect response for tool calls, execute tools, append results, repeat. Loop continues until the LLM produces a final response or the configured iteration limit is reached. The entire loop is a few dozen lines of Java and is fully inspectable. Spring AI is used only for LLM protocol translation — its automatic tool execution is explicitly disabled.
+## Architecture at a Glance
 
-### Memory
+![OryxOS system architecture](/images/architecture.svg)
 
-Two-layer memory in the core phase. Session memory holds the current conversation history, persisted to SQLite and recoverable across restarts. Long-term memory lives in `MEMORY.md` — a Markdown file agents write to via `save_memory` and search via `recall_memory` (keyword matching). The full file is injected into every system prompt so agents have persistent context across conversations. Files over 4,000 characters are truncated to stay within context limits. Vector retrieval is the planned upgrade path for the extension phase.
+The **ReAct loop** is the engine — self-implemented, not delegated to a framework:
 
-### Tool System
+![OryxOS ReAct loop](/images/react-loop.svg)
 
-Built-in tools cover the baseline: `read_file`, `write_file`, `list_dir`, `shell`, `http_get`, `http_post`, `save_memory`, `recall_memory`. All execute with sandbox enforcement — path allowlist for files, command allowlist for shell, domain allowlist for HTTP.
+## Roadmap
 
-Extension follows three tiers, ordered by effort:
+Our philosophy: **slow is fast — restrained and focused.** Nail the single-node runtime kernel first, make running and managing a fleet of agents on one node genuinely usable, then grow distributed capabilities on top of it.
 
-| Tier | Effort | Approach |
-| --- | --- | --- |
-| Zero-code | Lowest | Write a `SKILL.md` describing the task, reference existing community MCP servers in Profile |
-| Light-code | Medium | Write an MCP server in any language; OryxOS connects as MCP Client |
-| Heavy-code | Highest | Annotate a Spring Bean with `@Tool`; registers directly in-process |
-
-All tools — built-in, MCP-backed, and native — are registered through `ToolRegistry` and expose a uniform `OryxTool` interface to the ReAct loop.
-
-### REST API
-
-Ten REST endpoints under `/api/v1` expose all capabilities to external systems: session lifecycle management, stateless agent invocation, profile listing, memory inspection, tool inventory, health check, and runtime info. Any language that can send HTTP requests can integrate. No SDK required for the core phase. The Web Service is the integration boundary — business systems plug in here, not at the library level.
+- **Phase 1 (current) — Single-node runtime kernel**: all five core capabilities working; single-node agent fleet usable
+- **Phase 2 (planned) — Distributed foundation**: stateless nodes, externalized state, multi-replica deployment for scale and high availability
+- **Phase 3 (vision) — Cross-node agent collaboration**: agent communication foundation, A2A integration, cross-node discovery, delegation, reliable async coordination
+- **Horizontal capabilities (along the way)**: multi-tenancy, SSO, full audit, tool policies, observability, web console
 
 ## Design Principles
 
-- **Platform before Agent** — the most important deliverable is the environment that lets any agent run reliably, not any particular agent
-- **Self-implement the core, reuse the plumbing** — the reasoning loop is written by hand; LLM protocol adapters delegate to Spring AI Alibaba
-- **Config = Agent** — an Agent is defined entirely by a YAML Profile, not by code
-- **Open standards** — MCP for tools, A2A for agent-to-agent collaboration, `SKILL.md` files for skills
-- **Stateless instances, externalized state** — the prerequisite for eventually going distributed without an architectural rewrite
-- **Security as foundation, not afterthought** — tool source control, least privilege, mandatory sandbox allowlists, credentials via environment variables, full audit trail written to SQLite from day one
-- **Phased and disciplined** — build the minimal complete runtime kernel first; governance and distributed infrastructure come later, proven by real usage data
+- **Foundation over agents** — the most important deliverable is not a powerful agent, but an environment where any agent runs reliably
+- **Self-implemented core first** — the reasoning loop is hand-written; model protocol adaptation reuses mature libraries
+- **Config is the agent** — an agent is defined by one config file, not by code
+- **Open standards** — MCP for tools, A2A for collaboration, open formats for skills
+- **Stateless instances, externalized state** — the prerequisite for a smooth path from single node to distributed
+- **Security is the foundation, not a patch** — controlled tool sources, least privilege, enforced sandbox, credentials never on disk, full-chain audit
+- **Restrained, phased delivery** — build the minimal complete kernel; governance and heavy distributed infrastructure only after real usage proves them necessary
+
+## Project Info
+
+- **Language**: Java (JDK 21)
+- **License**: Apache 2.0
+- **Community**: oryx-labs
+- **Long-term goal**: enter the Apache Software Foundation as a top-level project

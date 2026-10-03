@@ -30,3 +30,7 @@ target/
 website/.vitepress/dist/
 website/.vitepress/cache/
 website/node_modules/
+
+# macOS junk & runtime artifacts
+.DS_Store
+oryxos.db

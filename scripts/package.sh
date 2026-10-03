@@ -5,8 +5,16 @@
 set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-REMOTE_HOST="root@117.72.92.117"
-REMOTE_DIR="/root/oryxos"
+# Override via environment variables, e.g.:
+#   ORYXOS_REMOTE_HOST=root@1.2.3.4 ORYXOS_REMOTE_DIR=/root/oryxos ./scripts/package.sh
+#   ORYXOS_SSH_KEY=~/.ssh/id_ed25519 ./scripts/package.sh   # use a specific key
+REMOTE_HOST="${ORYXOS_REMOTE_HOST:-root@117.72.92.117}"
+REMOTE_DIR="${ORYXOS_REMOTE_DIR:-/root/oryxos}"
+
+# Optional: dedicated SSH key / port
+SSH_OPTS=(-o ConnectTimeout=15)
+[[ -n "${ORYXOS_SSH_KEY:-}" ]] && SSH_OPTS+=(-i "${ORYXOS_SSH_KEY}" -o IdentitiesOnly=yes)
+[[ -n "${ORYXOS_SSH_PORT:-}" ]] && SSH_OPTS+=(-p "${ORYXOS_SSH_PORT}")
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -140,7 +148,7 @@ fi
 ARCHIVE_NAME="$(basename "$ARCHIVE")"
 if [[ "${SKIP_ARCHIVE}" -eq 0 ]]; then
   info "Uploading to ${REMOTE_HOST}:${REMOTE_DIR} ..."
-  scp "$ARCHIVE" "${REMOTE_HOST}:${REMOTE_DIR}/"
+  scp "${SSH_OPTS[@]}" "$ARCHIVE" "${REMOTE_HOST}:${REMOTE_DIR}/"
   info "Upload complete: ${REMOTE_HOST}:${REMOTE_DIR}/${ARCHIVE_NAME}"
 fi
 
@@ -160,7 +168,7 @@ set -e
 
 # ── Remote: pull → extract → commit → push ────────────────────────────────────
 info "Syncing remote ..."
-ssh "${REMOTE_HOST}" \
+ssh "${SSH_OPTS[@]}" "${REMOTE_HOST}" \
   REMOTE_DIR="${REMOTE_DIR}" \
   LOCAL_BRANCH="${LOCAL_BRANCH}" \
   ARCHIVE_NAME="${ARCHIVE_NAME}" \
