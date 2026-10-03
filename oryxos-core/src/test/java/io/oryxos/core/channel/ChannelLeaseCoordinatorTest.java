@@ -3,7 +3,11 @@ package io.oryxos.core.channel;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.oryxos.core.cluster.ClusterProperties;
@@ -134,6 +138,43 @@ class ChannelLeaseCoordinatorTest {
 
     assertThat(connected.get()).isTrue();
     assertThat(stops.get()).as("没有任何处置动作时不该调用 stop").isZero();
+  }
+
+  @Test
+  @DisplayName("建连抛异常：必须释放属主，否则之后既不能重试也不能被接管")
+  void failedStartReleasesTheLease() {
+    CoordinationStore store = grantingStore();
+    ChannelLeaseCoordinator coordinator =
+        new ChannelLeaseCoordinator(store, new ClusterProperties(), idleScheduler());
+    AtomicBoolean connected = new AtomicBoolean(false);
+
+    // manage 同步跑第一次 tick；startConnection 抛异常会被 loop 的 catch 吞掉。
+    coordinator.manage(
+        "wecom",
+        () -> {
+          throw new IllegalStateException("建连超时");
+        },
+        () -> {},
+        connected::get);
+
+    // 不释放的话：下一轮 tryAcquire 会撞上自己那行，而它没过期 → takeExpired 返回 0
+    // → 既不重试也不再续租，standby 也接管不了，直到 TTL 到期。
+    verify(store, times(1)).releaseChannel(eq("wecom"), anyString());
+    assertThat(connected.get()).isFalse();
+  }
+
+  @Test
+  @DisplayName("建连成功时不释放属主")
+  void successfulStartKeepsTheLease() {
+    CoordinationStore store = grantingStore();
+    ChannelLeaseCoordinator coordinator =
+        new ChannelLeaseCoordinator(store, new ClusterProperties(), idleScheduler());
+    AtomicBoolean connected = new AtomicBoolean(false);
+
+    coordinator.manage("wecom", () -> connected.set(true), () -> {}, connected::get);
+
+    verify(store, never()).releaseChannel(anyString(), anyString());
+    assertThat(connected.get()).isTrue();
   }
 
   private static void awaitQuietly(CountDownLatch latch) {
