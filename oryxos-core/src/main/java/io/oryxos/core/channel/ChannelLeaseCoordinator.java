@@ -95,10 +95,23 @@ public class ChannelLeaseCoordinator {
     if (held && !Boolean.TRUE.equals(isConnected.get())) {
       LOG.info("获得渠道连接属主，建立连接: channel={}", sanitize(channelName));
       metrics.recordLeaseAcquired("channel");
-      startConnection.run();
-      // 建连可能长时间阻塞（企微最坏约 20s）。跑完再确认这一代还算不算数：
-      // 不算数说明期间渠道已被处置，这次连接不该存在 —— 用同一个 stop 回调回滚。
-      if (!isCurrent(channelName, generation)) {
+      boolean started;
+      try {
+        startConnection.run();
+        started = true;
+      } catch (RuntimeException e) {
+        // 建连失败但租约已经拿到手。若就这么放着：下一轮 tryAcquire 会撞上自己那行，
+        // 而它没过期 → takeExpired 返回 0 → 既不重试也不再续租，standby 同样接管不了，
+        // 直到 TTL 到期；到期后谁抢到又是随机的，抢到者若再失败，接管时间就没有上界。
+        // 释放租约让下一轮（或 standby）能立刻重来，重试才有可能收敛。
+        started = false;
+        LOG.warn("建连失败，释放属主以便下一轮重试: channel={}", sanitize(channelName), e);
+        store.releaseChannel(channelName, owner);
+        throw e;
+      }
+      if (started && !isCurrent(channelName, generation)) {
+        // 建连可能长时间阻塞（企微最坏约 20s）。跑完再确认这一代还算不算数：
+        // 不算数说明期间渠道已被处置，这次连接不该存在 —— 用同一个 stop 回调回滚。
         LOG.warn("建连期间渠道已被处置，回滚这次连接: channel={}", sanitize(channelName));
         stopConnection.run();
       }
