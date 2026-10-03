@@ -27,6 +27,9 @@ public class ChannelLeaseCoordinator {
   private final TaskScheduler scheduler;
   private final Map<String, ScheduledFuture<?>> loops = new ConcurrentHashMap<>();
 
+  /** 每个渠道当前的世代号：manage 递增，unmanage 也递增（让在跑的那一代立刻过期）。 */
+  private final Map<String, Long> generations = new ConcurrentHashMap<>();
+
   private volatile io.oryxos.core.metrics.MetricsRecorder metrics =
       io.oryxos.core.metrics.MetricsRecorder.NOOP;
 
@@ -58,10 +61,11 @@ public class ChannelLeaseCoordinator {
       Runnable stopConnection,
       Supplier<Boolean> isConnected) {
     Duration interval = properties.effectiveHeartbeatInterval();
+    long generation = generations.merge(channelName, 1L, Long::sum);
     Runnable loop =
         () -> {
           try {
-            tick(channelName, startConnection, stopConnection, isConnected);
+            tick(channelName, startConnection, stopConnection, isConnected, generation);
           } catch (RuntimeException e) {
             LOG.warn("渠道属主循环异常（下一周期重试）: channel={}", sanitize(channelName), e);
           }
@@ -76,7 +80,12 @@ public class ChannelLeaseCoordinator {
       String channelName,
       Runnable startConnection,
       Runnable stopConnection,
-      Supplier<Boolean> isConnected) {
+      Supplier<Boolean> isConnected,
+      long generation) {
+    if (!isCurrent(channelName, generation)) {
+      // 这一代已被 unmanage 或被新的 manage 取代，不再产生任何副作用。
+      return;
+    }
     String owner = properties.owner();
     Duration ttl = properties.getLeaseTtl();
     boolean held =
@@ -87,6 +96,12 @@ public class ChannelLeaseCoordinator {
       LOG.info("获得渠道连接属主，建立连接: channel={}", sanitize(channelName));
       metrics.recordLeaseAcquired("channel");
       startConnection.run();
+      // 建连可能长时间阻塞（企微最坏约 20s）。跑完再确认这一代还算不算数：
+      // 不算数说明期间渠道已被处置，这次连接不该存在 —— 用同一个 stop 回调回滚。
+      if (!isCurrent(channelName, generation)) {
+        LOG.warn("建连期间渠道已被处置，回滚这次连接: channel={}", sanitize(channelName));
+        stopConnection.run();
+      }
     } else if (!held && Boolean.TRUE.equals(isConnected.get())) {
       LOG.warn("渠道连接属主已失去（fencing），停止连接: channel={}", sanitize(channelName));
       metrics.recordFenceConflict("channel");
@@ -94,8 +109,16 @@ public class ChannelLeaseCoordinator {
     }
   }
 
-  /** 停止管理（渠道下线/删除时）：撤循环并释放属主。 */
+  /** 这一代是否仍是该渠道的当前世代。 */
+  private boolean isCurrent(String channelName, long generation) {
+    return generations.getOrDefault(channelName, 0L) == generation;
+  }
+
+  /** 停止管理（渠道下线/删除时）：先让在跑的那一代失效，再撤循环并释放属主。 */
   public void unmanage(String channelName) {
+    // 先换代：此刻可能有一次 startConnection 正阻塞在建连上，
+    // 它返回时会发现自己那一代已经不算数，从而回滚这次连接。
+    generations.merge(channelName, 1L, Long::sum);
     ScheduledFuture<?> loop = loops.remove(channelName);
     if (loop != null) {
       loop.cancel(false);
