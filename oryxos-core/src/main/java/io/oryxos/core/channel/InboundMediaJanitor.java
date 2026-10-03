@@ -35,6 +35,9 @@ public final class InboundMediaJanitor {
   private final long maxBytes;
   private final AtomicLong lastSweepMs = new AtomicLong(0L);
 
+  /** 串行化 sweep 本身：并发的按需清理必须排队，否则后来者会读到扫描中途的大小。 */
+  private final Object sweepLock = new Object();
+
   public InboundMediaJanitor() {
     this(resolveTtl(), resolveMaxBytes());
   }
@@ -61,10 +64,22 @@ public final class InboundMediaJanitor {
     if (!lastSweepMs.compareAndSet(prev, now)) {
       return;
     }
-    try {
-      sweep(mediaRoot, Instant.ofEpochMilli(now));
-    } catch (RuntimeException e) {
-      LOG.warn("入站媒体清理失败: {}", InboundMediaPaths.sanitizeLog(e.getMessage()));
+    sweepSerialized(mediaRoot);
+  }
+
+  /**
+   * 串行化的一次清理：并发调用时后者等前者扫完再返回。
+   *
+   * <p>等待是必要的——调用方在扫完之后立刻读 {@code sizeOf}，若与前一次清理并发， 读到的就是扫描中途的大小，据此抛出的「超过配额」同样是谎报。锁只覆盖 sweep 本身，
+   * 不覆盖调用方随后的 sizeOf：那次读取要么在本次清理之后（本线程），要么在他人清理之后 （等锁时已发生），两种都不会读到中间态。
+   */
+  private void sweepSerialized(Path mediaRoot) {
+    synchronized (sweepLock) {
+      try {
+        sweep(mediaRoot, Instant.now());
+      } catch (RuntimeException e) {
+        LOG.warn("入站媒体清理失败: {}", InboundMediaPaths.sanitizeLog(e.getMessage()));
+      }
     }
   }
 
@@ -133,13 +148,14 @@ public final class InboundMediaJanitor {
     if (mediaRoot == null || maxBytes <= 0 || !Files.isDirectory(mediaRoot)) {
       return;
     }
-    long total = sizeOf(mediaRoot);
-    if (total <= maxBytes) {
+    if (sizeOf(mediaRoot) <= maxBytes) {
       return;
     }
-    sweepIfDue(mediaRoot);
-    total = sizeOf(mediaRoot);
-    if (total > maxBytes) {
+    // 已经超配额：这次必须真扫一遍。走周期节流入口的话，被跳过之后照样抛「超过配额」——
+    // 那是谎报，空间本来腾得出来，而调用方会据此把附件降级成平台引用名。
+    // 节流只约束周期性清理，不约束「写盘前必须腾出空间」这条按需路径。
+    sweepSerialized(mediaRoot);
+    if (sizeOf(mediaRoot) > maxBytes) {
       throw new IOException("入站媒体目录超过配额 " + maxBytes + " 字节（可调 ORYXOS_INBOUND_MEDIA_MAX_MB / TTL）");
     }
   }
