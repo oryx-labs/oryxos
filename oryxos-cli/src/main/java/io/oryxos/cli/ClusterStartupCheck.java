@@ -1,6 +1,7 @@
 package io.oryxos.cli;
 
 import io.oryxos.core.cluster.ClusterProperties;
+import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -62,10 +63,25 @@ public class ClusterStartupCheck implements SmartInitializingSingleton {
           "oryxos.cluster.enabled=true 与 knowledge.store=memory 不兼容：内存知识库在副本间不共享。"
               + "请改为 knowledge.store=sqlite（知识落共享库），或关闭 oryxos.cluster.enabled");
     }
+    // 续租间隔必须小于租约时长，否则两次续租之间租约必然过期：未持有者每轮都抢得到，
+    // 属主每轮都续租失败并 fencing 断连，两边轮流持有 —— 持续互踢。
+    // 这两项此前只被打印，配错要等到线上互踢才被发现。
+    Duration heartbeat = cluster.effectiveHeartbeatInterval();
+    Duration leaseTtl = cluster.getLeaseTtl();
+    if (heartbeat.compareTo(leaseTtl) >= 0) {
+      throw new IllegalStateException(
+          "oryxos.cluster.heartbeat-interval（"
+              + heartbeat
+              + "）必须小于 oryxos.cluster.lease-ttl（"
+              + leaseTtl
+              + "）：续租间隔不小于租约时长时，租约会在两次续租之间过期，"
+              + "未持有者每轮都抢得到，属主每轮都续租失败 —— 两副本持续互踢。"
+              + "建议保持缺省（leaseTtl/3）。");
+    }
     LOG.info(
         "多副本模式启用: instance={} leaseTtl={} heartbeat={}",
         cluster.effectiveInstanceId().replace('\r', '_').replace('\n', '_'),
-        cluster.getLeaseTtl(),
-        cluster.effectiveHeartbeatInterval());
+        leaseTtl,
+        heartbeat);
   }
 }
