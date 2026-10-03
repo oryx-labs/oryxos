@@ -134,6 +134,15 @@ Modules are decoupled through interfaces. Adding a new Channel or Tool requires 
 
 **Prerequisites**: Java 21, Maven 3.9+, and an LLM API key (DeepSeek / Qwen / OpenAI / Ollama). The Maven build installs a local Node.js on first run to bundle the admin UI — no global Node.js required.
 
+**Quickest setup — [SDKMAN!](https://sdkman.io/)** (recommended): the repo ships a `.sdkmanrc` that pins the exact JDK and Maven versions. After installing SDKMAN, enable `sdkman_auto_env=true` in `~/.sdkman/etc/config`, then:
+
+```bash
+cd oryxos
+sdk env install    # installs the JDK + Maven versions declared in .sdkmanrc
+```
+
+From then on, every `cd` into the project directory auto-switches to the right toolchain. If you prefer to install Java and Maven yourself (e.g. via `apt`, `brew`, or a tarball), make sure `java -version` reports 21+ and `mvn -version` reports 3.9+.
+
 **Windows**: Built-in workspace storage requires a native POSIX filesystem, so start the server inside WSL2 (Ubuntu). Clone into the Linux home directory, for example `~/oryxos`, then build and run there. A checkout on a Windows drive such as `/mnt/d/...` is still NTFS and fails the same startup check. Docker on WSL2 is the other supported path.
 
 ### 1 · Build
