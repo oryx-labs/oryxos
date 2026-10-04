@@ -11,7 +11,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -117,14 +116,7 @@ public class DingTalkMessageSender {
   }
 
   static List<String> segment(String text, int chunkSize) {
-    if (text.isEmpty()) {
-      return List.of("");
-    }
-    List<String> parts = new ArrayList<>();
-    for (int i = 0; i < text.length(); i += chunkSize) {
-      parts.add(text.substring(i, Math.min(text.length(), i + chunkSize)));
-    }
-    return parts;
+    return io.oryxos.core.channel.OutboundTextSegments.split(text, chunkSize);
   }
 
   /** 钉钉 markdown 必填 title：取首行摘要，过长截断；空内容用默认标题。 */

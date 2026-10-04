@@ -9,7 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 
 /** Telegram {@code sendMessage}；群聊带 {@code reply_to_message_id}。 */
@@ -123,14 +122,7 @@ public class TelegramMessageSender {
   }
 
   static List<String> segment(String text, int chunkSize) {
-    if (text.isEmpty()) {
-      return List.of("");
-    }
-    List<String> parts = new ArrayList<>();
-    for (int i = 0; i < text.length(); i += chunkSize) {
-      parts.add(text.substring(i, Math.min(text.length(), i + chunkSize)));
-    }
-    return parts;
+    return io.oryxos.core.channel.OutboundTextSegments.split(text, chunkSize);
   }
 
   private static String trimSlash(String base) {

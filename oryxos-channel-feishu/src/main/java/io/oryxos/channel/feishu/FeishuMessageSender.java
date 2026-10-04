@@ -15,7 +15,6 @@ import com.lark.oapi.service.im.v1.model.ReplyMessageReqBody;
 import com.lark.oapi.service.im.v1.model.ReplyMessageResp;
 import com.lark.oapi.service.im.v1.model.ReplyMessageRespBody;
 import io.oryxos.core.channel.OutboundGuard;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -271,14 +270,7 @@ public class FeishuMessageSender {
 
   /** 按字符数分段，顺序保持、内容不丢；空文本发送一条空段（保持"必有回复"语义）。 */
   static List<String> segment(String text, int chunkSize) {
-    List<String> chunks = new ArrayList<>();
-    if (text == null || text.isEmpty()) {
-      chunks.add("");
-      return chunks;
-    }
-    for (int i = 0; i < text.length(); i += chunkSize) {
-      chunks.add(text.substring(i, Math.min(text.length(), i + chunkSize)));
-    }
+    List<String> chunks = io.oryxos.core.channel.OutboundTextSegments.split(text, chunkSize);
     if (chunks.size() > 1) {
       LOG.info("回复超长，按 {} 字符分 {} 段发送", chunkSize, chunks.size());
     }
