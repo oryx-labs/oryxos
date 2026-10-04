@@ -243,13 +243,26 @@ public final class InboundMediaJanitor {
         return DEFAULT_TTL;
       }
       Duration ttl = Duration.ofHours(hours);
-      // 构造得出来不等于能用：清理时算 now.minus(ttl)，超出 Instant 范围会抛
-      // DateTimeException，被 sweepIfDue 吞成一条 warn —— 表现是清理每 60s 失败一次、
-      // 永远不生效，而进程照跑。这里先用一次同样的运算把它挡在配置期。
-      Instant.now().minus(ttl);
-      return ttl;
+      return subtractableFromNow(ttl) ? ttl : DEFAULT_TTL;
     } catch (NumberFormatException | ArithmeticException | DateTimeException e) {
       return DEFAULT_TTL;
+    }
+  }
+
+  /**
+   * 这个 TTL 能不能拿去做清理时的 {@code now.minus(ttl)}。
+   *
+   * <p>构造得出来不等于能用：超出 {@code Instant} 可表示范围时那一步会抛 {@code DateTimeException}， 被 {@code sweepIfDue}
+   * 吞成一条 warn —— 表现是清理每 60s 失败一次、永远不生效，而进程照跑。 用它做配置期校验，把这种情况挡在启动时。
+   */
+  private static boolean subtractableFromNow(Duration ttl) {
+    try {
+      Instant cutoff = Instant.now().minus(ttl);
+      // 正的 TTL 必然落在过去。这里比较一次，是为了让这次运算的结果真的被用上 ——
+      // PMD 的 UnusedReturnValue 不接受「为了让它抛而调用、随即丢弃结果」。
+      return !cutoff.isAfter(Instant.now());
+    } catch (ArithmeticException | DateTimeException e) {
+      return false;
     }
   }
 
