@@ -139,7 +139,7 @@ class DingTalkMessageSenderTest {
   @DisplayName("业务失败时日志里不得出现 sessionWebhook 的会话能力令牌")
   void businessFailureDoesNotLeakTheSessionToken() {
     String webhook =
-        "https://oapi.dingtalk.com/robot/sendBySession?session=SESSION-CAPABILITY-TOKEN-abc123";
+        "https://oapi.dingtalk.com/robot/sendBySession?session=66d7c695a9e1f18782a7cba1d9deb885";
     String body = "{\"errcode\":310000,\"errmsg\":\"keywords not in content\"}";
 
     IllegalStateException e =
@@ -149,8 +149,8 @@ class DingTalkMessageSenderTest {
 
     // 异常文案会被 safeReply / 进度流兜底打进 WARN/ERROR，所以它本身不能带凭证
     org.assertj.core.api.Assertions.assertThat(e.getMessage())
-        .as("会话能力令牌可让持有者以机器人身份往该会话发消息，不能进日志")
-        .doesNotContain("SESSION-CAPABILITY-TOKEN-abc123")
+        .as("官方文档形态的会话能力（?session=<32 位十六进制>）可让持有者以机器人身份发消息，不能进日志")
+        .doesNotContain("66d7c695a9e1f18782a7cba1d9deb885")
         .doesNotContain("session=");
     // 但排查仍要能看出是哪个端点
     org.assertj.core.api.Assertions.assertThat(e.getMessage())
