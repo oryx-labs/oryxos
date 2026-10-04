@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -241,8 +242,13 @@ public final class InboundMediaJanitor {
       if (hours <= 0) {
         return DEFAULT_TTL;
       }
-      return Duration.ofHours(hours);
-    } catch (NumberFormatException e) {
+      Duration ttl = Duration.ofHours(hours);
+      // 构造得出来不等于能用：清理时算 now.minus(ttl)，超出 Instant 范围会抛
+      // DateTimeException，被 sweepIfDue 吞成一条 warn —— 表现是清理每 60s 失败一次、
+      // 永远不生效，而进程照跑。这里先用一次同样的运算把它挡在配置期。
+      Instant.now().minus(ttl);
+      return ttl;
+    } catch (NumberFormatException | ArithmeticException | DateTimeException e) {
       return DEFAULT_TTL;
     }
   }
@@ -257,10 +263,19 @@ public final class InboundMediaJanitor {
       if (mb < 0) {
         return DEFAULT_MAX_BYTES;
       }
-      return mb * 1024L * 1024L;
-    } catch (NumberFormatException e) {
+      return megabytesToBytes(mb);
+    } catch (NumberFormatException | ArithmeticException e) {
       return DEFAULT_MAX_BYTES;
     }
+  }
+
+  /**
+   * MB → 字节，溢出即抛。
+   *
+   * <p>普通乘法溢出会绕成一个负数或恰好 0，而 0 在本类里是「显式关闭配额」的哨兵 （见类注释）—— 溢出与故意关闭就分不出来了，配额会被静默关掉。 调用方在溢出时回退默认值。
+   */
+  static long megabytesToBytes(long mb) {
+    return Math.multiplyExact(Math.multiplyExact(mb, 1024L), 1024L);
   }
 
   private record DirStat(Path path, long bytes, Instant newestMtime) {}

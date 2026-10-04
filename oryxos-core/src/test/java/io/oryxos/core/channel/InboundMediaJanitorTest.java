@@ -1,5 +1,6 @@
 package io.oryxos.core.channel;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -144,5 +145,20 @@ class InboundMediaJanitorTest {
     Thread.sleep(250);
     janitor.sweepIfDue(mediaRoot);
     assertFalse(Files.exists(second), "窗口过后应当恢复清理");
+  }
+
+  @Test
+  @DisplayName("MB→字节的溢出必须抛，不能绕成 0 —— 0 是「关闭配额」的哨兵")
+  void megabyteConversionRefusesToOverflow() {
+    // 正常范围
+    assertEquals(2048L * 1024 * 1024, InboundMediaJanitor.megabytesToBytes(2048));
+    // 边界前一个：仍在 long 范围内
+    assertEquals(9223372036853727232L, InboundMediaJanitor.megabytesToBytes(8796093022207L));
+    // ★ 溢出：普通乘法会得到 Long.MIN_VALUE，再被 Math.max(0L, ·) 变成 0 = 关闭配额
+    assertThrows(
+        ArithmeticException.class, () -> InboundMediaJanitor.megabytesToBytes(8796093022208L));
+    // ★ 恰好回绕成 0 的那个值
+    assertThrows(
+        ArithmeticException.class, () -> InboundMediaJanitor.megabytesToBytes(17592186044416L));
   }
 }
