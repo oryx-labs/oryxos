@@ -216,7 +216,36 @@ public class DingTalkMessageSender {
     return "";
   }
 
+  /**
+   * 日志安全的外形：只留 scheme/host/path，去掉 userinfo、query 与 fragment。
+   *
+   * <p>这里处理的 {@code sessionWebhook} 形如 {@code https://…/robot/sendBySession?session=<能力令牌>} —— 拿着这条
+   * URL 就能以机器人身份 往该会话发消息。而业务失败（HTTP 200 + errcode≠0，如 310000 关键词拦截、发送过快）是钉钉的 <b>常规</b>拒绝方式，异常文案随后会被
+   * {@code safeReply} / 进度流兜底打进 WARN/ERROR， 于是凭证进了日志。只清 CR/LF 挡不住这个 —— 要去掉 query。
+   */
   private static String sanitizeUrl(String url) {
-    return url == null ? "" : url.replace('\r', '_').replace('\n', '_');
+    if (url == null) {
+      return "";
+    }
+    String cleaned = url.replace('\r', '_').replace('\n', '_');
+    int cut = cleaned.length();
+    int query = cleaned.indexOf('?');
+    if (query >= 0 && query < cut) {
+      cut = query;
+    }
+    int fragment = cleaned.indexOf('#');
+    if (fragment >= 0 && fragment < cut) {
+      cut = fragment;
+    }
+    String head = cleaned.substring(0, cut);
+    int at = head.indexOf('@');
+    if (at >= 0) {
+      int schemeEnd = head.indexOf("://");
+      head =
+          schemeEnd >= 0
+              ? head.substring(0, schemeEnd + 3) + head.substring(at + 1)
+              : head.substring(at + 1);
+    }
+    return cut < cleaned.length() ? head + "?…" : head;
   }
 }
