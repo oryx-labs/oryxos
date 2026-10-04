@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.oryxos.core.channel.ChannelConfig;
 import io.oryxos.core.channel.ChannelStatus;
-import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundChannelAdapter;
 import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
@@ -15,8 +14,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,9 +43,11 @@ public class TelegramChannelAdapter implements InboundChannelAdapter {
   private final InboundMessageService inboundMessageService;
   private final OutboundGuard guard;
   private final String apiBase;
+  private static final String MEDIA_DIR_PREFIX = "telegram";
 
   private volatile TelegramEventNormalizer normalizer;
   private volatile TelegramMessageSender sender;
+  private volatile TelegramInboundMediaResolver mediaResolver;
   private volatile HttpClient http;
   private volatile ChannelStatus.State state = ChannelStatus.State.DISCONNECTED;
   private volatile String lastError;
@@ -171,46 +170,30 @@ public class TelegramChannelAdapter implements InboundChannelAdapter {
   }
 
   private void dispatch(InboundMessage message) {
-    InboundMessage enriched = resolveMedia(message);
+    InboundMessage enriched = resolveMedia(message, sender);
     inboundMessageService.onMessage(enriched, this);
   }
 
-  private InboundMessage resolveMedia(InboundMessage message) {
-    TelegramMessageSender current = sender;
+  /**
+   * 把带 file_id 的附件落盘换成本地路径。
+   *
+   * <p>此前是把 file_id 换成下载地址直接交给核心 —— 而那个地址形如 {@code …/file/bot<token>/…}， token 就在 URL 里，于是它随 Agent
+   * 输入进了 prompt、会话历史与 provider 请求。其余渠道都是先落盘 再交出本地路径，这里对齐。
+   */
+  InboundMessage resolveMedia(InboundMessage message, TelegramMessageSender current) {
     if (current == null || message.attachments().isEmpty()) {
       return message;
     }
-    List<InboundAttachment> resolved = new ArrayList<>();
-    for (InboundAttachment attachment : message.attachments()) {
-      if (attachment.url() != null && !attachment.url().isBlank()) {
-        resolved.add(attachment);
-        continue;
-      }
-      if (attachment.reference() == null || attachment.reference().isBlank()) {
-        resolved.add(attachment);
-        continue;
-      }
-      try {
-        String url = current.resolveFileUrl(attachment.reference());
-        resolved.add(
-            new InboundAttachment(
-                attachment.type(), url, attachment.reference(), attachment.fileName()));
-      } catch (RuntimeException e) {
-        LOG.warn("Telegram 附件 getFile 失败，保留 file_id: {}", sanitize(e.getMessage()));
-        resolved.add(attachment);
-      }
+    TelegramInboundMediaResolver resolver = mediaResolver;
+    if (resolver == null) {
+      resolver =
+          new TelegramInboundMediaResolver(
+              apiBase,
+              io.oryxos.core.channel.InboundMediaRoots.forChannel(config.name(), MEDIA_DIR_PREFIX),
+              config.name());
+      mediaResolver = resolver;
     }
-    return new InboundMessage(
-        message.channelType(),
-        message.channelName(),
-        message.messageId(),
-        message.chatKind(),
-        message.userId(),
-        message.chatId(),
-        message.content(),
-        message.textual(),
-        message.mentionedBot(),
-        resolved);
+    return resolver.resolve(message, current::resolveFileUrl);
   }
 
   private JsonNode getUpdates() throws Exception {
