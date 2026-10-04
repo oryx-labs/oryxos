@@ -58,8 +58,8 @@ class ChannelLeaseCoordinatorTest {
           connected.set(true);
           startReturned.countDown();
         };
-    Runnable stopConnection =
-        () -> {
+    java.util.function.Consumer<ChannelLeaseCoordinator.Loss> stopConnection =
+        loss -> {
           stops.incrementAndGet();
           connected.set(false);
         };
@@ -103,7 +103,7 @@ class ChannelLeaseCoordinatorTest {
                       awaitQuietly(letStartReturn);
                       oldConnected.set(true);
                     },
-                    () -> {
+                    loss -> {
                       oldStops.incrementAndGet();
                       oldConnected.set(false);
                     },
@@ -116,7 +116,7 @@ class ChannelLeaseCoordinatorTest {
     coordinator.unmanage("wecom");
     AtomicBoolean newConnected = new AtomicBoolean(false);
     coordinator.manage(
-        "wecom", () -> newConnected.set(true), () -> newConnected.set(false), newConnected::get);
+        "wecom", () -> newConnected.set(true), loss -> newConnected.set(false), newConnected::get);
     letStartReturn.countDown();
 
     manageThread.join(2000);
@@ -134,7 +134,7 @@ class ChannelLeaseCoordinatorTest {
     AtomicBoolean connected = new AtomicBoolean(false);
 
     coordinator.manage(
-        "wecom", () -> connected.set(true), () -> stops.incrementAndGet(), connected::get);
+        "wecom", () -> connected.set(true), loss -> stops.incrementAndGet(), connected::get);
 
     assertThat(connected.get()).isTrue();
     assertThat(stops.get()).as("没有任何处置动作时不该调用 stop").isZero();
@@ -154,7 +154,7 @@ class ChannelLeaseCoordinatorTest {
         () -> {
           throw new IllegalStateException("建连超时");
         },
-        () -> {},
+        loss -> {},
         connected::get);
 
     // 不释放的话：下一轮 tryAcquire 会撞上自己那行，而它没过期 → takeExpired 返回 0
@@ -171,7 +171,7 @@ class ChannelLeaseCoordinatorTest {
         new ChannelLeaseCoordinator(store, new ClusterProperties(), idleScheduler());
     AtomicBoolean connected = new AtomicBoolean(false);
 
-    coordinator.manage("wecom", () -> connected.set(true), () -> {}, connected::get);
+    coordinator.manage("wecom", () -> connected.set(true), loss -> {}, connected::get);
 
     verify(store, never()).releaseChannel(anyString(), anyString());
     assertThat(connected.get()).isTrue();

@@ -20,6 +20,20 @@ import org.springframework.scheduling.TaskScheduler;
     justification = "本类全部日志占位符仅填经 sanitize 的 channelName（lambda 内合成方法工具无法定位方法级豁免）。")
 public class ChannelLeaseCoordinator {
 
+  /**
+   * 失去一次连接的原因。两种情形要停的动作相同（停掉这次连接），但**共享状态的归属不同**：
+   *
+   * <ul>
+   *   <li>{@link #FENCED}：租约判定失败，连接不该再存在，登记表也要跟着降级；
+   *   <li>{@link #SUPERSEDED}：这一代已被 {@code unmanage} 或新的 {@code manage} 取代 ——
+   *       渠道名下的登记此刻属于新的世代，回滚时碰它会把新适配器摘掉，之后就再也停不掉它。
+   * </ul>
+   */
+  public enum Loss {
+    FENCED,
+    SUPERSEDED
+  }
+
   private static final Logger LOG = LoggerFactory.getLogger(ChannelLeaseCoordinator.class);
 
   private final CoordinationStore store;
@@ -58,7 +72,7 @@ public class ChannelLeaseCoordinator {
   public void manage(
       String channelName,
       Runnable startConnection,
-      Runnable stopConnection,
+      java.util.function.Consumer<Loss> stopConnection,
       Supplier<Boolean> isConnected) {
     Duration interval = properties.effectiveHeartbeatInterval();
     long generation = generations.merge(channelName, 1L, Long::sum);
@@ -79,7 +93,7 @@ public class ChannelLeaseCoordinator {
   private void tick(
       String channelName,
       Runnable startConnection,
-      Runnable stopConnection,
+      java.util.function.Consumer<Loss> stopConnection,
       Supplier<Boolean> isConnected,
       long generation) {
     if (!isCurrent(channelName, generation)) {
@@ -113,12 +127,12 @@ public class ChannelLeaseCoordinator {
         // 建连可能长时间阻塞（企微最坏约 20s）。跑完再确认这一代还算不算数：
         // 不算数说明期间渠道已被处置，这次连接不该存在 —— 用同一个 stop 回调回滚。
         LOG.warn("建连期间渠道已被处置，回滚这次连接: channel={}", sanitize(channelName));
-        stopConnection.run();
+        stopConnection.accept(Loss.SUPERSEDED);
       }
     } else if (!held && Boolean.TRUE.equals(isConnected.get())) {
       LOG.warn("渠道连接属主已失去（fencing），停止连接: channel={}", sanitize(channelName));
       metrics.recordFenceConflict("channel");
-      stopConnection.run();
+      stopConnection.accept(Loss.FENCED);
     }
   }
 

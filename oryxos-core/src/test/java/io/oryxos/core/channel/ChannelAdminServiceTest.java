@@ -1,6 +1,7 @@
 package io.oryxos.core.channel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -235,5 +236,51 @@ class ChannelAdminServiceTest {
 
     assertTrue(!cleared.isPresent());
     assertNull(loader.loadRaw().get(0).governance());
+  }
+
+  @Test
+  @DisplayName("回滚一次已被取代的连接：不得摘掉新世代的登记（否则连接活着却再也停不掉）")
+  void supersededRollbackKeepsTheNewAdapter() {
+    // 只有独连型（wecom）才走属主协调分支
+    ChannelAdminService svc =
+        new ChannelAdminService(
+            loader,
+            registry,
+            profileRegistry,
+            Map.of("wecom", c -> new TrackingAdapter(c.name(), c.agent())));
+    ChannelLeaseCoordinator coordinator = mock(ChannelLeaseCoordinator.class);
+    java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<ChannelLeaseCoordinator.Loss>>
+        stopCallback = new java.util.concurrent.atomic.AtomicReference<>();
+    org.mockito.Mockito.doAnswer(
+            inv -> {
+              stopCallback.set(inv.getArgument(2));
+              return null;
+            })
+        .when(coordinator)
+        .manage(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any());
+    svc.setChannelLeaseCoordinator(coordinator);
+
+    svc.add(new ChannelConfig("chan-w", "wecom", "app-id", "app-secret", "ops-agent", true));
+    assertNotNull(stopCallback.get(), "独连型渠道应当交给属主协调器");
+
+    // 新世代已经把它自己的适配器登记上去 —— 这正是 #779 那条时序的后半段
+    InboundChannelAdapter newer = new TrackingAdapter("chan-w", "ops-agent");
+    registry.register(newer);
+
+    // 旧世代回滚：渠道名下的登记此刻属于新世代，回滚不能碰它
+    stopCallback.get().accept(ChannelLeaseCoordinator.Loss.SUPERSEDED);
+    assertEquals(
+        Optional.of(newer),
+        registry.get("chan-w"),
+        "回滚不该摘掉新世代的适配器 —— 摘掉之后 stopOne 的 registry.get 找不到它，" + "连接活着却停不掉");
+
+    // 对照：真丢了租约（fencing）时，登记应当降为离线
+    stopCallback.get().accept(ChannelLeaseCoordinator.Loss.FENCED);
+    assertTrue(registry.get("chan-w").isEmpty(), "fencing 应当把连接降为离线");
   }
 }

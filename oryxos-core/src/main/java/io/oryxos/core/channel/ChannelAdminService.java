@@ -241,16 +241,22 @@ public class ChannelAdminService {
             registry.register(adapter);
             LOG.info("独连型渠道 {} 已由本副本接管上线", sanitize(resolved.name()));
           },
-          () -> {
+          loss -> {
             adapter.stop();
             connected.set(false);
-            registry.registerOffline(
-                new ChannelStatus(
-                    resolved.name(),
-                    resolved.type(),
-                    resolved.agent(),
-                    ChannelStatus.State.STANDBY,
-                    null));
+            // 只有真的丢了租约才把登记降为离线。回滚一次已被取代的连接时不能碰登记表：
+            // 渠道名下的登记此刻可能已经是新世代的适配器，而 registerOffline 会把适配器
+            // 从运行表摘掉（两个表必须互斥）—— 之后 stopOne 的 registry.get 就再也
+            // 找不到它，连接活着却没有登记、也停不掉。
+            if (loss == ChannelLeaseCoordinator.Loss.FENCED) {
+              registry.registerOffline(
+                  new ChannelStatus(
+                      resolved.name(),
+                      resolved.type(),
+                      resolved.agent(),
+                      ChannelStatus.State.STANDBY,
+                      null));
+            }
           },
           connected::get);
     } catch (RuntimeException e) {
