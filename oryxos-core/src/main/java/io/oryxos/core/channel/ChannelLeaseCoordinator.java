@@ -102,10 +102,12 @@ public class ChannelLeaseCoordinator {
     }
     String owner = properties.owner();
     Duration ttl = properties.getLeaseTtl();
-    boolean held =
-        Boolean.TRUE.equals(isConnected.get())
-            ? store.renewChannel(channelName, owner, ttl)
-            : store.tryAcquireChannel(channelName, owner, ttl);
+    boolean held;
+    if (Boolean.TRUE.equals(isConnected.get())) {
+      held = renewOrLoseLease(channelName, owner, ttl);
+    } else {
+      held = store.tryAcquireChannel(channelName, owner, ttl);
+    }
     if (held && !Boolean.TRUE.equals(isConnected.get())) {
       LOG.info("获得渠道连接属主，建立连接: channel={}", sanitize(channelName));
       metrics.recordLeaseAcquired("channel");
@@ -158,6 +160,21 @@ public class ChannelLeaseCoordinator {
       store.releaseChannel(channelName, properties.owner());
     } catch (RuntimeException e) {
       LOG.warn("释放渠道属主租约失败（将等 TTL 自然过期）: channel={} {}", sanitize(channelName), e.getMessage());
+    }
+  }
+
+  /**
+   * 续租；续不上（返回 false 或调用抛异常）都算「租约已丢」。
+   *
+   * <p>异常路径此前被循环的 wrapper 吞成一条 warn：连接照旧、也不走 fencing。数据库在续租上 持续抛错（连接重置、故障转移、死锁）超过 leaseTtl
+   * 时，租约行照样过期并被 standby 抢走并建连， 而本副本仍持连 —— 正是类注释承诺不会发生的互踢。语义相同就该同样处理：拿不到租约就停连。
+   */
+  private boolean renewOrLoseLease(String channelName, String owner, Duration ttl) {
+    try {
+      return store.renewChannel(channelName, owner, ttl);
+    } catch (RuntimeException e) {
+      LOG.warn("续租渠道属主失败，按失去属主处理: channel={} {}", sanitize(channelName), e.getMessage());
+      return false;
     }
   }
 

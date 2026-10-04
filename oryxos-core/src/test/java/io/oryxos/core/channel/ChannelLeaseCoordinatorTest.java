@@ -201,4 +201,34 @@ class ChannelLeaseCoordinatorTest {
     // 留下连接活着、登记仍是 CONNECTED、循环却已撤的中间态。
     org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> coordinator.unmanage("wecom"));
   }
+
+  @Test
+  @DisplayName("续租抛异常 ≡ 失去属主：必须停连，不能静默继续持有")
+  void renewFailureFencesTheConnection() {
+    CoordinationStore store = grantingStore();
+    ChannelLeaseCoordinator coordinator =
+        new ChannelLeaseCoordinator(store, new ClusterProperties(), idleScheduler());
+
+    // 正处于「已持有连接」的状态，于是第一次 tick 会走续租分支（无需等周期任务）
+    AtomicBoolean connected = new AtomicBoolean(true);
+    AtomicInteger stops = new AtomicInteger();
+
+    // 数据库在续租上抛错：连接重置 / 故障转移 / 死锁
+    when(store.renewChannel(anyString(), anyString(), any(Duration.class)))
+        .thenThrow(new IllegalStateException("数据库在续租上抛错"));
+
+    coordinator.manage(
+        "wecom",
+        () -> {},
+        loss -> {
+          stops.incrementAndGet();
+          connected.set(false);
+        },
+        connected::get);
+
+    assertThat(stops.get())
+        .as("续租抛异常与续租返回 false 同语义，必须走 fencing 停连；" + "否则数据库持续抛错的窗口内租约行照样过期被 standby 抢走并建连，本副本仍持连")
+        .isEqualTo(1);
+    assertThat(connected).isFalse();
+  }
 }
