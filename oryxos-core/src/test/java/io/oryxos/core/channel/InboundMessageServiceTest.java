@@ -538,4 +538,31 @@ class InboundMessageServiceTest {
         adapter.sent().stream()
             .anyMatch(s -> InboundMessageService.ASSET_OFFLINE_REPLY.equals(s.text())));
   }
+
+  @Test
+  @DisplayName("提交失败（triggerAsync 抛）：登记必须释放，否则 /stop 会去中断一个不存在的运行")
+  void submitFailureReleasesTheActiveRun() {
+    Session session = new Session("stub:user-1:" + AGENT, AGENT);
+    when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
+    // 落执行记录写库失败，或执行器已停机 —— 两种都在真实实现里从 triggerAsync 抛出。
+    when(executionService.triggerAsync(anyString(), anyString(), any(), any()))
+        .thenThrow(new IllegalStateException("执行器已停机"));
+
+    try {
+      service.onMessage(p2p("m-submit-fail", "一个问题"), adapter);
+    } catch (RuntimeException expected) {
+      // 异常是否逸出取决于调用方，与本次要验证的行为无关
+    }
+
+    // 登记若未释放，这一步会回 STOP_REPLY 并去中断那个从未运行的 session：
+    // 中断标志只在 ReActLoop 观察到时才清，没人观察就永久留着，
+    // 而私聊的 sessionId 正是用户的真实会话 —— 下一条正常消息会被误判为已中断。
+    service.onMessage(p2p("m-stop-after-fail", "/stop"), adapter);
+
+    assertEquals(
+        InboundMessageService.STOP_NO_SESSION_REPLY,
+        adapter.sent().get(adapter.sent().size() - 1).text(),
+        "提交失败后不该留下可被 /stop 定位到的登记");
+    verify(interruptManager, never()).interrupt(any());
+  }
 }

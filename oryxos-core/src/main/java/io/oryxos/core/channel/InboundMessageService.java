@@ -204,30 +204,40 @@ public class InboundMessageService {
     long runToken = activeRuns.register(chatKey, job.sessionId());
     CountDownLatch done = preprocessingDone != null ? preprocessingDone : new CountDownLatch(1);
     // B5/B10：推理在虚拟线程后台跑并落 agent_executions（source = 渠道类型）
-    executionService.triggerAsync(
-        agent,
-        msg.channelType(),
-        job.sessionId(),
-        () -> {
-          try {
-            job.inference().run();
-          } catch (io.oryxos.core.cluster.TurnWaitTimeoutException e) {
-            // 026：等待超限单独提示（用户稍候重发即可，不是系统故障）
-            if (!job.streamed()) {
-              safeReply(replyVia, msg.chatId(), TURN_BUSY_REPLY, replyTo);
+    try {
+      executionService.triggerAsync(
+          agent,
+          msg.channelType(),
+          job.sessionId(),
+          () -> {
+            try {
+              job.inference().run();
+            } catch (io.oryxos.core.cluster.TurnWaitTimeoutException e) {
+              // 026：等待超限单独提示（用户稍候重发即可，不是系统故障）
+              if (!job.streamed()) {
+                safeReply(replyVia, msg.chatId(), TURN_BUSY_REPLY, replyTo);
+              }
+              throw e;
+            } catch (RuntimeException e) {
+              // B6：失败以可读消息告知用户（不含堆栈），异常继续上抛让执行记录记为失败
+              if (!job.streamed()) {
+                safeReply(replyVia, msg.chatId(), FAILURE_REPLY, replyTo);
+              }
+              throw e;
+            } finally {
+              activeRuns.unregister(chatKey, runToken);
+              done.countDown();
             }
-            throw e;
-          } catch (RuntimeException e) {
-            // B6：失败以可读消息告知用户（不含堆栈），异常继续上抛让执行记录记为失败
-            if (!job.streamed()) {
-              safeReply(replyVia, msg.chatId(), FAILURE_REPLY, replyTo);
-            }
-            throw e;
-          } finally {
-            activeRuns.unregister(chatKey, runToken);
-            done.countDown();
-          }
-        });
+          });
+    } catch (RuntimeException e) {
+      // 提交失败（落执行记录写库失败、执行器已停机等）时那段 Runnable 从未运行，
+      // 它的 finally 也就不会执行。留着登记会让 /stop 定位到一个不存在的运行：
+      // 中断标志只在 ReActLoop 观察到时才清，没人观察就永久留在 InterruptedSessions，
+      // 而私聊的 sessionId 正是用户的真实会话 —— 下一条正常消息会被误判为已中断。
+      activeRuns.unregister(chatKey, runToken);
+      done.countDown();
+      throw e;
+    }
     // 进度流已发「思考中」卡片时不再发延迟「处理中」文本，避免双提示
     if (preprocessingDone == null && !job.streamed()) {
       scheduleProcessingNotice(done, replyVia, msg.chatId(), replyTo);
