@@ -199,7 +199,9 @@ public class InboundMessageService {
     List<Message.MediaPart> media = InboundMediaParts.from(msg);
     InferenceJob job = buildInference(msg, replyVia, agent, agentInput, media, replyTo);
     String chatKey = ActiveRunRegistry.chatKey(msg.channelType(), msg.chatId());
-    activeRuns.register(chatKey, job.sessionId());
+    // 令牌按本次运行发放：私聊同一用户的 sessionId 恒定，用它做撤销身份会让
+    // 先结束的运行清掉后一次（仍在跑）的登记。
+    long runToken = activeRuns.register(chatKey, job.sessionId());
     CountDownLatch done = preprocessingDone != null ? preprocessingDone : new CountDownLatch(1);
     // B5/B10：推理在虚拟线程后台跑并落 agent_executions（source = 渠道类型）
     executionService.triggerAsync(
@@ -222,7 +224,7 @@ public class InboundMessageService {
             }
             throw e;
           } finally {
-            activeRuns.unregister(chatKey, job.sessionId());
+            activeRuns.unregister(chatKey, runToken);
             done.countDown();
           }
         });
