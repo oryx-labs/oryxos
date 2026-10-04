@@ -18,6 +18,7 @@ public class StubChannelAdapter implements InboundChannelAdapter {
   private final List<SentReply> sent = new CopyOnWriteArrayList<>();
   private volatile boolean started;
   private volatile RuntimeException sendFailure;
+  private volatile InboundProgressStream progressStream;
 
   public StubChannelAdapter(String name, String boundAgent) {
     this.name = name;
@@ -75,5 +76,17 @@ public class StubChannelAdapter implements InboundChannelAdapter {
   /** 让后续 sendReply 抛出给定异常（模拟发送失败）。 */
   public void failSendsWith(RuntimeException failure) {
     this.sendFailure = failure;
+  }
+
+  @Override
+  public java.util.Optional<InboundProgressStream> openProgressStream(
+      String chatId, String replyToMessageId) {
+    InboundProgressStream stream = progressStream;
+    return stream == null ? java.util.Optional.empty() : java.util.Optional.of(stream);
+  }
+
+  /** 让后续 openProgressStream 返回给定进度流（模拟飞书卡片等平台可更新消息）。 */
+  public void useProgressStream(InboundProgressStream stream) {
+    this.progressStream = stream;
   }
 }

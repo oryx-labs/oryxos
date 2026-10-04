@@ -236,6 +236,9 @@ public class InboundMessageService {
       // 而私聊的 sessionId 正是用户的真实会话 —— 下一条正常消息会被误判为已中断。
       activeRuns.unregister(chatKey, runToken);
       done.countDown();
+      // 进度流已经发过「思考中」占位，而 finish/fail 都写在没跑起来的那段 Runnable 里 ——
+      // 不在这里收尾，用户看到的就是一张永远停在思考中的卡片。
+      job.abandon().run();
       throw e;
     }
     // 进度流已发「思考中」卡片时不再发延迟「处理中」文本，避免双提示
@@ -387,7 +390,10 @@ public class InboundMessageService {
     var streamOpt = replyVia.openProgressStream(chatId, replyTo);
     if (streamOpt.isEmpty()) {
       return new InferenceJob(
-          sessionId, () -> replyVia.sendReply(chatId, plainInference.get(), replyTo), false);
+          sessionId,
+          () -> replyVia.sendReply(chatId, plainInference.get(), replyTo),
+          false,
+          () -> {});
     }
     InboundProgressStream stream = streamOpt.get();
     try {
@@ -395,7 +401,10 @@ public class InboundMessageService {
     } catch (RuntimeException e) {
       LOG.warn("渠道 {} 进度流启动失败，降级整段回复: {}", sanitize(replyVia.name()), sanitize(e.getMessage()));
       return new InferenceJob(
-          sessionId, () -> replyVia.sendReply(chatId, plainInference.get(), replyTo), false);
+          sessionId,
+          () -> replyVia.sendReply(chatId, plainInference.get(), replyTo),
+          false,
+          () -> {});
     }
     return new InferenceJob(
         sessionId,
@@ -420,7 +429,16 @@ public class InboundMessageService {
             throw e;
           }
         },
-        true);
+        true,
+        () -> {
+          // 提交失败时那段 Runnable 从未运行，finish/fail 都不会被调到，
+          // 而「思考中」占位已经发出去了 —— 在这里把它标成失败态。
+          try {
+            stream.fail(FAILURE_REPLY);
+          } catch (RuntimeException ignored) {
+            // 已经发不出去就只留终态，不再上抛
+          }
+        });
   }
 
   private static void release(CountDownLatch latch) {
@@ -429,7 +447,14 @@ public class InboundMessageService {
     }
   }
 
-  private record InferenceJob(String sessionId, Runnable inference, boolean streamed) {}
+  /**
+   * 一次推理的编排句柄。
+   *
+   * @param abandon 提交失败时如何收尾。进度流的生命周期是 start → finish/fail；提交失败意味着那段 Runnable 从未运行，finish/fail
+   *     都不会被调到，而占位消息（飞书卡片等）已经发出去了 —— 必须在这里把它标成失败态，否则用户看到的是一张永远停在「思考中」的卡片。
+   */
+  private record InferenceJob(
+      String sessionId, Runnable inference, boolean streamed, Runnable abandon) {}
 
   static boolean isNewSessionCommand(String agentInput) {
     return agentInput != null && NEW_SESSION_COMMAND.equals(agentInput.strip());

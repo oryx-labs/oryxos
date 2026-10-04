@@ -565,4 +565,47 @@ class InboundMessageServiceTest {
         "提交失败后不该留下可被 /stop 定位到的登记");
     verify(interruptManager, never()).interrupt(any());
   }
+
+  @Test
+  @DisplayName("提交失败时，已经发出去的进度流必须被收尾，不能留一张永久的「思考中」卡片")
+  void submitFailureClosesAnOpenProgressStream() {
+    Session session = new Session("stub:user-1:" + AGENT, AGENT);
+    when(sessionManager.getOrCreate("stub", "user-1", AGENT)).thenReturn(session);
+
+    // 记下这张进度流被怎么处置
+    java.util.List<String> calls =
+        java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+    adapter.useProgressStream(
+        new InboundProgressStream() {
+          @Override
+          public void start() {
+            calls.add("start");
+          }
+
+          @Override
+          public void finish(String t) {
+            calls.add("finish");
+          }
+
+          @Override
+          public void fail(String m) {
+            calls.add("fail");
+          }
+
+          @Override
+          public void onToken(String delta) {}
+        });
+
+    // 提交失败：落执行记录写库失败，或执行器已停机
+    when(executionService.triggerAsync(anyString(), anyString(), any(), any()))
+        .thenThrow(new IllegalStateException("执行器已停机"));
+
+    try {
+      service.onMessage(p2p("m-progress-abandon", "一个问题"), adapter);
+    } catch (RuntimeException expected) {
+      // 异常是否逸出与本次要验证的行为无关
+    }
+
+    assertEquals(java.util.List.of("start", "fail"), calls, "start 之后必须有人收尾（fail），否则占位卡片永远停在思考中");
+  }
 }
