@@ -17,6 +17,9 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
   private static final String IMAGE_WITH_URL = "[用户发送了一张图片]\n图片链接: ";
   private static final String IMAGE_WITH_REF = "[用户发送了一张图片]\n图片资源: ";
   private static final String FILE_WITH_URL = "[用户发送了一个文件]\n本地路径: ";
+  private static final String FILE_WITH_REMOTE = "[用户发送了一个文件]\n远程临时链接（未落盘）: ";
+  private static final String FILE_REMOTE_HINT =
+      "\n下载落盘失败，仅保留平台临时 URL（通常数分钟过期）；它不在本机，read_file 打不开。";
   private static final String FILE_WITH_REF = "[用户发送了一个文件]\n文件资源: ";
   private static final String FILE_NAME_LINE = "\n文件名: ";
   private static final String FILE_HINT = "\n可用 read_file 读取该路径（文本或文本型 PDF；须在 FILE 沙箱白名单内）。";
@@ -26,6 +29,10 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
   private static final String PDF_SUFFIX = ".pdf";
   private static final String AUDIO_PREFIX = "[用户发送了一段语音]\n转写: ";
   private static final String AUDIO_PATH = "[用户发送了一段语音]\n本地路径: ";
+  private static final String AUDIO_WITH_REMOTE = "[用户发送了一段语音]\n远程临时链接（未落盘）: ";
+  private static final String AUDIO_REMOTE_HINT = "\n下载落盘失败，仅保留平台临时 URL（通常数分钟过期）；无法在本机转写。";
+  private static final String AUDIO_WITH_REF = "[用户发送了一段语音]\n语音资源: ";
+  private static final String AUDIO_NO_LOCAL = "\n未拿到本机文件（下载落盘失败且平台只给了资源引用），无法转写。";
   private static final String AUDIO_NO_ASR =
       "\n未配置语音转写（设置 OPENAI_API_KEY 或 ORYXOS_ASR_API_KEY 启用 Whisper）。";
   private static final String AUDIO_FFMPEG =
@@ -93,8 +100,13 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
 
   private static String enrichFile(InboundAttachment attachment) {
     StringBuilder sb = new StringBuilder();
-    if (attachment.url() != null && !attachment.url().isBlank()) {
-      sb.append(FILE_WITH_URL).append(attachment.url().strip());
+    String url = attachment.url();
+    boolean hasUrl = url != null && !url.isBlank();
+    // 未落盘时 url 是平台临时链接，不是本机路径 —— 视频分支早就在区分这两种态，
+    // 文件分支此前把两者都说成「本地路径」并附上 read_file 指令，模型必然失败。
+    boolean remote = hasUrl && ImageMime.isHttpUrl(url.strip());
+    if (hasUrl) {
+      sb.append(remote ? FILE_WITH_REMOTE : FILE_WITH_URL).append(url.strip());
     } else if (attachment.reference() != null && !attachment.reference().isBlank()) {
       sb.append(FILE_WITH_REF).append(attachment.reference().strip());
     } else {
@@ -103,7 +115,9 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
     if (attachment.fileName() != null && !attachment.fileName().isBlank()) {
       sb.append(FILE_NAME_LINE).append(attachment.fileName().strip());
     }
-    if (attachment.url() != null && !attachment.url().isBlank()) {
+    if (remote) {
+      sb.append(FILE_REMOTE_HINT);
+    } else if (hasUrl) {
       sb.append(looksLikePdf(attachment) ? FILE_HINT_PDF : FILE_HINT);
     }
     return sb.toString();
@@ -130,16 +144,17 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
   }
 
   private String enrichAudio(InboundAttachment attachment, String channel) {
-    String path =
-        attachment.url() != null && !attachment.url().isBlank()
-            ? attachment.url().strip()
-            : (attachment.reference() != null ? attachment.reference().strip() : "");
-    if (speechTranscriber != null
-        && attachment.url() != null
-        && !attachment.url().isBlank()
-        && !ImageMime.isHttpUrl(attachment.url())) {
+    String url = attachment.url() == null ? "" : attachment.url().strip();
+    String reference = attachment.reference() == null ? "" : attachment.reference().strip();
+    // 未落盘时 url 是平台临时链接（或干脆没有 url、只有平台引用），两者都不是本机路径。
+    // 视频分支对这三种态各给不同文案；语音分支此前一律贴「本地路径」，把没落到本机的
+    // 东西说成在盘上，而且不解释为什么没有转写。
+    boolean remote = !url.isEmpty() && ImageMime.isHttpUrl(url);
+    String path = !url.isEmpty() ? url : reference;
+
+    if (!remote && !url.isEmpty() && speechTranscriber != null) {
       try {
-        String text = speechTranscriber.transcribe(Path.of(attachment.url().strip()));
+        String text = speechTranscriber.transcribe(Path.of(url));
         if (text != null && !text.isBlank()) {
           metrics.recordInboundAsr(channel, MEDIA_AUDIO, true, "ok");
           return AUDIO_PREFIX + text.strip();
@@ -155,6 +170,16 @@ public final class DefaultInboundMediaEnricher implements InboundMediaEnricher {
         }
         return AUDIO_PATH + path + AUDIO_ASR_FAIL + detail;
       }
+    }
+    if (remote) {
+      metrics.recordInboundAsr(channel, MEDIA_AUDIO, false, "not_on_disk");
+      return AUDIO_WITH_REMOTE + url + AUDIO_REMOTE_HINT;
+    }
+    if (url.isEmpty()) {
+      metrics.recordInboundAsr(channel, MEDIA_AUDIO, false, "not_on_disk");
+      return reference.isEmpty()
+          ? AUDIO_WITH_REF + AUDIO_NO_LOCAL
+          : AUDIO_WITH_REF + reference + AUDIO_NO_LOCAL;
     }
     if (speechTranscriber == null) {
       metrics.recordInboundAsr(channel, MEDIA_AUDIO, false, "no_asr");

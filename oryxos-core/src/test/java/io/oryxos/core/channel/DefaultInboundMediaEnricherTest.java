@@ -1,6 +1,7 @@
 package io.oryxos.core.channel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -219,5 +220,77 @@ class DefaultInboundMediaEnricherTest {
     assertTrue(input.contains("未落盘"), input);
     assertTrue(input.contains("临时"), input);
     assertTrue(!input.contains("视频已落盘"), input);
+  }
+
+  @Test
+  @DisplayName("文件未落盘（远程 URL）：标明未落盘，不谎称本地路径、不给 read_file 指令")
+  void remoteFileIsLabelledAsNotOnDisk() {
+    InboundMessage msg =
+        new InboundMessage(
+            "slack",
+            "ops-slack",
+            "m20",
+            ChatKind.P2P,
+            "u1",
+            "c1",
+            "",
+            false,
+            false,
+            List.of(
+                InboundAttachment.fileUrl("https://cdn.example.com/a/report.pdf", "report.pdf")));
+
+    String input = new DefaultInboundMediaEnricher().toAgentInput(msg);
+
+    assertTrue(input.contains("未落盘"), "远程 URL 必须标明未落盘: " + input);
+    assertTrue(input.contains("https://cdn.example.com/a/report.pdf"));
+    // 断言的是「不给使用指令」，不是「不出现这三个字」—— 提示本身会说明 read_file 打不开。
+    assertFalse(input.contains("可用 read_file 读取该路径"), "文件不在本机时不能下达 read_file 指令（模型必然失败）: " + input);
+    assertTrue(input.contains("read_file 打不开"), "要明确说它打不开: " + input);
+  }
+
+  @Test
+  @DisplayName("语音未落盘（远程 URL）：标明未落盘，不贴「本地路径」")
+  void remoteAudioIsLabelledAsNotOnDisk() {
+    DefaultInboundMediaEnricher withAsr = new DefaultInboundMediaEnricher(path -> "不该被调用");
+    InboundMessage msg =
+        new InboundMessage(
+            "telegram",
+            "ops-telegram",
+            "m21",
+            ChatKind.P2P,
+            "u1",
+            "c1",
+            "",
+            false,
+            false,
+            List.of(InboundAttachment.audioUrl("https://api.example/file/botTOKEN/voice.ogg")));
+
+    String input = withAsr.toAgentInput(msg);
+
+    assertTrue(input.contains("未落盘"), "远程语音必须标明未落盘: " + input);
+    assertFalse(input.contains("本地路径"), "没落到本机就不能叫本地路径: " + input);
+  }
+
+  @Test
+  @DisplayName("语音只有平台引用（url 为空）：给资源引用并说明拿不到本机文件")
+  void audioWithOnlyAReferenceSaysSo() {
+    DefaultInboundMediaEnricher withAsr = new DefaultInboundMediaEnricher(path -> "不该被调用");
+    InboundMessage msg =
+        new InboundMessage(
+            "matrix",
+            "ops-matrix",
+            "m22",
+            ChatKind.P2P,
+            "u1",
+            "c1",
+            "",
+            false,
+            false,
+            List.of(InboundAttachment.audioReference("mxc://example/abcdef")));
+
+    String input = withAsr.toAgentInput(msg);
+
+    assertTrue(input.contains("mxc://example/abcdef"), "引用要带给模型: " + input);
+    assertFalse(input.contains("本地路径"), "没有本机文件就不能叫本地路径: " + input);
   }
 }
