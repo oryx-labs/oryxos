@@ -30,10 +30,22 @@ public final class InboundMediaJanitor {
   private static final Duration DEFAULT_TTL = Duration.ofHours(24);
   private static final long DEFAULT_MAX_BYTES = 2048L * 1024 * 1024;
   private static final long MIN_SWEEP_INTERVAL_MS = 60_000L;
+  private static final long MIN_SWEEP_INTERVAL_NANOS =
+      java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(MIN_SWEEP_INTERVAL_MS);
 
   private final Duration ttl;
   private final long maxBytes;
-  private final AtomicLong lastSweepMs = new AtomicLong(0L);
+
+  /** 节流窗口；生产固定 60s，测试可注入更短的值以验证窗口行为。 */
+  private final long minSweepIntervalNanos;
+
+  /**
+   * 上次清理的单调时刻（纳秒）。节流窗口是「距上次多久」这种时间间隔，必须用单调钟： 用墙钟的话，NTP 或休眠唤醒把钟往回校时会让 {@code now - prev} 变负， 于是「至少间隔
+   * 60s」变成「回拨后可无限期跳过」，TTL 与配额清理一起停摆。
+   *
+   * <p>初值回退一个窗口，让首次调用即可清理（{@link System#nanoTime()} 可为负，不能用 0 当哨兵）。
+   */
+  private final AtomicLong lastSweepNanos;
 
   /** 串行化 sweep 本身：并发的按需清理必须排队，否则后来者会读到扫描中途的大小。 */
   private final Object sweepLock = new Object();
@@ -43,8 +55,14 @@ public final class InboundMediaJanitor {
   }
 
   InboundMediaJanitor(Duration ttl, long maxBytes) {
+    this(ttl, maxBytes, MIN_SWEEP_INTERVAL_NANOS);
+  }
+
+  InboundMediaJanitor(Duration ttl, long maxBytes, long minSweepIntervalNanos) {
     this.ttl = ttl == null || ttl.isNegative() || ttl.isZero() ? DEFAULT_TTL : ttl;
     this.maxBytes = Math.max(0L, maxBytes);
+    this.minSweepIntervalNanos = minSweepIntervalNanos;
+    this.lastSweepNanos = new AtomicLong(System.nanoTime() - minSweepIntervalNanos);
   }
 
   public static InboundMediaJanitor fromEnv() {
@@ -56,12 +74,12 @@ public final class InboundMediaJanitor {
     if (mediaRoot == null || !Files.isDirectory(mediaRoot)) {
       return;
     }
-    long now = System.currentTimeMillis();
-    long prev = lastSweepMs.get();
-    if (now - prev < MIN_SWEEP_INTERVAL_MS) {
+    long now = System.nanoTime();
+    long prev = lastSweepNanos.get();
+    if (now - prev < minSweepIntervalNanos) {
       return;
     }
-    if (!lastSweepMs.compareAndSet(prev, now)) {
+    if (!lastSweepNanos.compareAndSet(prev, now)) {
       return;
     }
     sweepSerialized(mediaRoot);

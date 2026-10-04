@@ -123,4 +123,26 @@ class InboundMediaJanitorTest {
         failures.isEmpty(),
         "两次并发调用都不该抛 —— 空间腾得出来；实际: " + failures.stream().map(Throwable::getMessage).toList());
   }
+
+  @Test
+  @DisplayName("节流窗口：窗口内不重复清理，窗口过后恢复")
+  void sweepIfDueRespectsTheThrottleWindow() throws Exception {
+    Path mediaRoot = Files.createDirectories(root.resolve("media4"));
+    // 窗口取 200ms 以便在测试里跨过；生产固定 60s。
+    InboundMediaJanitor janitor =
+        new InboundMediaJanitor(
+            Duration.ofHours(24), 0L, java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(200));
+
+    Path first = messageDir(mediaRoot, "expired-a", 16, Duration.ofHours(48));
+    janitor.sweepIfDue(mediaRoot);
+    assertFalse(Files.exists(first), "窗口到期后第一次调用应当清理");
+
+    Path second = messageDir(mediaRoot, "expired-b", 16, Duration.ofHours(48));
+    janitor.sweepIfDue(mediaRoot);
+    assertTrue(Files.exists(second), "窗口内的调用应当被节流掉");
+
+    Thread.sleep(250);
+    janitor.sweepIfDue(mediaRoot);
+    assertFalse(Files.exists(second), "窗口过后应当恢复清理");
+  }
 }
