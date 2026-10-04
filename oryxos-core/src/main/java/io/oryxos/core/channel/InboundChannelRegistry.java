@@ -11,42 +11,52 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>{@link #statusAll()} 基于注册表实时计算，不 snapshot——管理台增删渠道必须立刻反映到状态端点 （#203 活视图教训，参照
  * ToolRegistry.asMap）。
+ *
+ * <p>一个渠道在任一时刻只处于一种状态，所以这里用<b>一张表</b>存「适配器或离线状态」，而不是并行两张表： 两张表意味着每次登记要动两处，读方可能落在两次写之间，看到一个渠道同时在两边
+ * —— 状态端点于是 同一渠道返回两行、且两行互相矛盾。单表的每次更新都是一次 {@code put}，读者看到的必然是某个完整状态。
  */
 public class InboundChannelRegistry {
 
-  private final Map<String, InboundChannelAdapter> adapters = new ConcurrentHashMap<>();
-  // 未上线渠道（校验/启动失败 = ERROR，停用 = DISABLED）：name → 状态（配置仍在，状态可见，不带病上线）
-  private final Map<String, ChannelStatus> offline = new ConcurrentHashMap<>();
+  /** 一个渠道的当前状态：要么是一个活着的适配器，要么是一条离线状态（未上线：ERROR 点名原因 / DISABLED 停用）。 */
+  private sealed interface Entry permits Online, Offline {}
 
-  /** 登记一个已启动的适配器；同名离线记录清除。 */
+  private record Online(InboundChannelAdapter adapter) implements Entry {}
+
+  private record Offline(ChannelStatus status) implements Entry {}
+
+  private final Map<String, Entry> entries = new ConcurrentHashMap<>();
+
+  /** 登记一个已启动的适配器；同名离线记录被这一次 {@code put} 一并取代。 */
   public void register(InboundChannelAdapter adapter) {
-    offline.remove(adapter.name());
-    adapters.put(adapter.name(), adapter);
+    entries.put(adapter.name(), new Online(adapter));
   }
 
-  /** 登记一个未上线渠道的状态（ERROR 带点名原因 / DISABLED 停用）。 */
+  /** 登记一个未上线渠道的状态（ERROR 带点名原因 / DISABLED 停用）；同名适配器记录被一并取代。 */
   public void registerOffline(ChannelStatus status) {
-    adapters.remove(status.name());
-    offline.put(status.name(), status);
+    entries.put(status.name(), new Offline(status));
   }
 
   /** 移除一个渠道的登记（运行中或离线态皆可）。 */
   public void unregister(String name) {
-    adapters.remove(name);
-    offline.remove(name);
+    entries.remove(name);
   }
 
   public Optional<InboundChannelAdapter> get(String name) {
-    return Optional.ofNullable(adapters.get(name));
+    return entries.get(name) instanceof Online online
+        ? Optional.of(online.adapter())
+        : Optional.empty();
   }
 
-  /** 全部渠道实时状态：运行中的问适配器，未上线的返回登记的离线状态。 */
+  /** 全部渠道实时状态：运行中的问适配器，未上线的返回登记的离线状态。每个渠道名至多一行。 */
   public List<ChannelStatus> statusAll() {
     List<ChannelStatus> out = new ArrayList<>();
-    for (InboundChannelAdapter adapter : adapters.values()) {
-      out.add(adapter.status());
+    for (Entry entry : entries.values()) {
+      if (entry instanceof Online online) {
+        out.add(online.adapter().status());
+      } else if (entry instanceof Offline offline) {
+        out.add(offline.status());
+      }
     }
-    out.addAll(offline.values());
     out.sort(java.util.Comparator.comparing(ChannelStatus::name));
     return out;
   }
