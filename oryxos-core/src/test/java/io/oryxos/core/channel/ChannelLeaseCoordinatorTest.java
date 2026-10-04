@@ -184,4 +184,21 @@ class ChannelLeaseCoordinatorTest {
       Thread.currentThread().interrupt();
     }
   }
+
+  @Test
+  @DisplayName("释放租约失败不得挡住调用方的停连：异常不能从 unmanage 逸出")
+  void releaseFailureDoesNotEscapeUnmanage() {
+    CoordinationStore store = grantingStore();
+    // 数据库抖动：DELETE 抛
+    org.mockito.Mockito.doThrow(new IllegalStateException("数据库不可用"))
+        .when(store)
+        .releaseChannel(
+            org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+    ChannelLeaseCoordinator coordinator =
+        new ChannelLeaseCoordinator(store, new ClusterProperties(), idleScheduler());
+
+    // unmanage 若把异常抛出去，调用方 stopOne 的「停适配器 + 注销登记」会整段被跳过，
+    // 留下连接活着、登记仍是 CONNECTED、循环却已撤的中间态。
+    org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> coordinator.unmanage("wecom"));
+  }
 }

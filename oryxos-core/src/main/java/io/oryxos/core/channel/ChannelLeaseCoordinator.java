@@ -150,7 +150,15 @@ public class ChannelLeaseCoordinator {
     if (loop != null) {
       loop.cancel(false);
     }
-    store.releaseChannel(channelName, properties.owner());
+    // 释放租约是尽力而为：它失败最坏是让接管多等一个 TTL（租约行会自行过期）。
+    // 但异常若从这里逸出，调用方 stopOne 的「停适配器 + 注销登记」会被整段跳过 ——
+    // 连接活着、登记仍是 CONNECTED、循环却已撤（不再续租也不再自我 fencing），
+    // 那才是不可恢复的中间态。所以这里吞掉并留痕，把必须做的停连让给调用方。
+    try {
+      store.releaseChannel(channelName, properties.owner());
+    } catch (RuntimeException e) {
+      LOG.warn("释放渠道属主租约失败（将等 TTL 自然过期）: channel={} {}", sanitize(channelName), e.getMessage());
+    }
   }
 
   private static String sanitize(String value) {
