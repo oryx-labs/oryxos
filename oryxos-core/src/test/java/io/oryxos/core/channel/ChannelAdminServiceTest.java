@@ -283,4 +283,64 @@ class ChannelAdminServiceTest {
     stopCallback.get().accept(ChannelLeaseCoordinator.Loss.FENCED);
     assertTrue(registry.get("chan-w").isEmpty(), "fencing 应当把连接降为离线");
   }
+
+  @Test
+  @DisplayName("落盘失败时不得先把旧连接拆掉（否则运行态没了、磁盘仍写着在用）")
+  void saveFailureKeepsTheRunningChannel() {
+    // 写盘失败：只读卷 / 磁盘满 / 权限变更 —— ChannelConfigLoader.save 会抛 UncheckedIOException
+    ChannelConfigLoader failing = mock(ChannelConfigLoader.class);
+    when(failing.loadRaw()).thenReturn(List.of(config("chan-a", "ops-agent", true)));
+    when(failing.resolve(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> inv.getArgument(0));
+    org.mockito.Mockito.doThrow(new java.io.UncheckedIOException(new java.io.IOException("只读卷")))
+        .when(failing)
+        .save(org.mockito.ArgumentMatchers.any());
+
+    ChannelAdminService svc =
+        new ChannelAdminService(
+            failing,
+            registry,
+            profileRegistry,
+            Map.of("stub", c -> new TrackingAdapter(c.name(), c.agent())));
+    // 模拟「该渠道正在运行」
+    TrackingAdapter running = new TrackingAdapter("chan-a", "ops-agent");
+    running.start();
+    registry.register(running);
+    lifecycle.setLength(0);
+
+    assertThrows(
+        java.io.UncheckedIOException.class,
+        () -> svc.update("chan-a", config("chan-a", "ops-agent", true)));
+
+    // 关键：保存失败发生在断连【之前】，所以连接应当还在
+    assertTrue(registry.get("chan-a").isPresent(), "落盘失败时渠道应当继续运行（磁盘仍是旧配置，运行态应与之一致）");
+    assertTrue(
+        !lifecycle.toString().contains("stop:chan-a"), "不该在保存成功之前就断开连接，实际生命周期: " + lifecycle);
+  }
+
+  @Test
+  @DisplayName("删除渠道时落盘失败：连接不得被拆掉")
+  void removeSaveFailureKeepsTheRunningChannel() {
+    ChannelConfigLoader failing = mock(ChannelConfigLoader.class);
+    when(failing.loadRaw()).thenReturn(List.of(config("chan-a", "ops-agent", true)));
+    when(failing.resolve(org.mockito.ArgumentMatchers.any())).thenAnswer(inv -> inv.getArgument(0));
+    org.mockito.Mockito.doThrow(new java.io.UncheckedIOException(new java.io.IOException("只读卷")))
+        .when(failing)
+        .save(org.mockito.ArgumentMatchers.any());
+
+    ChannelAdminService svc =
+        new ChannelAdminService(
+            failing,
+            registry,
+            profileRegistry,
+            Map.of("stub", c -> new TrackingAdapter(c.name(), c.agent())));
+    TrackingAdapter running = new TrackingAdapter("chan-a", "ops-agent");
+    running.start();
+    registry.register(running);
+    lifecycle.setLength(0);
+
+    assertThrows(java.io.UncheckedIOException.class, () -> svc.remove("chan-a"));
+
+    assertTrue(registry.get("chan-a").isPresent(), "落盘失败时渠道应当继续运行");
+    assertTrue(!lifecycle.toString().contains("stop:chan-a"), "实际生命周期: " + lifecycle);
+  }
 }

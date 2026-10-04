@@ -101,9 +101,12 @@ public class ChannelAdminService {
     if (merged.enabled()) {
       validateForLaunch(resolved);
     }
-    stopOne(name);
+    // 先落盘再断连（类注释钉的顺序）。反过来的话，save 失败（只读卷/磁盘满/权限）
+    // 会留下「运行态已拆、磁盘仍写着在用」的撕裂：GET /channels 读盘仍列出它，
+    // GET /channels/status 读登记表却整行消失，不重试就不会回来。
     existing.set(idx, merged);
     loader.save(existing);
+    stopOne(name);
     startOne(resolved);
     return merged;
   }
@@ -136,9 +139,10 @@ public class ChannelAdminService {
     if (idx < 0) {
       throw new IllegalArgumentException("渠道不存在: " + name);
     }
-    stopOne(name);
+    // 同上：先落盘再断连。save 失败时渠道继续按磁盘上的配置运行，两边一致。
     existing.remove(idx);
     loader.save(existing);
+    stopOne(name);
     registry.unregister(name);
   }
 
