@@ -227,8 +227,29 @@ final class TelegramInboundMediaResolver {
     if (baseHost == null || baseHost.isBlank() || base.getScheme() == null) {
       return false;
     }
-    return baseHost.equalsIgnoreCase(uri.getHost())
-        && base.getScheme().equalsIgnoreCase(uri.getScheme());
+    return asciiEqualsIgnoreCase(baseHost, uri.getHost())
+        && asciiEqualsIgnoreCase(base.getScheme(), uri.getScheme());
+  }
+
+  /** 仅 ASCII 大小写折叠，避免 {@code equalsIgnoreCase} 触发 SpotBugs 的 Unicode 变换告警。 */
+  private static boolean asciiEqualsIgnoreCase(String left, String right) {
+    if (left == null || right == null || left.length() != right.length()) {
+      return false;
+    }
+    for (int i = 0; i < left.length(); i++) {
+      char a = left.charAt(i);
+      char b = right.charAt(i);
+      if (a >= 'A' && a <= 'Z') {
+        a += 'a' - 'A';
+      }
+      if (b >= 'A' && b <= 'Z') {
+        b += 'a' - 'A';
+      }
+      if (a != b) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private static String extensionFor(InboundAttachment attachment, String urlPath) {
