@@ -141,7 +141,7 @@ class FailoverTakeoverIT {
       AtomicInteger startsB = new AtomicInteger();
 
       coordinatorA.manage(
-          "wecom-main", () -> connectedA.set(true), () -> connectedA.set(false), connectedA::get);
+          "wecom-main", () -> connectedA.set(true), loss -> connectedA.set(false), connectedA::get);
       assertTrue(connectedA.get(), "先到者成为属主并建连");
 
       coordinatorB.manage(
@@ -150,7 +150,7 @@ class FailoverTakeoverIT {
             connectedB.set(true);
             startsB.incrementAndGet();
           },
-          () -> connectedB.set(false),
+          loss -> connectedB.set(false),
           connectedB::get);
       assertFalse(connectedB.get(), "属主存活时待机方不建连（不互踢）");
 
