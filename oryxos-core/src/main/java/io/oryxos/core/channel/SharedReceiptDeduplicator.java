@@ -39,6 +39,13 @@ public class SharedReceiptDeduplicator implements MessageDeduplicator {
     return first;
   }
 
+  @Override
+  public void release(String key) {
+    // 两级都要撤：只撤共享库的话，本地缓存仍认为「已见」，同一 key 再也进不来。
+    localCache.release(key);
+    store.unmarkReceipt(key);
+  }
+
   private static String channelOf(String key) {
     int colon = key.indexOf(':');
     return colon > 0 ? key.substring(0, colon) : "unknown";

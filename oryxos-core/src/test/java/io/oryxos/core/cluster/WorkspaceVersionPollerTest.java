@@ -75,6 +75,13 @@ class WorkspaceVersionPollerTest {
     }
 
     @Override
+    public void unmarkReceipt(String r) {
+
+      // 无状态桩：与上面的 markReceipt 一样不做记录。
+
+    }
+
+    @Override
     public boolean tryAcquireChannel(String c, String o, Duration t) {
       return false;
     }

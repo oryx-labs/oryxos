@@ -113,6 +113,11 @@ public class JpaCoordinationStore implements CoordinationStore {
   }
 
   @Override
+  public void unmarkReceipt(String receiptKey) {
+    receipts.deleteReceipt(receiptKey);
+  }
+
+  @Override
   public boolean tryAcquireChannel(String channelName, String owner, Duration ttl) {
     Instant now = dbNow();
     Instant until = now.plus(ttl);

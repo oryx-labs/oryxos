@@ -70,4 +70,14 @@ class MessageDeduplicatorTest {
     clock.advance(Duration.ofHours(2));
     assertTrue(dedup.markIfFirst("k1")); // 已过期
   }
+
+  @Test
+  @DisplayName("撤销占用后同一键可再次登记（失败路径要把重推机会还给平台）")
+  void releaseAllowsSameKeyAgain() {
+    MessageDeduplicator dedup = new InMemoryMessageDeduplicator();
+    assertTrue(dedup.markIfFirst("chan:m-1"));
+    assertFalse(dedup.markIfFirst("chan:m-1"));
+    dedup.release("chan:m-1");
+    assertTrue(dedup.markIfFirst("chan:m-1"));
+  }
 }

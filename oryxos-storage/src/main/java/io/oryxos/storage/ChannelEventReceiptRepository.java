@@ -22,4 +22,9 @@ public interface ChannelEventReceiptRepository extends JpaRepository<ChannelEven
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("DELETE FROM ChannelEventReceipt r WHERE r.firstSeenAt < :before")
   int deleteOlderThan(Instant before);
+
+  @Transactional(rollbackFor = Exception.class)
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("DELETE FROM ChannelEventReceipt r WHERE r.receiptKey = :receiptKey")
+  int deleteReceipt(String receiptKey);
 }

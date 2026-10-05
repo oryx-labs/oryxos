@@ -51,6 +51,11 @@ public class InMemoryMessageDeduplicator implements MessageDeduplicator {
     return true;
   }
 
+  @Override
+  public synchronized void release(String key) {
+    seen.remove(key);
+  }
+
   /** 从最老条目起清掉已过 TTL 的登记（插入序即时间序，遇到未过期即可停）。 */
   private void evictExpired(Instant now) {
     Instant cutoff = now.minus(ttl);

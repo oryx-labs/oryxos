@@ -141,6 +141,14 @@ public class InboundMessageService {
   }
 
   /**
+   * 撤销一次占用，与 {@link #tryClaim} 对称。占用之后若最终没能给出任何答复，必须撤销 —— 否则平台对同一 message_id 的重推会被判为重复而静默丢弃，用户拿到 0
+   * 条回答。
+   */
+  public void releaseClaim(String channelName, String messageId) {
+    deduplicator.release(channelName + DEDUP_KEY_SEPARATOR + messageId);
+  }
+
+  /**
    * 昂贵预处理（如下载图片）开始前立刻发 B8「处理中」（仍受合并窗约束）。下载+识图常在默认阈值（15s）内结束，若仍走延迟计时，用户会感到「识别完 才提示」。返回的 latch
    * 必须在整条入站链路结束时 {@code countDown}，并交给 {@link #onClaimedMessage(InboundMessage,
    * InboundChannelAdapter, CountDownLatch)}，避免推理阶段再开一个提示。
@@ -239,6 +247,10 @@ public class InboundMessageService {
       // 进度流已经发过「思考中」占位，而 finish/fail 都写在没跑起来的那段 Runnable 里 ——
       // 不在这里收尾，用户看到的就是一张永远停在思考中的卡片。
       job.abandon().run();
+      // 与上面 activeRuns.unregister 同理：去重登记也要撤。不撤的话，平台按自己的策略
+      // 重推同一 message_id 会命中判重而被静默丢弃，用户永远拿不到回答 —— 而这次失败
+      // 根本没走到「可能有部分答复」的地步，撤销不会造成重复。
+      releaseClaim(msg.channelName(), msg.messageId());
       throw e;
     }
     // 进度流已发「思考中」卡片时不再发延迟「处理中」文本，避免双提示

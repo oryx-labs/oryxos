@@ -43,6 +43,14 @@ public interface CoordinationStore {
   /** 入站事件判重：首见插入回执返回 true；唯一约束冲突返回 false = 重复，丢弃。 */
   boolean markReceipt(String receiptKey);
 
+  /**
+   * 撤销一条回执登记，与 {@link #markReceipt} 对称。
+   *
+   * <p>契约：撤销后同一 {@code receiptKey} 再次 {@link #markReceipt} 必须重新返回 true ——
+   * 这是「占用之后没能给出答复」时把重推机会还给平台的前提。
+   */
+  void unmarkReceipt(String receiptKey);
+
   /** 渠道属主认领（独连型渠道，如企微）：语义同 tryAcquireTurn。 */
   boolean tryAcquireChannel(String channelName, String owner, Duration ttl);
 

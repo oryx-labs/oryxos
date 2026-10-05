@@ -33,4 +33,16 @@ class SharedReceiptDeduplicatorTest {
     assertThat(dedup.markIfFirst("feishu:m2")).isFalse(); // 撞冲突后也进了本地缓存
     verify(store, times(1)).markReceipt("feishu:m2");
   }
+
+  @Test
+  void releaseClearsBothLevels() {
+    CoordinationStore store = mock(CoordinationStore.class);
+    when(store.markReceipt("feishu:m3")).thenReturn(true);
+    SharedReceiptDeduplicator dedup = new SharedReceiptDeduplicator(store);
+
+    assertThat(dedup.markIfFirst("feishu:m3")).isTrue();
+    dedup.release("feishu:m3");
+    verify(store, times(1)).unmarkReceipt("feishu:m3"); // 共享回执要撤
+    assertThat(dedup.markIfFirst("feishu:m3")).isTrue(); // 本地缓存也要撤，否则这里是 false
+  }
 }
