@@ -19,6 +19,16 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # PMD 7.28.0 aborts inside its own NonThreadSafeSingleton rule
+      # (NodeStream.firstOrThrow), so maven-pmd-plugin fails the quality gate while
+      # all 750 tests and Checkstyle pass. 7.28.0 changed that rule to also report
+      # non-static methods (pmd/pmd#6780). Only that release is held back, so a fixed
+      # 7.28.x still upgrades automatically.
+      - dependency-name: "net.sourceforge.pmd:pmd-core"
+        versions: ["7.28.0"]
+      - dependency-name: "net.sourceforge.pmd:pmd-java"
+        versions: ["7.28.0"]
 
   - package-ecosystem: github-actions
     directory: /
