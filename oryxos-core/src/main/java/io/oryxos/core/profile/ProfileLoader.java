@@ -302,7 +302,7 @@ public class ProfileLoader {
   private static void validateCronAndZone(String key, String cron, String zone, String source) {
     ZoneId zoneId;
     try {
-      zoneId = zone == null || zone.isBlank() ? ZoneId.systemDefault() : ZoneId.of(zone);
+      zoneId = Profile.ScheduleConfig.resolveZone(zone);
     } catch (RuntimeException e) {
       throw new ProfileValidationException(
           "Profile 定时配置 " + key + " 的 zone 无效: " + source + " (" + e.getMessage() + ")");

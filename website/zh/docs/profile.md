@@ -205,8 +205,12 @@ schedules:
 | --- | --- | --- |
 | `id` | string | 该 Agent 内此定时任务的唯一 id |
 | `cron` | string | Spring 6 段 cron 表达式 |
-| `zone` | string | IANA 时区（如 `Asia/Shanghai`） |
+| `zone` | string | 可选 IANA 时区（如 `Asia/Shanghai`）；省略或空白时使用 UTC |
 | `message` | string | 定时触发时交给 Agent 的触发消息 |
+
+每个副本的有效默认时区均为 UTC，不依赖进程或宿主机时区。原始 `zone` 配置值保持不变，校验和调度时才应用这个默认值。
+
+**升级说明：** 旧版本在 `zone` 省略或空白时使用系统时区。要保留现有日程的本地触发时刻，请在升级前显式填写原部署使用的 IANA 时区。例如，`cron: "0 0 9 * * *"` 未填写 `zone` 时按 UTC 9 点执行，即上海本地 17 点；增加 `zone: Asia/Shanghai` 可保留上海本地 9 点。
 
 ---
 

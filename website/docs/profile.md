@@ -206,8 +206,12 @@ schedules:
 |-------|------|-------------|
 | `id` | string | Unique id for this schedule within the agent. |
 | `cron` | string | Spring 6-field cron expression. |
-| `zone` | string | IANA time zone (e.g. `Asia/Shanghai`). |
+| `zone` | string | Optional IANA time zone (e.g. `Asia/Shanghai`); omitted or blank values use UTC. |
 | `message` | string | The trigger message handed to the agent when the schedule fires. |
+
+The effective default is UTC on every replica, regardless of the process or host time zone. The original configured `zone` value is preserved; this default is applied when validating and scheduling the task.
+
+**Upgrade note:** Earlier versions used the system time zone when `zone` was omitted or blank. To preserve an existing local-time schedule, explicitly set its former IANA time zone before upgrading. For example, `cron: "0 0 9 * * *"` without `zone` runs at `09:00` UTC (`17:00` Shanghai time); add `zone: Asia/Shanghai` to retain `09:00` Shanghai time.
 
 ---
 

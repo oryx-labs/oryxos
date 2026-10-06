@@ -14,6 +14,8 @@ import java.util.Set;
 import java.util.function.UnaryOperator;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** 课件《第16节》验收 harness：ProfileLoaderTest。 */
 class ProfileLoaderTest {
@@ -347,6 +349,30 @@ class ProfileLoaderTest {
     Profile profile = loader().parse(profilesDir.resolve("ok-sched.yaml"));
     assertEquals(1, profile.schedules().size());
     assertEquals("morning", profile.schedules().get(0).key());
+    assertNull(profile.schedules().get(0).zone());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "  "})
+  void schedules空白时区仍可加载且保留原值(String zone) throws IOException {
+    write(
+        "blank-zone.yaml",
+        """
+        name: blank-zone
+        provider:
+          name: deepseek
+          model: deepseek-chat
+        schedules:
+          - key: morning
+            name: Morning job
+            cron: "0 0 8 * * *"
+            zone: "%s"
+            message: hi
+        """
+            .formatted(zone));
+
+    Profile profile = loader().parse(profilesDir.resolve("blank-zone.yaml"));
+    assertEquals(zone, profile.schedules().get(0).zone());
   }
 
   @Test
