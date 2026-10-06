@@ -450,6 +450,9 @@ public class AgentLifecycleService {
     Map<String, Object> settings = new LinkedHashMap<>();
     settings.put("max_iterations", Profile.Settings.defaults().maxIterations());
     settings.put("max_history_turns", Profile.Settings.defaults().maxHistoryTurns());
+    settings.put(
+        "max_iterations_mode",
+        Profile.Settings.defaults().maxIterationsMode().name().toLowerCase(java.util.Locale.ROOT));
     frontmatter.put("settings", settings);
     return frontmatter;
   }

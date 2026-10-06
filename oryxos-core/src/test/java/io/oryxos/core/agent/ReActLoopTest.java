@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.oryxos.core.ToolResult;
+import io.oryxos.core.profile.MaxIterationsMode;
 import io.oryxos.core.profile.Profile;
 import io.oryxos.core.provider.ProviderRequest;
 import io.oryxos.core.provider.ProviderResponse;
@@ -60,6 +61,21 @@ class ReActLoopTest {
         List.of(),
         List.of(),
         new Profile.Settings(maxIterations, 20));
+  }
+
+  private Profile profileWithMode(int maxIterations, MaxIterationsMode mode) {
+    return new Profile(
+        "ops-agent",
+        null,
+        null,
+        new Profile.ProviderRef("deepseek", "deepseek-chat", null),
+        List.of("http_get"),
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        List.of(),
+        new Profile.Settings(maxIterations, 20, mode));
   }
 
   private static ProviderResponse finalAnswer(String text) {
@@ -145,6 +161,42 @@ class ReActLoopTest {
     String reply = loop.run(session, "查天气", profileWithMaxIterations(10));
 
     verify(providerService, times(10)).chat(any(), any(), any()); // 恰好 10 轮，一轮不多
+    assertTrue(reply.contains("达到最大轮数"));
+  }
+
+  @Test
+  @DisplayName("SUMMARIZE_转满后追加一次无工具最终答复并写入Session_仍返回哨兵串")
+  void summarizeMode_appendsFinalAnswerAndStillReturnsSentinel() {
+    java.util.concurrent.atomic.AtomicInteger calls =
+        new java.util.concurrent.atomic.AtomicInteger();
+    when(providerService.chat(any(), any(), any()))
+        .thenAnswer(
+            inv ->
+                calls.incrementAndGet() <= 3
+                    ? responseWithToolCall(HTTP_GET_CALL) // 前 3 轮永不收敛
+                    : finalAnswer("基于已查到的信息：今天多云")); // 第 4 次 = 无工具收尾调用
+    when(toolExecutor.execute(any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+
+    String reply = loop.run(session, "持续调查", profileWithMode(3, MaxIterationsMode.SUMMARIZE));
+
+    // 3 轮循环全在调工具 + 1 次无工具收尾 = 4 次模型调用
+    verify(providerService, times(4)).chat(eq("s-1"), any(), any());
+    assertTrue(reply.contains("达到最大轮数")); // 哨兵串不变，上层据此仍标记失败
+    Message last = session.messages().get(session.messages().size() - 1);
+    assertEquals(Message.ROLE_ASSISTANT, last.role());
+    assertTrue(last.toolCalls().isEmpty()); // 收尾答复不带工具调用
+    assertEquals("基于已查到的信息：今天多云", last.content());
+  }
+
+  @Test
+  @DisplayName("ERROR默认_转满仅返回哨兵串且不追加额外模型调用")
+  void errorMode_onlySentinelNoExtraCall() {
+    when(providerService.chat(any(), any(), any())).thenReturn(responseWithToolCall(HTTP_GET_CALL));
+    when(toolExecutor.execute(any(), any(), any())).thenReturn(ToolResult.ok("ok"));
+
+    String reply = loop.run(session, "持续调查", profileWithMode(3, MaxIterationsMode.ERROR));
+
+    verify(providerService, times(3)).chat(eq("s-1"), any(), any()); // 无第 4 次收尾调用
     assertTrue(reply.contains("达到最大轮数"));
   }
 
