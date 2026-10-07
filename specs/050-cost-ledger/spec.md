@@ -25,9 +25,9 @@ attributes tokens, price version, tool cost and latency by task, Agent, team and
 
 | Acceptance | Coverage |
 |------------|----------|
-| ???????????? | `GET /api/v1/cost/attribution` + `CostLedgerService.query` includes `priceVersions` |
-| ????????????? | `checkBudget` + provider `applyBudgetGate` BLOCK / DEGRADE |
-| ?????????? | `GET /api/v1/cost/runs/{runId}/reconcile` vs `llm_calls.cost_micros` |
+| 可按任务、团队、模型归因 | `GET /api/v1/cost/attribution` + `CostLedgerService.query` includes `priceVersions` |
+| 可校验预算、超限阻断或降级 | `checkBudget` + provider `applyBudgetGate` BLOCK / DEGRADE |
+| 账本可与审计成本对账 | `GET /api/v1/cost/runs/{runId}/reconcile` vs `llm_calls.cost_micros` |
 
 ## Out of scope
 

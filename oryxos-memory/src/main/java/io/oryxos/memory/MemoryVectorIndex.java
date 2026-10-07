@@ -95,7 +95,7 @@ public class MemoryVectorIndex {
     }
   }
 
-  /** 启动对账（幂等）：清模型不一致的行（整体重建，不混比新旧向量）、清本体已不存在的孤儿行、补缺失行。 「已索引」= 表中有当前模型的对应行，无单独状态列。 */
+  /** 启动对账（幂等）：清模型或维度不一致的行（整体重建，不混比新旧向量）、清本体已不存在的孤儿行、补缺失行。 「已索引」= 表中有当前模型且当前维度的对应行，无单独状态列。 */
   public void reconcile(String agentName, List<MemoryEntryView> archivalEntries) {
     repository.deleteByEmbeddingModelNot(embedder.modelId());
     Map<String, MemoryEntryView> live = new LinkedHashMap<>();
@@ -103,16 +103,17 @@ public class MemoryVectorIndex {
       live.putIfAbsent(entryHash(agentName, entry.content()), entry);
     }
     Set<String> existing = new HashSet<>();
-    List<String> orphans = new ArrayList<>();
+    List<String> stale = new ArrayList<>();
     for (MemoryVectorEntity row : repository.findByAgentName(agentName)) {
-      if (live.containsKey(row.getEntryHash())) {
+      // 本体仍在、且向量出自当前模型与当前维度，才算已索引；孤儿与维度陈旧行一并清掉，按 missing 重建
+      if (live.containsKey(row.getEntryHash()) && isCurrent(row)) {
         existing.add(row.getEntryHash());
       } else {
-        orphans.add(row.getEntryHash());
+        stale.add(row.getEntryHash());
       }
     }
-    if (!orphans.isEmpty()) {
-      repository.deleteByAgentNameAndEntryHashIn(agentName, orphans);
+    if (!stale.isEmpty()) {
+      repository.deleteByAgentNameAndEntryHashIn(agentName, stale);
     }
     List<MemoryEntryView> missing = new ArrayList<>();
     live.forEach(
@@ -149,11 +150,20 @@ public class MemoryVectorIndex {
     return value == null ? "" : value.replace('\r', '_').replace('\n', '_');
   }
 
+  /**
+   * 行是否已由当前 embedder 建好：模型与维度都一致才算。维度也是身份的一部分——同一 modelId 换了 dimensions（或上游同名
+   * 模型换了隐层宽度）时旧行不能复用，否则语义路按维度过滤后恒空（FR-007「维度不一致 MUST 自动重建」）。
+   */
+  private boolean isCurrent(MemoryVectorEntity row) {
+    return embedder.modelId().equals(row.getEmbeddingModel())
+        && row.getDim() == embedder.dimensions();
+  }
+
   private void index(String agentName, MemoryEntryView entry) {
     String hash = entryHash(agentName, entry.content());
     Optional<MemoryVectorEntity> existing = repository.findByAgentNameAndEntryHash(agentName, hash);
-    if (existing.isPresent() && embedder.modelId().equals(existing.get().getEmbeddingModel())) {
-      return; // 幂等：同条目同模型已索引
+    if (existing.isPresent() && isCurrent(existing.get())) {
+      return; // 幂等：同条目同模型同维度已索引
     }
     float[] vector = embedder.embed(entry.content());
     MemoryVectorEntity entity = existing.orElseGet(MemoryVectorEntity::new);

@@ -55,6 +55,12 @@ public final class AgentAwareProcessStarter implements ProcessStarter {
     return select(resolve(ToolExecutionContext.agentName())).start(command, workingDirectory);
   }
 
+  /** 本次调用真正会用的档：与 {@link #start} 同一处收敛结果，供工具侧闸门判定（闸门与执行体必须同源）。 */
+  @Override
+  public ExecutionBackendProperties effectiveBackend() {
+    return resolve(ToolExecutionContext.agentName());
+  }
+
   private ProcessStarter select(ExecutionBackendProperties effective) throws IOException {
     if (effective.isDocker()) {
       return dockerFactory.apply(effective);

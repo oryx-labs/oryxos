@@ -71,4 +71,27 @@ class MemoryToolsTest {
     store.append("核对", MemoryScope.ARCHIVAL);
     assertTrue(store.recallByKeyword("x").size() >= 1);
   }
+
+  @Test
+  @DisplayName("save_memory 缺 content 报缺参，不落记忆")
+  void missingContentReportsAndStoresNothing() {
+    MemoryTools t = tools();
+
+    for (String missing : new String[] {null, "", "   "}) {
+      assertEquals("错误: 缺少 content 参数", t.saveMemory(missing, "archival"));
+    }
+
+    // 以前会落一条只有时间戳的空记忆，并回"已记住"
+    assertTrue(store.load().replace("## 核心记忆", "").replace("## 归档记忆", "").isBlank(), "不落库");
+  }
+
+  @Test
+  @DisplayName("recall_memory 缺 keyword 报缺参，不再抛裸 NPE")
+  void missingKeywordReportsInsteadOfThrowing() {
+    MemoryTools t = tools();
+
+    for (String missing : new String[] {null, "", "   "}) {
+      assertEquals("错误: 缺少 keyword 参数", t.recallMemory(missing));
+    }
+  }
 }

@@ -129,8 +129,9 @@ class RecallBackwardCompatTest {
   }
 
   /**
-   * 旧版 SqliteMemoryStore 检索行为快照：{@code scope='ARCHIVAL' AND content LIKE %kw% ORDER BY id ASC}——
-   * SQLite 的 LIKE 对 ASCII 本就不区分大小写，故大小写统一对这一档不构成行为差异。
+   * 旧版 SqliteMemoryStore 检索行为快照：{@code scope='ARCHIVAL' AND content LIKE %kw% ORDER BY id
+   * ASC}，配合调用方把关键词压小写。 这里按 Java 侧折叠 + 字面包含表达该语义：ASCII 与 SQLite 的 LIKE 同判，非 ASCII 只有 Java
+   * 侧折叠做得到（SQLite 的 {@code lower()} 只折 ASCII），所以这一档的一致性由折叠规则本身保证，不靠 SQL。
    */
   private static List<String> legacySqliteRecall(List<MemoryEntry> data, String keyword) {
     String needle = keyword.toLowerCase(Locale.ROOT);
@@ -166,19 +167,6 @@ class RecallBackwardCompatTest {
               String scope = inv.getArgument(1);
               return data.stream()
                   .filter(e -> e.getAgentName().equals(agent) && e.getScope().equals(scope))
-                  .toList();
-            });
-    when(repo.searchArchival(anyString(), anyString()))
-        .thenAnswer(
-            inv -> {
-              String agent = inv.getArgument(0);
-              String needle = ((String) inv.getArgument(1)).replace("%", "");
-              return data.stream()
-                  .filter(
-                      e ->
-                          e.getAgentName().equals(agent)
-                              && "ARCHIVAL".equals(e.getScope())
-                              && e.getContent().toLowerCase(Locale.ROOT).contains(needle))
                   .toList();
             });
     return repo;

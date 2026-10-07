@@ -419,19 +419,6 @@ class MemoryBackendContractTest {
               matched.sort((a, b) -> Long.compare(b.getId(), a.getId()));
               return matched.stream().limit(pageable.getPageSize()).toList();
             });
-    when(repo.searchArchival(anyString(), anyString()))
-        .thenAnswer(
-            inv -> {
-              String agent = inv.getArgument(0);
-              String needle = ((String) inv.getArgument(1)).replace("%", "");
-              return data.stream()
-                  .filter(
-                      e ->
-                          e.getAgentName().equals(agent)
-                              && "ARCHIVAL".equals(e.getScope())
-                              && e.getContent().toLowerCase(Locale.ROOT).contains(needle))
-                  .toList();
-            });
     return repo;
   }
 

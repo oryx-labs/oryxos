@@ -326,9 +326,13 @@ public final class WhitelistSandbox implements Sandbox, SandboxWhitelist, Resolv
    */
   private static boolean isBlockedSsrfAddress(InetAddress addr) {
     InetAddress effective = unwrapEmbeddedIpv4(addr);
-    // addr 侧保留原生 IPv6 回环/未指定（避免 ::1 被误展开成 0.0.0.1 后漏拦）
+    // addr 侧保留原生 IPv6 类别（回环/未指定/链路本地/站点本地/组播）：展开只针对嵌入的 IPv4，
+    // 隧道地址自身的 IPv6 段仍要先判——否则 fe80::/10 之类挂上 ISATAP IID 后，展开成公网 IPv4 就漏拦了。
     return addr.isLoopbackAddress()
         || addr.isAnyLocalAddress()
+        || addr.isLinkLocalAddress()
+        || addr.isSiteLocalAddress()
+        || addr.isMulticastAddress()
         || effective.isLoopbackAddress()
         || effective.isAnyLocalAddress()
         || effective.isLinkLocalAddress()

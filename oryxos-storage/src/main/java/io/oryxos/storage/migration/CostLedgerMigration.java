@@ -7,8 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * V24?050 cost ledger + llm_pricing.price_version?#476??? PostgreSQL {@code V24__cost_ledger.sql}
- * ??????? + CREATE IF NOT EXISTS??????????
+ * V24：050 成本账本 + llm_pricing.price_version（#476）。与 PostgreSQL 目录 {@code V24__cost_ledger.sql} 成对；
+ * 存量库用 PRAGMA 探测补 price_version 列 + {@code CREATE TABLE IF NOT EXISTS} 建 cost_ledger_entries 表。
  */
 final class CostLedgerMigration extends BaseSqliteMigration {
 
@@ -71,7 +71,7 @@ final class CostLedgerMigration extends BaseSqliteMigration {
       execute(
           connection,
           "ALTER TABLE llm_pricing ADD COLUMN price_version INTEGER NOT NULL DEFAULT 1");
-      log.info("llm_pricing ?? price_version ??050 / #476?");
+      log.info("llm_pricing 已补 price_version 列（050 / #476）");
     }
   }
 }

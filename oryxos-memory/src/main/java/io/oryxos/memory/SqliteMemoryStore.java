@@ -13,8 +13,8 @@ import org.springframework.data.domain.PageRequest;
 /**
  * 档二：长期记忆按条入 memory_entries 表。记忆量变大后的结构化升级，仍零外部依赖（复用既有 SQLite）。
  *
- * <p>契约落地：截断从字符串裁尾变成归档查询的 {@code LIMIT}（核心区用 {@code WHERE scope='CORE'} 全量取， 不受影响——契约二）；检索变成 SQL
- * LIKE（契约四）；每次查库不缓存（契约一）。
+ * <p>契约落地：截断从字符串裁尾变成归档查询的 {@code LIMIT}（核心区用 {@code WHERE scope='CORE'} 全量取，
+ * 不受影响——契约二）；检索只在归档区、匹配规则与 markdown 档同一套（契约四 / FR-002，见 {@link #recallByKeyword}）；每次查库不缓存（契约一）。
  */
 public class SqliteMemoryStore implements LongTermMemoryStore {
 
@@ -64,10 +64,13 @@ public class SqliteMemoryStore implements LongTermMemoryStore {
 
   @Override
   public List<String> recallByKeyword(String keyword) {
-    // 大小写统一（FR-002）：JPQL 侧 LOWER(content)，这里把关键词也压小写，语义与 markdown 档一致
-    String pattern = "%" + keyword.toLowerCase(Locale.ROOT) + "%";
-    return repository.searchArchival(agentName(), pattern).stream()
+    // 匹配规则与 markdown 档同一套（FR-002 跨档统一）：关键词与条目都按 Locale.ROOT 折叠，再做字面包含。
+    // 不把这条规则交给 SQL——SQLite 的 lower() 只折叠 ASCII，而 LIKE 又把关键词里的 % / _ 当通配符：
+    // 「CAFÉ」与「café」在 SQL 侧判为不同，「50%」会命中只写着 50 的条目，两者都只在 sqlite 档出现。
+    String needle = keyword.toLowerCase(Locale.ROOT);
+    return repository.findByAgentNameAndScopeOrderByIdAsc(agentName(), "ARCHIVAL").stream()
         .map(MemoryEntry::getContent)
+        .filter(content -> content.toLowerCase(Locale.ROOT).contains(needle))
         .toList();
   }
 

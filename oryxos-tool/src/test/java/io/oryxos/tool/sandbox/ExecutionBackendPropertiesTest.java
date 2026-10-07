@@ -1,5 +1,6 @@
 package io.oryxos.tool.sandbox;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -69,6 +70,21 @@ class ExecutionBackendPropertiesTest {
               ExecutionBackendProperties props = context.getBean(ExecutionBackendProperties.class);
               assertEquals("local", props.backend());
               assertEquals("none", props.network());
+            });
+  }
+
+  @Test
+  @DisplayName("backend 写错_绑定即失败_不静默落 local 宿主执行")
+  void unknownBackendFailsBinding() {
+    runner
+        .withPropertyValues("oryxos.sandbox.execution.backend=Docker")
+        .run(
+            context -> {
+              // 以前这个上下文会正常起来：'Docker' 既不 isDocker 也不 isSsh，select() 直接落 local。
+              assertThat(context).hasFailed();
+              assertThat(context.getStartupFailure())
+                  .hasStackTraceContaining("Docker")
+                  .hasStackTraceContaining("local/docker/ssh");
             });
   }
 

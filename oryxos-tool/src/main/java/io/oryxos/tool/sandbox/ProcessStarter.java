@@ -38,4 +38,14 @@ public interface ProcessStarter {
     }
     return start(command);
   }
+
+  /**
+   * 本次调用实际生效的执行档（024 D8「Agent 覆写 &gt; 全局」）；实现若无档位概念（直连 starter / 测试替身）返回 {@code null}，调用方按全局配置判断。
+   *
+   * <p>存在的理由：闸门与执行体必须看同一份配置。工具若读全局配置做「必须 docker」判断、却把命令交给按 Agent 现算档位的 starter，就会在 Agent 覆写 local
+   * 时静默落到宿主执行。
+   */
+  default ExecutionBackendProperties effectiveBackend() {
+    return null;
+  }
 }

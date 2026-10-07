@@ -5,7 +5,7 @@
 
 | Acceptance | Evidence |
 |------------|----------|
-| ???????????? | `CostLedgerServiceTest.attributionAndPriceVersion`; `CostApiControllerTest.attributionWhenEnabled` |
-| ????????????? | `CostLedgerServiceTest.overBudgetBlocks` / `overBudgetDegrades`; provider `applyBudgetGate` |
-| ?????????? | `CostLedgerServiceTest.reconcileMatchesAudit` + `/runs/{runId}/reconcile` |
+| 可按任务、团队、模型归因 | `CostLedgerServiceTest.attributionAndPriceVersion`; `CostApiControllerTest.attributionWhenEnabled` |
+| 可校验预算、超限阻断或降级 | `CostLedgerServiceTest.overBudgetBlocks` / `overBudgetDegrades`; provider `applyBudgetGate` |
+| 账本可与审计成本对账 | `CostLedgerServiceTest.reconcileMatchesAudit` + `/runs/{runId}/reconcile` |
 | Default-off | `oryxos.cost.enabled=false`; APIs 404; `flagOffIsNoop` |

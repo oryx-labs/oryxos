@@ -28,6 +28,10 @@ public class MemoryTools {
                   "记忆分区：core = 少量常驻事实（身份/偏好/硬约束，每轮对话都在场，不参与检索，务必精炼）；"
                       + "archival = 一般值得记住的事件与结论（按需检索找回）。不确定就填 archival")
           String scope) {
+    if (content == null || content.isBlank()) {
+      // 空 content 以前一路 remember 下去并回"已记住"，记忆里只多一行时间戳——同 FormatTools 口径点名缺参。
+      return "错误: 缺少 content 参数";
+    }
     String normalized =
         (scope == null || scope.isBlank()) ? "ARCHIVAL" : scope.toUpperCase(Locale.ROOT);
     MemoryScope target;
@@ -43,6 +47,10 @@ public class MemoryTools {
 
   @Tool(name = "recall_memory", description = "按关键词检索长期记忆")
   public String recallMemory(@ToolParam(description = "检索关键词") String keyword) {
+    if (keyword == null || keyword.isBlank()) {
+      // 空 keyword 以前直接进 recall，在 SqliteMemoryStore 的 String.toLowerCase 上抛裸 NPE。
+      return "错误: 缺少 keyword 参数";
+    }
     List<String> hits = memoryService.recall(keyword);
     return hits.isEmpty() ? "没有找到相关记忆" : String.join("\n", hits);
   }

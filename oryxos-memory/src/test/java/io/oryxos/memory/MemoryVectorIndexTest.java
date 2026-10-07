@@ -98,13 +98,14 @@ class MemoryVectorIndexTest {
     return repo;
   }
 
-  private static MemoryVectorEntity row(String agent, String hash, String content, String model) {
+  private static MemoryVectorEntity row(
+      String agent, String hash, String content, String model, int dim) {
     MemoryVectorEntity e = new MemoryVectorEntity();
     e.setAgentName(agent);
     e.setEntryHash(hash);
     e.setContent(content);
     e.setEmbedding(new byte[] {0, 0, 0, 0});
-    e.setDim(1);
+    e.setDim(dim);
     e.setEmbeddingModel(model);
     return e;
   }
@@ -174,9 +175,9 @@ class MemoryVectorIndexTest {
     MemoryEntryView kept = new MemoryEntryView("已索引条目", null);
     MemoryEntryView missing = new MemoryEntryView("缺失条目", null);
     String keptHash = MemoryVectorIndex.entryHash(AGENT, kept.content());
-    data.add(row(AGENT, keptHash, kept.content(), "m1")); // 现模型已索引 → 保留
-    data.add(row(AGENT, "orphan-hash", "本体已删的条目", "m1")); // 孤儿 → 清
-    data.add(row(AGENT, "stale-hash", "旧模型残留", "m0")); // 旧模型 → 整体重建时清
+    data.add(row(AGENT, keptHash, kept.content(), "m1", 2)); // 现模型现维度已索引 → 保留
+    data.add(row(AGENT, "orphan-hash", "本体已删的条目", "m1", 2)); // 孤儿 → 清
+    data.add(row(AGENT, "stale-hash", "旧模型残留", "m0", 2)); // 旧模型 → 整体重建时清
     MemoryVectorIndex index = new MemoryVectorIndex(fakeRepo(data), fakeEmbedder("m1"), DIRECT);
     List<MemoryEntryView> archival = List.of(kept, missing);
 

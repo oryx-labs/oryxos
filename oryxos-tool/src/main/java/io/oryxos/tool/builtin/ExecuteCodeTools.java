@@ -75,9 +75,17 @@ public class ExecuteCodeTools {
       throw new IllegalStateException(
           "execute_code is disabled; set oryxos.tool.execute-code.enabled=true");
     }
-    if (!execution.isDocker()) {
+    // 闸门与执行体同源：starter 按 Agent 现算生效档（024 D8，Agent 覆写 > 全局），
+    // 所以这里判定的是本次调用真正会用的档，而不是管理员配的全局档。
+    ExecutionBackendProperties effective = processStarter.effectiveBackend();
+    if (effective == null) {
+      effective = execution;
+    }
+    if (!effective.isDocker()) {
       throw new IllegalStateException(
-          "execute_code requires oryxos.sandbox.execution.backend=docker (fail-loud; no local fallback)");
+          "execute_code requires an effective execution backend of docker, but the effective backend is '"
+              + effective.backend()
+              + "' (fail-loud; no local fallback)");
     }
     if (execution.image() == null || execution.image().isBlank()) {
       throw new IllegalStateException(

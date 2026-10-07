@@ -91,7 +91,8 @@ public class McpApiController {
             .filter(c -> c.name().equals(name))
             .findFirst()
             .orElseThrow(() -> new ResourceNotFoundException("MCP server 不存在: " + name)); // → 404
-    // 视图回显的是掩码值；提交掩码 = 未修改，保留原凭证——否则打码值会覆盖真实 token（Provider 同款口径）
+    // 视图回显的是掩码值；提交掩码 = 未修改，保留原凭证——否则打码值会覆盖真实 token（Provider 同款口径）。
+    // 掩码覆盖 env/headers 的任意键（键名认不出凭证时按字面量判定），归并判定与回显同一函数，两边不会错位。
     Map<String, String> env = CredentialMasks.mergeUnchanged(existing.env(), req.env());
     Map<String, String> headers = CredentialMasks.mergeUnchanged(existing.headers(), req.headers());
     int requestTimeoutSeconds =

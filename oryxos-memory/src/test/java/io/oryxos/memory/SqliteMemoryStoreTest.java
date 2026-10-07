@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,7 +34,6 @@ class SqliteMemoryStoreTest {
     when(repo.findByAgentNameAndScopeOrderByIdAsc(anyString(), anyString())).thenReturn(List.of());
     when(repo.findByAgentNameAndScopeOrderByIdDesc(anyString(), anyString(), any()))
         .thenReturn(List.of());
-    when(repo.searchArchival(anyString(), anyString())).thenReturn(List.of());
     SqliteMemoryStore store = new SqliteMemoryStore(repo);
     ToolExecutionContext.setAgentName("ops-agent");
 
@@ -46,8 +46,8 @@ class SqliteMemoryStoreTest {
     verify(repo).save(saved.capture());
     assertEquals("ops-agent", saved.getValue().getAgentName(), "写入落当前 Agent 作用域");
     verify(repo).findByAgentNameAndScopeOrderByIdAsc("ops-agent", "CORE");
-    verify(repo).searchArchival("ops-agent", "%关键词%");
-    verify(repo).findByAgentNameAndScopeOrderByIdAsc("ops-agent", "ARCHIVAL"); // archivalEntries
+    // 关键词路与 archivalEntries 都按 Agent 读归档区全量（匹配在 Java 侧做，见 recallByKeyword）
+    verify(repo, times(2)).findByAgentNameAndScopeOrderByIdAsc("ops-agent", "ARCHIVAL");
     verify(repo)
         .findByAgentNameAndScopeOrderByIdDesc(
             org.mockito.ArgumentMatchers.eq("ops-agent"),
@@ -59,13 +59,16 @@ class SqliteMemoryStoreTest {
   @DisplayName("无 Agent 上下文_回退 __global__ 作用域")
   void missingContextFallsBackToGlobalScope() {
     MemoryEntryRepository repo = mock(MemoryEntryRepository.class);
-    when(repo.searchArchival(anyString(), anyString())).thenReturn(List.of());
+    MemoryEntry entry = new MemoryEntry();
+    entry.setAgentName(MemoryEntry.GLOBAL_AGENT);
+    entry.setScope("ARCHIVAL");
+    entry.setContent("Needle 就在这里");
+    when(repo.findByAgentNameAndScopeOrderByIdAsc(MemoryEntry.GLOBAL_AGENT, "ARCHIVAL"))
+        .thenReturn(List.of(entry));
     SqliteMemoryStore store = new SqliteMemoryStore(repo);
 
-    store.recallByKeyword("Needle");
-
-    // 关键词压小写（FR-002 大小写统一，JPQL 侧 LOWER(content)）
-    verify(repo).searchArchival(MemoryEntry.GLOBAL_AGENT, "%needle%");
+    // 关键词压小写（FR-002 大小写统一），读的是全局作用域的归档区
+    assertEquals(List.of("Needle 就在这里"), store.recallByKeyword("needle"));
   }
 
   @Test

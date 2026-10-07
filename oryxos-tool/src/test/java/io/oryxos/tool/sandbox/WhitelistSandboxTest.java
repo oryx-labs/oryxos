@@ -312,6 +312,9 @@ class WhitelistSandboxTest {
             "http://[2001::5601:5601]/x", // Teredo → 169.254.169.254
             "http://[2001:db8::5efe:a9fe:a9fe]/x", // ISATAP → 169.254.169.254
             "http://[2001:db8::200:5efe:a9fe:a9fe]/x", // ISATAP u-bit → 169.254.169.254
+            "http://[fe80::200:5efe:8.8.8.8]/x", // ISATAP IID 落在链路本地 fe80::/10 上（嵌入公网 IPv4）
+            "http://[fec0::200:5efe:8.8.8.8]/x", // ISATAP IID 落在站点本地 fec0::/10 上
+            "http://[ff02::5efe:8.8.8.8]/x", // ISATAP IID 落在组播 ff00::/8 上
             "http://localhost/x"
           }) {
         assertThrows(
