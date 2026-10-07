@@ -6,6 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.oryxos.core.auth.Principal;
+import io.oryxos.core.auth.Role;
+import io.oryxos.core.policy.Action;
+import io.oryxos.core.policy.AuthorizationService;
+import io.oryxos.core.policy.RoleBasedAuthorizationServiceImpl;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -176,5 +182,61 @@ abstract class WebUserServiceContractTest {
 
     assertTrue(svc.hasAdminAccount());
     assertEquals(java.util.Set.of(), svc.rolesOf("nobody"));
+  }
+
+  @Test
+  @DisplayName("rolesOf_已禁用账号返回空集（039 FR-008：账号不存在/禁用返回空集）")
+  void rolesOf_disabledAccountYieldsNoRoles() {
+    WebUserService svc = service();
+    svc.create("carol", "password1");
+    svc.setRoles("carol", Set.of(Role.ADMIN));
+    assertEquals(Set.of(Role.ADMIN), svc.rolesOf("carol"));
+
+    svc.disable("carol");
+
+    assertEquals(Set.of(), svc.rolesOf("carol"));
+    assertFalse(svc.isEnabledUser("carol"));
+    assertFalse(svc.hasAdminAccount());
+  }
+
+  @Test
+  @DisplayName("decide_已禁用管理员的治理动作全部拒绝（039 FR-008 端到端：rolesOf → decide）")
+  void decide_disabledAdminDeniedGovernanceActions() {
+    WebUserService svc = service();
+    svc.create("carol", "password1");
+    svc.setRoles("carol", Set.of(Role.ADMIN));
+
+    // 生产装配口径：default-user-roles 默认收紧为空 ⇒ 主体无角色即拒绝。
+    AuthorizationService authz = new RoleBasedAuthorizationServiceImpl(Set.of(), Set.of());
+
+    Principal active = Principal.user("carol", "carol", svc.rolesOf("carol"));
+    assertTrue(authz.decide(active, Action.MANAGE_POLICIES, null).allowed());
+
+    svc.disable("carol");
+    Principal disabled = Principal.user("carol", "carol", svc.rolesOf("carol"));
+
+    assertFalse(authz.decide(disabled, Action.MANAGE_POLICIES, null).allowed());
+    assertFalse(authz.decide(disabled, Action.MANAGE_MEMBERS, null).allowed());
+    assertFalse(authz.decide(disabled, Action.MANAGE_CHANNELS, null).allowed());
+  }
+
+  @Test
+  @DisplayName("rolesOf_启用账号不受影响_禁用只停权不清角色（反向：未过度修正）")
+  void rolesOf_enabledAccountKeepsRolesAndDisableIsReversible() {
+    WebUserService svc = service();
+    svc.create("carol", "password1");
+    svc.setRoles("carol", Set.of(Role.EDITOR, Role.ADMIN));
+
+    assertEquals(Set.of(Role.EDITOR, Role.ADMIN), svc.rolesOf("carol"));
+
+    svc.disable("carol");
+    assertEquals(Set.of(), svc.rolesOf("carol"));
+    assertEquals(1, svc.list().size()); // 禁用不删账号，仍可在管理面看到并再启用
+
+    svc.enable("carol");
+
+    assertEquals(Set.of(Role.EDITOR, Role.ADMIN), svc.rolesOf("carol")); // roles 列未被清空
+    assertTrue(svc.verify("carol", "password1"));
+    assertTrue(svc.hasAdminAccount());
   }
 }

@@ -152,6 +152,7 @@ public class WebUserService {
    *
    * <ul>
    *   <li>账号不存在 → 空集（不授权）
+   *   <li>账号已禁用 → 空集（不授权，FR-008；与 {@link #isEnabledUser}/{@link #hasAdminAccount} 同口径）
    *   <li>未知 token → WARN 后忽略（降权，绝不向上兜底）
    *   <li>空串 / 解析结果为空 → 空集（拒绝，不是默认档）
    * </ul>
@@ -162,6 +163,7 @@ public class WebUserService {
     }
     return repository
         .findByUsername(username.strip())
+        .filter(WebUser::isEnabled)
         .map(user -> parseRoles(user.getRoles()))
         .orElse(Set.of());
   }
