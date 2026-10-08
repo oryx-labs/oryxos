@@ -1,6 +1,7 @@
 package io.oryxos.web.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -104,6 +105,84 @@ class ProviderApiControllerTest {
   }
 
   @Test
+  @DisplayName("create 非 mock 带 api-key_正常落库（反向用例，防过度拦截）")
+  void create_withApiKey_savesKey() throws Exception {
+    when(registry.exists("kimi")).thenReturn(false);
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            post("/api/v1/providers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"name\":\"kimi\",\"apiKey\":\"sk-real\",\"baseUrl\":\"https://api.moonshot.cn\"}"))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<ProviderDef> captor = ArgumentCaptor.forClass(ProviderDef.class);
+    verify(registry).save(captor.capture());
+    Assertions.assertEquals("sk-real", captor.getValue().apiKey());
+  }
+
+  @Test
+  @DisplayName("create 非 mock 缺 api-key_返回400_不落库")
+  void create_missingApiKey_returns400() throws Exception {
+    when(registry.exists("nokey")).thenReturn(false);
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    // 上面 stub 时的 save(any()) 会记一条交互；清掉后下面的 never() 才真正验“未落库”。
+    clearInvocations(registry);
+
+    mvc.perform(
+            post("/api/v1/providers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"nokey\",\"baseUrl\":\"https://api.example.com\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+    verify(registry, never()).save(any());
+  }
+
+  @Test
+  @DisplayName("create 非 mock api-key 为空串_返回400_不落库")
+  void create_blankApiKey_returns400() throws Exception {
+    when(registry.exists("nokey")).thenReturn(false);
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    // 上面 stub 时的 save(any()) 会记一条交互；清掉后下面的 never() 才真正验“未落库”。
+    clearInvocations(registry);
+
+    mvc.perform(
+            post("/api/v1/providers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"name\":\"nokey\",\"apiKey\":\"  \",\"baseUrl\":\"https://api.example.com\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+    verify(registry, never()).save(any());
+  }
+
+  @Test
+  @DisplayName("create 非 mock api-key 仍是未解析的 ${...} 占位_返回400_且不回显该值")
+  void create_unresolvedPlaceholder_returns400_withoutEchoingValue() throws Exception {
+    when(registry.exists("nokey")).thenReturn(false);
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    // 上面 stub 时的 save(any()) 会记一条交互；清掉后下面的 never() 才真正验“未落库”。
+    clearInvocations(registry);
+
+    String body =
+        mvc.perform(
+                post("/api/v1/providers")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        "{\"name\":\"nokey\",\"apiKey\":\"${ORYXOS_LEAK_CANARY}\","
+                            + "\"baseUrl\":\"https://api.example.com\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value(400))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    Assertions.assertFalse(body.contains("ORYXOS_LEAK_CANARY"), "错误响应不得回显 api-key 值: " + body);
+    verify(registry, never()).save(any());
+  }
+
+  @Test
   @DisplayName("update 回传掩码 apiKey_视为未修改_保留原 key")
   void update_maskedKey_keepsOriginal() throws Exception {
     when(registry.find("kimi"))
@@ -123,6 +202,100 @@ class ProviderApiControllerTest {
     ArgumentCaptor<ProviderDef> captor = ArgumentCaptor.forClass(ProviderDef.class);
     verify(registry).save(captor.capture());
     Assertions.assertEquals("sk-secretvalue", captor.getValue().apiKey());
+  }
+
+  @Test
+  @DisplayName("update 请求体省略 apiKey（JSON 无该字段）_视为未修改_保留原 key")
+  void update_omittedApiKey_keepsOriginal() throws Exception {
+    when(registry.find("kimi"))
+        .thenReturn(
+            Optional.of(
+                new ProviderDef("kimi", "sk-secretvalue", "https://api.moonshot.cn", "月之暗面")));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            put("/api/v1/providers/kimi")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"baseUrl\":\"https://api.moonshot.cn\",\"description\":\"只改描述\"}"))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<ProviderDef> captor = ArgumentCaptor.forClass(ProviderDef.class);
+    verify(registry).save(captor.capture());
+    Assertions.assertEquals("sk-secretvalue", captor.getValue().apiKey());
+    Assertions.assertEquals("只改描述", captor.getValue().description());
+  }
+
+  @Test
+  @DisplayName("update apiKey 显式 JSON null_视为未修改_保留原 key")
+  void update_nullApiKey_keepsOriginal() throws Exception {
+    when(registry.find("kimi"))
+        .thenReturn(
+            Optional.of(
+                new ProviderDef("kimi", "sk-secretvalue", "https://api.moonshot.cn", "月之暗面")));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            put("/api/v1/providers/kimi")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"apiKey\":null,\"baseUrl\":\"https://api.moonshot.cn\"}"))
+        .andExpect(status().isOk());
+
+    ArgumentCaptor<ProviderDef> captor = ArgumentCaptor.forClass(ProviderDef.class);
+    verify(registry).save(captor.capture());
+    Assertions.assertEquals("sk-secretvalue", captor.getValue().apiKey());
+  }
+
+  @Test
+  @DisplayName("update api-key 为空串_返回400_不静默清空原 key")
+  void update_blankApiKey_returns400() throws Exception {
+    when(registry.find("kimi"))
+        .thenReturn(
+            Optional.of(
+                new ProviderDef("kimi", "sk-secretvalue", "https://api.moonshot.cn", "月之暗面")));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    // 上面 stub 时的 save(any()) 会记一条交互；清掉后下面的 never() 才真正验“未落库”。
+    clearInvocations(registry);
+
+    mvc.perform(
+            put("/api/v1/providers/kimi")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"apiKey\":\"\",\"baseUrl\":\"https://api.moonshot.cn\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+    verify(registry, never()).save(any());
+  }
+
+  @Test
+  @DisplayName("update 原记录本身无 key 且请求省略 apiKey_返回400_不落库")
+  void update_existingWithoutKey_returns400() throws Exception {
+    when(registry.find("nokey"))
+        .thenReturn(
+            Optional.of(new ProviderDef("nokey", null, "https://api.example.com", "历史无效记录")));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    // 上面 stub 时的 save(any()) 会记一条交互；清掉后下面的 never() 才真正验“未落库”。
+    clearInvocations(registry);
+
+    mvc.perform(
+            put("/api/v1/providers/nokey")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"baseUrl\":\"https://api.example.com\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value(400));
+    verify(registry, never()).save(any());
+  }
+
+  @Test
+  @DisplayName("update mock_无 api-key 与 base-url 仍可保存（守住既有约定）")
+  void update_mock_allowsNoKeyAndNoBaseUrl() throws Exception {
+    when(registry.find("mock")).thenReturn(Optional.of(new ProviderDef("mock", null, null, null)));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            put("/api/v1/providers/mock")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"description\":\"内置假模型\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.name").value("mock"));
   }
 
   @Test

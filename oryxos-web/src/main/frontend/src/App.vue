@@ -11,6 +11,7 @@ import IdentityMappingsView from './features/identity-mappings/IdentityMappingsV
 import ApprovalsView from './features/approvals/ApprovalsView.vue'
 import GovernanceRevisionHistory from './features/governance/GovernanceRevisionHistory.vue'
 import { isNearBottom } from './chat-scroll.js'
+import { providerApiKeyMissing } from './provider-form.js'
 import { applyRunNav, parseRunNav, runHash, runListHash } from './features/runs/run-navigation.js'
 import { DEFAULT_MCP_REQUEST_TIMEOUT_SECONDS, normalizeMcpRequestTimeout } from './mcp-timeout.js'
 import { filterSkills, hiddenSelectedCount, selectAllVisible, clearVisible, renderSet } from './skill-filter.js'
@@ -1211,6 +1212,8 @@ async function testProvider(name) {
 
 // 新建/编辑表单：editing 存被编辑 Provider 的 name（此时 name 只读），null 表示新建
 const pv = reactive({ open: false, editing: null, name: '', apiKey: '', baseUrl: '', description: '', busy: false, error: null })
+// 后端要求非 mock 的 provider 必须有 api-key（否则 400）；缺 key 时直接禁用提交，不让用户白点一次
+const pvApiKeyMissing = computed(() => providerApiKeyMissing(pv.name, pv.apiKey))
 
 async function saveProvider() {
   pv.busy = true; pv.error = null
@@ -3948,7 +3951,7 @@ const outputRows = computed(() =>
                 </div>
                 <div class="modal-foot">
                   <button class="btn" @click="cancelPv">取消</button>
-                  <button class="btn btn-primary" :disabled="pv.busy || !pv.name" @click="saveProvider">{{ pv.editing ? '保存修改' : '创建' }}</button>
+                  <button class="btn btn-primary" :disabled="pv.busy || !pv.name || pvApiKeyMissing" @click="saveProvider">{{ pv.editing ? '保存修改' : '创建' }}</button>
                 </div>
               </div>
             </div>
