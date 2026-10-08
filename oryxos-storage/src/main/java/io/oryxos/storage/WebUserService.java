@@ -54,11 +54,12 @@ public class WebUserService {
   public WebUser create(String username, String rawPassword) {
     validateUsername(username);
     validatePassword(rawPassword);
-    if (repository.existsByUsername(username)) {
-      throw new IllegalArgumentException("user '" + username + "' already exists");
+    String name = normalizeUsername(username);
+    if (repository.existsByUsername(name)) {
+      throw new IllegalArgumentException("user '" + name + "' already exists");
     }
     WebUser user = new WebUser();
-    user.setUsername(username.strip());
+    user.setUsername(name);
     user.setPasswordHash(passwordEncoder.encode(rawPassword));
     user.setEnabled(true);
     user.setRoles(DEFAULT_ROLES_SERIALIZED);
@@ -72,7 +73,7 @@ public class WebUserService {
    */
   public WebUser ensureOidcProvisioned(String username) {
     validateUsername(username);
-    String clean = username.strip();
+    String clean = normalizeUsername(username);
     return repository
         .findByUsername(clean)
         .orElseGet(
@@ -128,7 +129,7 @@ public class WebUserService {
       return false;
     }
     return repository
-        .findByUsername(username)
+        .findByUsername(normalizeUsername(username))
         .filter(WebUser::isEnabled)
         .map(user -> passwordEncoder.matches(rawPassword, user.getPasswordHash()))
         .orElse(false);
@@ -144,7 +145,10 @@ public class WebUserService {
     if (username == null || username.isBlank()) {
       return false;
     }
-    return repository.findByUsername(username.strip()).filter(WebUser::isEnabled).isPresent();
+    return repository
+        .findByUsername(normalizeUsername(username))
+        .filter(WebUser::isEnabled)
+        .isPresent();
   }
 
   /**
@@ -185,8 +189,20 @@ public class WebUserService {
 
   private WebUser mustFind(String username) {
     return repository
-        .findByUsername(username)
+        .findByUsername(normalizeUsername(username))
         .orElseThrow(() -> new IllegalArgumentException("user '" + username + "' not found"));
+  }
+
+  /**
+   * 用户名归一：公开入口一律先过这里。
+   *
+   * <p>判重、落库与查找必须作用在**同一个规范形式**上，否则「同一个字符串建得出来、却删不掉也登不上」： 落库用 strip 后的值，而 {@code existsByUsername}
+   * / {@code findByUsername} 拿原值去查，带头尾空格的入参会查不到，重名还会绕过判重直接在落库时撞唯一约束，把 {@code
+   * IllegalArgumentException} 变成裸的数据库异常。同仓 {@code OrganizationCatalogService.requireOrgId} 与 {@code
+   * TeamCatalogService} 都是入口归一后全程用归一值。
+   */
+  private static String normalizeUsername(String username) {
+    return username == null ? null : username.strip();
   }
 
   private static void validateUsername(String username) {

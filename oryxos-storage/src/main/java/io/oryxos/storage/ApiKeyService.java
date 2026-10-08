@@ -166,7 +166,7 @@ public class ApiKeyService {
   public boolean revoke(String name) {
     ApiKey key =
         repository
-            .findByName(name)
+            .findByName(normalizeName(name))
             .orElseThrow(() -> new IllegalArgumentException("api key '" + name + "' not found"));
     if (!key.isActive()) {
       return false;
@@ -224,6 +224,14 @@ public class ApiKeyService {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException("SHA-256 unavailable", e);
     }
+  }
+
+  /**
+   * 名字归一：{@code create} 用 strip 后的值落库与判重，查找（{@code revoke}）必须用同一形式， 否则「同一个字符串建得出、却吊销不掉」。null
+   * 交由查找返回空，与既有 not found 文案一致。
+   */
+  private static String normalizeName(String name) {
+    return name == null ? null : name.strip();
   }
 
   private static void validateName(String name) {

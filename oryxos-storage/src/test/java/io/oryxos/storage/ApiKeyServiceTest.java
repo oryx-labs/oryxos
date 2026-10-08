@@ -198,4 +198,17 @@ class ApiKeyServiceTest {
     key.setKeyHash("0".repeat(64));
     return key;
   }
+
+  @Test
+  @DisplayName("revoke_与 create 同一个字符串_带首尾空格也要吊销得掉")
+  void revoke_acceptsThePaddedNameThatCreatedTheKey() {
+    when(repository.existsByName("deploy-key")).thenReturn(false);
+    ApiKeyService.CreatedKey created = service.create("  deploy-key  ");
+    assertThat(created.key().getName()).isEqualTo("deploy-key"); // 前提：create 已归一
+
+    ApiKey key = namedKey("deploy-key");
+    when(repository.findByName("deploy-key")).thenReturn(Optional.of(key));
+
+    assertThat(service.revoke("  deploy-key  ")).isTrue();
+  }
 }
