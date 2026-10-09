@@ -196,16 +196,14 @@ public class SlackChannelAdapter implements InboundChannelAdapter {
     }
   }
 
-  private void handleDisconnected(SlackDisconnectKind kind) {
+  /** 断线回调（Socket Mode 客户端调用）。包级可见，便于测试驱动重连状态机。 */
+  void handleDisconnected(SlackDisconnectKind kind) {
     boolean shouldReconnect;
     synchronized (this) {
       if (!running || state == ChannelStatus.State.ERROR) {
         return;
       }
-      lastDisconnectKind = kind == null ? SlackDisconnectKind.ABRUPT : kind;
-      if (lastDisconnectKind == SlackDisconnectKind.GRACEFUL) {
-        reconnectAttempt = 0;
-      }
+      noteDisconnected(kind);
       socketRef.set(null);
       state = ChannelStatus.State.DISCONNECTED;
       shouldReconnect = true;
@@ -225,13 +223,32 @@ public class SlackChannelAdapter implements InboundChannelAdapter {
       if (!running || reconnectFuture != null) {
         return;
       }
-      long delayMs =
-          lastDisconnectKind == SlackDisconnectKind.GRACEFUL
-              ? 0L
-              : reconnectDelayMs(reconnectAttempt);
       reconnectFuture =
-          reconnectScheduler().schedule(this::attemptReconnect, delayMs, TimeUnit.MILLISECONDS);
+          reconnectScheduler()
+              .schedule(this::attemptReconnect, nextReconnectDelayMs(), TimeUnit.MILLISECONDS);
     }
+  }
+
+  /** 记录一次断线。与调度分开，便于测试直接驱动重连状态机；自带锁，可从任意调用点使用。 */
+  synchronized void noteDisconnected(SlackDisconnectKind kind) {
+    lastDisconnectKind = kind == null ? SlackDisconnectKind.ABRUPT : kind;
+    if (lastDisconnectKind == SlackDisconnectKind.GRACEFUL) {
+      reconnectAttempt = 0;
+    }
+  }
+
+  /**
+   * 本次重连前应等待的毫秒数，并消费掉「服务端轮换」标记。调用方需持有 {@code this} 锁。
+   *
+   * <p>轮换免除退避只对紧随其后的那一次重连有效。标记若不清除，重连失败会再次走到这里； 等待时间恒为零，退避形同虚设，对端持续不可用时会变成无间隔的重试热循环。
+   */
+  long nextReconnectDelayMs() {
+    long delayMs =
+        lastDisconnectKind == SlackDisconnectKind.GRACEFUL
+            ? 0L
+            : reconnectDelayMs(reconnectAttempt);
+    lastDisconnectKind = SlackDisconnectKind.ABRUPT;
+    return delayMs;
   }
 
   private void attemptReconnect() {
