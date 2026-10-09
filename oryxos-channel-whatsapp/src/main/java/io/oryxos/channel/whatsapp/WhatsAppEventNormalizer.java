@@ -26,6 +26,7 @@ public class WhatsAppEventNormalizer {
   private static final String FIELD_VIDEO = "video";
   private static final String FIELD_DOCUMENT = "document";
   private static final String FIELD_FILENAME = "filename";
+  private static final String FIELD_CAPTION = "caption";
   private static final String FIELD_TIMESTAMP = "timestamp";
   private static final String TYPE_TEXT = "text";
   private static final String TYPE_IMAGE = "image";
@@ -80,30 +81,33 @@ public class WhatsAppEventNormalizer {
     boolean textual = false;
     if (TYPE_TEXT.equals(type)) {
       content = message.path(FIELD_TEXT).path(FIELD_BODY).asText("").strip();
-      textual = !content.isBlank();
     } else if (TYPE_IMAGE.equals(type)) {
       String id = text(message.path(FIELD_IMAGE), FIELD_ID);
       if (id != null) {
         attachments.add(InboundAttachment.imageReference(id));
       }
+      content = caption(message.path(FIELD_IMAGE));
     } else if (TYPE_AUDIO.equals(type)) {
       String id = text(message.path(FIELD_AUDIO), FIELD_ID);
       if (id != null) {
         attachments.add(InboundAttachment.audioReference(id));
       }
+      content = caption(message.path(FIELD_AUDIO));
     } else if (TYPE_VIDEO.equals(type)) {
       String id = text(message.path(FIELD_VIDEO), FIELD_ID);
       if (id != null) {
         attachments.add(InboundAttachment.videoReference(id));
       }
+      content = caption(message.path(FIELD_VIDEO));
     } else if (TYPE_DOCUMENT.equals(type)) {
-      String id = text(message.path(FIELD_DOCUMENT), FIELD_ID);
+      JsonNode document = message.path(FIELD_DOCUMENT);
+      String id = text(document, FIELD_ID);
       if (id != null) {
-        attachments.add(
-            InboundAttachment.fileReference(
-                id, text(message.path(FIELD_DOCUMENT), FIELD_FILENAME)));
+        attachments.add(InboundAttachment.fileReference(id, text(document, FIELD_FILENAME)));
       }
+      content = caption(document);
     }
+    textual = !content.isBlank();
     if (!textual && attachments.isEmpty()) {
       return Optional.of(
           new InboundMessage(
@@ -130,6 +134,14 @@ public class WhatsAppEventNormalizer {
             textual,
             false,
             attachments));
+  }
+
+  /**
+   * 媒体消息的正文：Cloud API 把 {@code caption} 放在媒体对象里（{@code image.caption} 等）。 只取 id 而不读它，用户随图发的那句话就丢了
+   * —— 附件到了，问题没到。
+   */
+  private static String caption(JsonNode media) {
+    return media.path(FIELD_CAPTION).asText("").strip();
   }
 
   static long timestampEpochMs(JsonNode message) {
