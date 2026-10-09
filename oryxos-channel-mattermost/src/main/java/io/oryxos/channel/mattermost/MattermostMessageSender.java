@@ -10,6 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 
 /** Mattermost {@code POST /api/v4/posts}。 */
 public class MattermostMessageSender {
@@ -18,6 +19,10 @@ public class MattermostMessageSender {
   private static final int HTTP_STATUS_OK_MAX_EXCLUSIVE = 300;
   private static final int ERROR_BODY_MAX_LEN = 200;
   private static final Duration TIMEOUT = Duration.ofSeconds(20);
+
+  /** 单条帖子上限（{@code MaxPostLength} 默认 16383 字符），留余量。 */
+  static final int DEFAULT_CHUNK_SIZE = 15000;
+
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private final HttpClient http;
@@ -36,14 +41,25 @@ public class MattermostMessageSender {
     this.token = token;
   }
 
+  /**
+   * 逐段发送。Mattermost 的 {@code MaxPostLength} 默认上限是 16383 字符，超了整条会被拒。
+   *
+   * <p>线程根 id 在循环外只解析一次 —— 它是另一条 HTTP 请求，按段重复解析没有必要，多段回复 还会多打几次接口。
+   */
   public void send(String channelId, String text, String replyToMessageId) {
+    String rootId = resolveThreadRootId(replyToMessageId);
+    for (String chunk : segment(text == null ? "" : text, DEFAULT_CHUNK_SIZE)) {
+      postMessage(channelId, chunk, rootId);
+    }
+  }
+
+  private void postMessage(String channelId, String text, String rootId) {
     String url = baseUrl + "/api/v4/posts";
     guard.check(url);
     try {
       ObjectNode body = MAPPER.createObjectNode();
       body.put("channel_id", channelId);
       body.put("message", text == null ? "" : text);
-      String rootId = resolveThreadRootId(replyToMessageId);
       if (rootId != null && !rootId.isBlank()) {
         body.put("root_id", rootId);
       }
@@ -111,5 +127,9 @@ public class MattermostMessageSender {
   static String trimSlash(String base) {
     String s = base.strip();
     return s.endsWith("/") ? s.substring(0, s.length() - 1) : s;
+  }
+
+  static List<String> segment(String text, int chunkSize) {
+    return io.oryxos.core.channel.OutboundTextSegments.split(text, chunkSize);
   }
 }
