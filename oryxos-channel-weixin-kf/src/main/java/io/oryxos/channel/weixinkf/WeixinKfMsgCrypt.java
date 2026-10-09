@@ -1,5 +1,7 @@
 package io.oryxos.channel.weixinkf;
 
+import io.oryxos.core.channel.SignatureComparison;
+
 /**
  * 企微回调同族加解密（WXBizMsgCrypt）：Token + EncodingAESKey + receiveId(CorpId)。
  *
@@ -51,7 +53,8 @@ final class WeixinKfMsgCrypt {
 
   String verifyUrl(String msgSignature, String timestamp, String nonce, String echostr)
       throws Exception {
-    if (!msgSignature.equals(sha1Signature(timestamp, nonce, echostr))) {
+    if (!SignatureComparison.constantTimeEquals(
+        msgSignature, sha1Signature(timestamp, nonce, echostr))) {
       throw new IllegalStateException("echostr 签名校验失败");
     }
     return decrypt(echostr);
@@ -59,7 +62,8 @@ final class WeixinKfMsgCrypt {
 
   String decryptMsg(String msgSignature, String timestamp, String nonce, String encrypt)
       throws Exception {
-    if (!msgSignature.equals(sha1Signature(timestamp, nonce, encrypt))) {
+    if (!SignatureComparison.constantTimeEquals(
+        msgSignature, sha1Signature(timestamp, nonce, encrypt))) {
       throw new IllegalStateException("回调签名校验失败");
     }
     return decrypt(encrypt);

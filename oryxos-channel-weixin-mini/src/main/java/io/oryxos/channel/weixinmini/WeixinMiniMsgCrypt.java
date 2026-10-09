@@ -1,5 +1,7 @@
 package io.oryxos.channel.weixinmini;
 
+import io.oryxos.core.channel.SignatureComparison;
+
 /**
  * 小程序消息推送加解密（WXBizMsgCrypt）：Token + EncodingAESKey + receiveId(小程序 AppId)。
  *
@@ -52,7 +54,7 @@ final class WeixinMiniMsgCrypt {
   /** 小程序 GET URL 验签：{@code signature}=SHA1(sorted token,timestamp,nonce)，原样返回 echostr（不解密）。 */
   String verifyUrlPlain(String signature, String timestamp, String nonce, String echostr)
       throws Exception {
-    if (!signature.equals(plainSha1Signature(timestamp, nonce))) {
+    if (!SignatureComparison.constantTimeEquals(signature, plainSha1Signature(timestamp, nonce))) {
       throw new IllegalStateException("echostr 明文签名校验失败");
     }
     return echostr;
@@ -60,7 +62,8 @@ final class WeixinMiniMsgCrypt {
 
   String decryptMsg(String msgSignature, String timestamp, String nonce, String encrypt)
       throws Exception {
-    if (!msgSignature.equals(sha1Signature(timestamp, nonce, encrypt))) {
+    if (!SignatureComparison.constantTimeEquals(
+        msgSignature, sha1Signature(timestamp, nonce, encrypt))) {
       throw new IllegalStateException("回调签名校验失败");
     }
     return decrypt(encrypt);

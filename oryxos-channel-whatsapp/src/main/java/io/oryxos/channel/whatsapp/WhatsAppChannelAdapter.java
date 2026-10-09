@@ -10,6 +10,7 @@ import io.oryxos.core.channel.InboundMessage;
 import io.oryxos.core.channel.InboundMessageService;
 import io.oryxos.core.channel.InboundWebhookHandler;
 import io.oryxos.core.channel.OutboundGuard;
+import io.oryxos.core.channel.SignatureComparison;
 import io.oryxos.core.channel.WebhookRequest;
 import io.oryxos.core.channel.WebhookResponse;
 import io.oryxos.core.profile.ProfileRegistry;
@@ -191,7 +192,7 @@ public class WhatsAppChannelAdapter implements InboundChannelAdapter, InboundWeb
       String expected =
           SHA256_PREFIX
               + HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
-      return asciiLower(header).equals(asciiLower(expected));
+      return SignatureComparison.constantTimeEquals(asciiLower(header), asciiLower(expected));
     } catch (GeneralSecurityException e) {
       return false;
     }

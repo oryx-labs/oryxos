@@ -1,6 +1,7 @@
 package io.oryxos.channel.douyin;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import io.oryxos.core.channel.SignatureComparison;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -16,7 +17,7 @@ final class DouyinWebhookSignature {
       return false;
     }
     String expected = sha1Hex(clientSecret + (rawBody == null ? "" : rawBody));
-    return asciiLower(header).equals(asciiLower(expected));
+    return SignatureComparison.constantTimeEquals(asciiLower(header), asciiLower(expected));
   }
 
   @SuppressFBWarnings(
