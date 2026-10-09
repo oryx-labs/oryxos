@@ -1011,4 +1011,23 @@ class FileToolsTest {
     assertThrows(SandboxViolationException.class, () -> guarded.writeFile(escapedWrite, "PWNED"));
     assertFalse(Files.exists(outside.resolve("victim.txt")));
   }
+
+  @Test
+  @DisplayName("make_dir 不得把 agents/<name>/AGENT.md 建成目录")
+  void makeDirRejectsAgentMdSlotAsDirectory() throws IOException {
+    Path agentDir = dir.resolve("agents/demo");
+    Files.createDirectories(agentDir);
+    // 路径在 AGENT.md 之后继续延伸时，createDirectories 会把 AGENT.md 建成目录
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> tools.makeDir(agentDir.resolve("AGENT.md/extra").toString()));
+    assertFalse(
+        Files.exists(agentDir.resolve("AGENT.md")),
+        "AGENT.md 槽位被建成目录后，AgentStore.write 会以「不是普通文件」失败");
+    // 同款：write_file 在槽位上建目录
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> tools.writeFile(agentDir.resolve("AGENT.md/extra.txt").toString(), "bogus"));
+    assertFalse(Files.exists(agentDir.resolve("AGENT.md")), "write_file 同样不得占掉槽位");
+  }
 }

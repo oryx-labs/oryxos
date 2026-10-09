@@ -364,9 +364,10 @@ public class FileTools {
 
   @Tool(name = "make_dir", description = "创建目录（含父目录，幂等）")
   public String makeDir(@ToolParam(description = "要创建的目录路径") String path) {
-    MemoryMdGuard.rejectMutation(path);
-    AdminConfigFileGuard.rejectMutation(path);
-    WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(path);
+    // 走公共聚合守卫：make_dir 会 createDirectories，是唯一能把 agents/<name>/AGENT.md
+    // 建成【目录】的工具；此前它内联四道守卫却漏了 AGENT.md 那道，槽位被占后
+    // AgentStore.write 会以「Agent 文件目标不是普通文件」失败。
+    rejectReservedFileWrites(path);
     WorkspaceMutationGuard.rejectBindSlotCreate(path);
     sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
     try {
@@ -374,9 +375,7 @@ public class FileTools {
       // 建目录后复检：与 write_file / download_file 同款——防首次校验到 createDirectories 间路径被换成外向软链
       // 或换成仍在 root 内的 MEMORY / AdminConfig / Skill·Knowledge / bind 槽
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, path));
-      MemoryMdGuard.rejectMutation(path);
-      AdminConfigFileGuard.rejectMutation(path);
-      WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(path);
+      rejectReservedFileWrites(path);
       WorkspaceMutationGuard.rejectBindSlotCreate(path);
       return "已创建目录: " + path;
     } catch (IOException e) {

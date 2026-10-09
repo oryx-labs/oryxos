@@ -139,8 +139,12 @@ public final class WorkspaceMutationGuard {
     if (agents < 0 || fileIdx >= segs.size()) {
       return;
     }
-    // agents/<name>/AGENT.md 恰好三段（相对 agents）
-    if (fileIdx == segs.size() - 1 && AGENT_MD.equals(segs.get(fileIdx))) {
+    // agents/<name>/AGENT.md 的保护槽位。原先还要求 AGENT.md 恰好是路径末段，于是
+    // agents/<name>/AGENT.md/x.txt 这类路径被放行——write_file / make_dir 会 createDirectories
+    // 把 AGENT.md 建成【目录】，之后 AgentStore.write 以「Agent 文件目标不是普通文件」失败，
+    // 该 Agent 的配置再也写不进去。只要 agents/<name>/ 之后的这一段是 AGENT.md 就拒绝，
+    // 与 MEMORY.md 的「任意路径段命中即可」保持一致（MemoryMdGuard.rejectLexical）。
+    if (AGENT_MD.equals(segs.get(fileIdx))) {
       throw new IllegalArgumentException(
           "拒绝直接改写 AGENT.md，请通过 Agent 管理 / lifecycle.update: " + path);
     }

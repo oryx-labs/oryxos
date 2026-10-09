@@ -200,4 +200,25 @@ class WorkspaceMutationGuardTest {
     assertDoesNotThrow(
         () -> WorkspaceMutationGuard.rejectBindLinkDetach("agents/demo/skills/report/SKILL.md"));
   }
+
+  @Test
+  @DisplayName("AGENT.md 槽位被建成目录（路径继续往下）同样拒绝")
+  void rejectsAgentMdSlotUsedAsDirectory() {
+    // agents/<name>/AGENT.md 是 Agent 自身的配置文件槽位。路径在它之后继续延伸时，
+    // 调用方（write_file / make_dir）会 createDirectories 把它建成【目录】，
+    // 之后 AgentStore.write 会以「Agent 文件目标不是普通文件」失败。
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite("agents/demo/AGENT.md/x.txt"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite("agents/demo/agent.md/sub"));
+    // 末段形式仍拒绝（既有行为）
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite("agents/demo/AGENT.md"));
+    // 共享 Skill 自己的 AGENT.md 仍放行（既有行为，不在 Agent 槽位上）
+    assertDoesNotThrow(
+        () -> WorkspaceMutationGuard.rejectAgentMdDirectWrite("agents/demo/skills/AGENT.md"));
+  }
 }
