@@ -1,6 +1,7 @@
 package io.oryxos.tool.builtin;
 
 import io.oryxos.core.fs.AdminConfigFileGuard;
+import io.oryxos.core.fs.ReservedFileGuard;
 import io.oryxos.core.fs.WorkspaceMutationGuard;
 import io.oryxos.core.io.AtomicFiles;
 import io.oryxos.core.memory.MemoryMdGuard;
@@ -104,10 +105,7 @@ public class FileTools {
 
   /** 写路径保留文件守卫（MEMORY / AdminConfig / Skill·Knowledge / AGENT.md）。 */
   private static void rejectReservedFileWrites(String path) {
-    MemoryMdGuard.rejectMutation(path);
-    AdminConfigFileGuard.rejectMutation(path);
-    WorkspaceMutationGuard.rejectSkillKnowledgeContentWrite(path);
-    WorkspaceMutationGuard.rejectAgentMdDirectWrite(path);
+    ReservedFileGuard.rejectMutation(path);
   }
 
   @Tool(name = "read_file", description = "读取指定路径的文本文件内容；文本型 PDF 自动抽取正文（扫描件无文本层会失败）")

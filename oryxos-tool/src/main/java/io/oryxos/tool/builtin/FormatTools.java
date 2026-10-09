@@ -3,6 +3,7 @@ package io.oryxos.tool.builtin;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.oryxos.core.fs.ReservedFileGuard;
 import io.oryxos.tool.sandbox.ActionType;
 import io.oryxos.tool.sandbox.Sandbox;
 import io.oryxos.tool.sandbox.SandboxAction;
@@ -108,6 +109,8 @@ public class FormatTools {
 
       // 写前校验 + 落盘前复检（与 write_file / download_file 同款，防 TOCTOU）
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, filePath));
+      // 保留文件守卫：导出与 write_file 受同一条策略约束
+      ReservedFileGuard.rejectMutation(filePath);
 
       List<String> headers = new ArrayList<>();
       for (JsonNode header : headersNode) {
@@ -124,6 +127,8 @@ public class FormatTools {
       }
 
       sandbox.enforce(new SandboxAction(ActionType.FILE_WRITE, filePath));
+      // 保留文件守卫：导出与 write_file 受同一条策略约束
+      ReservedFileGuard.rejectMutation(filePath);
       exportToExcel(Path.of(filePath), sheetName, headers, rows);
       return "Excel 文件已导出到: " + filePath;
     } catch (IOException | RuntimeException e) {
