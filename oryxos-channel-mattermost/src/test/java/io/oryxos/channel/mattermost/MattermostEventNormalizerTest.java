@@ -55,4 +55,26 @@ class MattermostEventNormalizerTest {
     assertEquals(ChatKind.GROUP, msg.get().chatKind());
     assertEquals("hi", msg.get().content());
   }
+
+  @Test
+  @DisplayName("频道 @bot 时不吞邮箱与他人提及")
+  void channelMentionKeepsEmailsAndOtherMentions() {
+    var msg =
+        normalizer.normalize(
+            "token=t&user_id=u1&channel_id=c1&post_id=p1&channel_type=O"
+                + "&text=@oryxbot%20发到%20alice@gmail.com%20和%20@bob");
+    assertTrue(msg.isPresent());
+    assertEquals("发到 alice@gmail.com 和 @bob", msg.get().content());
+  }
+
+  @Test
+  @DisplayName("邮箱域名里的 @bot 不算 @ 了机器人")
+  void emailLocalPartIsNotAMention() {
+    assertTrue(
+        normalizer
+            .normalize(
+                "token=t&user_id=u1&channel_id=c1&post_id=p1&channel_type=O"
+                    + "&text=把%20ops@oryxbot.example.com%20加进群")
+            .isEmpty());
+  }
 }

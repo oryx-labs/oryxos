@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.oryxos.core.channel.ChatKind;
 import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
+import io.oryxos.core.channel.MentionStripping;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -35,7 +36,6 @@ public class DiscordEventNormalizer {
   /** Discord Voice Message 标志位（{@code 1 << 13}）。 */
   private static final int FLAG_IS_VOICE_MESSAGE = 8192;
 
-  private static final Pattern MENTION = Pattern.compile("<@!?([0-9]+)>\\s*");
   private static final Pattern AUDIO_FILENAME =
       Pattern.compile("(?i).*\\.(ogg|opus|mp3|wav|m4a|aac|flac)$");
   private static final Pattern VIDEO_FILENAME =
@@ -204,15 +204,14 @@ public class DiscordEventNormalizer {
     if (content == null) {
       return false;
     }
-    return content.contains("<@" + applicationId + ">")
-        || content.contains("<@!" + applicationId + ">");
+    return MentionStripping.angleMention(applicationId).matcher(content).find();
   }
 
-  static String stripMentions(String text) {
+  String stripMentions(String text) {
     if (text == null || text.isBlank()) {
       return "";
     }
-    return MENTION.matcher(text).replaceAll("").strip();
+    return MentionStripping.strip(text, MentionStripping.angleMention(applicationId));
   }
 
   private static String text(JsonNode node, String field) {

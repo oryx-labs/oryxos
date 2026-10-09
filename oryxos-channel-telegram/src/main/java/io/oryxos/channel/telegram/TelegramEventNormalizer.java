@@ -4,16 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.oryxos.core.channel.ChatKind;
 import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
+import io.oryxos.core.channel.MentionStripping;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 /** Telegram {@code Update.message} → {@link InboundMessage}。群聊仅当 {@code @} bot 用户名时接受。 */
 public class TelegramEventNormalizer {
 
   static final String CHANNEL_TYPE = "telegram";
-  private static final Pattern MENTION = Pattern.compile("@[A-Za-z0-9_]+\\s*");
   private static final String FIELD_MESSAGE = "message";
   private static final String FIELD_EDITED_MESSAGE = "edited_message";
   private static final String FIELD_FROM = "from";
@@ -143,7 +142,8 @@ public class TelegramEventNormalizer {
       return false;
     }
     String needle = AT_PREFIX + asciiLower(botUsername);
-    if (text != null && asciiLower(text).contains(needle)) {
+    // 文本兜底用带边界的模式：contains 会把邮箱域名（ops@bot.example.com）当成提及。
+    if (text != null && MentionStripping.atMention(botUsername).matcher(text).find()) {
       return true;
     }
     JsonNode entities = message.path(FIELD_ENTITIES);
@@ -177,7 +177,7 @@ public class TelegramEventNormalizer {
     if (text == null || text.isBlank() || botUsername.isBlank()) {
       return text == null ? "" : text;
     }
-    return MENTION.matcher(text).replaceAll("").strip();
+    return MentionStripping.strip(text, MentionStripping.atMention(botUsername));
   }
 
   static List<InboundAttachment> extractAttachments(JsonNode message) {

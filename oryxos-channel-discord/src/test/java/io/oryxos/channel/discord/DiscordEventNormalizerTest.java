@@ -204,4 +204,15 @@ class DiscordEventNormalizerTest {
     author.put("bot", false);
     return data;
   }
+
+  @Test
+  @DisplayName("公会 @Bot 时保留他人的角括号提及")
+  void guildMentionKeepsOtherMembers() {
+    ObjectNode data = baseMessage("<@" + APP_ID + "> 请让 <@999888777> 复核", "guild-1");
+    var mentions = data.putArray("mentions");
+    mentions.addObject().put("id", APP_ID).put("username", "oryxos");
+    Optional<InboundMessage> msg = normalizer.normalize("MESSAGE_CREATE", data);
+    assertTrue(msg.isPresent());
+    assertEquals("请让 <@999888777> 复核", msg.get().content());
+  }
 }

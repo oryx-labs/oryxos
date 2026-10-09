@@ -2,19 +2,18 @@ package io.oryxos.channel.mattermost;
 
 import io.oryxos.core.channel.ChatKind;
 import io.oryxos.core.channel.InboundMessage;
+import io.oryxos.core.channel.MentionStripping;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 /** Mattermost Outgoing Webhook 表单 → {@link InboundMessage}。频道需 trigger_word 或 {@code @bot}。 */
 public class MattermostEventNormalizer {
 
   static final String CHANNEL_TYPE = "mattermost";
-  private static final Pattern MENTION = Pattern.compile("@[A-Za-z0-9._-]+\\s*");
   private static final String FIELD_POST_ID = "post_id";
   private static final String FIELD_ID = "id";
   private static final String FIELD_USER_ID = "user_id";
@@ -124,11 +123,11 @@ public class MattermostEventNormalizer {
     if (botUsername.isBlank() || text == null) {
       return false;
     }
-    return asciiLower(text).contains(AT_PREFIX + asciiLower(botUsername));
+    return MentionStripping.atMention(botUsername).matcher(text).find();
   }
 
   private String stripMention(String text) {
-    return text == null ? "" : MENTION.matcher(text).replaceAll("").strip();
+    return MentionStripping.strip(text, MentionStripping.atMention(botUsername));
   }
 
   static Map<String, String> parseForm(String body) {

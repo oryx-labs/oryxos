@@ -97,4 +97,22 @@ class TelegramEventNormalizerTest {
     }
     return root;
   }
+
+  @Test
+  @DisplayName("群聊 @Bot 时不吞邮箱与他人提及")
+  void groupMentionKeepsEmailsAndOtherMentions() {
+    Optional<InboundMessage> msg =
+        normalizer.normalize(update("supergroup", "@OryxBot 发到 alice@gmail.com 和 @bob 一起看", true));
+    assertTrue(msg.isPresent());
+    assertEquals("发到 alice@gmail.com 和 @bob 一起看", msg.get().content());
+  }
+
+  @Test
+  @DisplayName("邮箱域名里的 @bot 不算 @ 了机器人")
+  void emailLocalPartIsNotAMention() {
+    assertTrue(
+        normalizer
+            .normalize(update("supergroup", "把 ops@OryxBot.example.com 加进群", false))
+            .isEmpty());
+  }
 }
