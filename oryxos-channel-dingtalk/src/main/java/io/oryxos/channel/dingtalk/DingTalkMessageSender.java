@@ -11,6 +11,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,9 +39,22 @@ public class DingTalkMessageSender {
 
   private final HttpClient httpClient;
   private final OutboundGuard guard;
+
+  /** 群聊 @ 目标的记忆条数上限。 */
+  static final int MAX_TRACKED_QUESTIONS = 200;
+
   private final int chunkSize;
   private final Map<String, String> sessionWebhooks = new ConcurrentHashMap<>();
-  private final Map<String, String> groupAtUserIds = new ConcurrentHashMap<>();
+
+  /**
+   * 群聊 @ 目标：按【入站消息 id】记，回复时按 {@code replyToMessageId} 查。
+   *
+   * <p>早期版本按 conversationId 记，于是同一个群里后一个提问者会覆盖前一个 —— A 的回答会 @ 到 后来的 B。群聊每条消息各有各的提问者，键必须落到消息上。
+   *
+   * <p>有界：只保留最近 {@code MAX_TRACKED_QUESTIONS} 条，避免长期运行时按消息无界增长 （同族的 ReplySessionStore 也都有淘汰）。
+   */
+  private final Map<String, String> groupAtUserIds =
+      Collections.synchronizedMap(new BoundedAtTargets());
 
   public DingTalkMessageSender(OutboundGuard guard, int chunkSize) {
     this(HttpClient.newBuilder().connectTimeout(REQUEST_TIMEOUT).build(), guard, chunkSize);
@@ -51,14 +66,19 @@ public class DingTalkMessageSender {
     this.chunkSize = chunkSize <= 0 ? DEFAULT_CHUNK_SIZE : chunkSize;
   }
 
-  /** 记录会话 webhook 与群聊 @ 目标（senderStaffId 优先）。 */
-  public void rememberSession(String conversationId, String sessionWebhook, String atUserId) {
+  /**
+   * 记录会话 webhook 与群聊 @ 目标（senderStaffId 优先）。
+   *
+   * @param messageId 触发本轮编排的那条入站消息 id；回复会带着它作为 {@code replyToMessageId} 回来，@ 目标就按它取
+   */
+  public void rememberSession(
+      String conversationId, String sessionWebhook, String atUserId, String messageId) {
     if (conversationId != null && !conversationId.isBlank()) {
       if (sessionWebhook != null && !sessionWebhook.isBlank()) {
         sessionWebhooks.put(conversationId, sessionWebhook);
       }
-      if (atUserId != null && !atUserId.isBlank()) {
-        groupAtUserIds.put(conversationId, atUserId);
+      if (atUserId != null && !atUserId.isBlank() && messageId != null && !messageId.isBlank()) {
+        groupAtUserIds.put(messageId, atUserId);
       }
     }
   }
@@ -71,7 +91,7 @@ public class DingTalkMessageSender {
     guard.check(webhook);
     String atUserId =
         replyToMessageId != null && !replyToMessageId.isBlank()
-            ? groupAtUserIds.get(conversationId)
+            ? groupAtUserIds.get(replyToMessageId)
             : null;
     for (String chunk : segment(text == null ? "" : text, chunkSize)) {
       postMarkdown(webhook, chunk, atUserId);
@@ -239,5 +259,20 @@ public class DingTalkMessageSender {
               : head.substring(at + 1);
     }
     return cut < cleaned.length() ? head + "?…" : head;
+  }
+
+  /** 只保留最近 {@link #MAX_TRACKED_QUESTIONS} 条的 {@code msgId → atUserId} 表。 */
+  private static final class BoundedAtTargets extends LinkedHashMap<String, String> {
+
+    private static final long serialVersionUID = 1L;
+
+    BoundedAtTargets() {
+      super(16, 0.75f, false);
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+      return size() > MAX_TRACKED_QUESTIONS;
+    }
   }
 }

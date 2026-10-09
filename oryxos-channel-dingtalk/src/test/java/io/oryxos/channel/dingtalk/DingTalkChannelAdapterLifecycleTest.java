@@ -50,7 +50,8 @@ class DingTalkChannelAdapterLifecycleTest {
 
     ensure.invoke(adapter);
     DingTalkMessageSender first = (DingTalkMessageSender) senderField.get(adapter);
-    first.rememberSession("conv-1", "https://oapi.dingtalk.com/robot/send?token=t", null);
+    first.rememberSession(
+        "conv-1", "https://oapi.dingtalk.com/robot/send?token=t", null, "msg-auto");
 
     ensure.invoke(adapter);
     DingTalkMessageSender second = (DingTalkMessageSender) senderField.get(adapter);

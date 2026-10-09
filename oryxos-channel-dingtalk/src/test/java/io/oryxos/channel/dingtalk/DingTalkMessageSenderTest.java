@@ -53,7 +53,7 @@ class DingTalkMessageSenderTest {
     DingTalkMessageSender sender =
         new DingTalkMessageSender(
             target -> guarded.set(target), DingTalkMessageSender.DEFAULT_CHUNK_SIZE);
-    sender.rememberSession("conv-1", webhookUrl, null);
+    sender.rememberSession("conv-1", webhookUrl, null, "msg-auto");
     sender.send("conv-1", "你好", null);
 
     assertEquals(webhookUrl, guarded.get());
@@ -81,7 +81,7 @@ class DingTalkMessageSenderTest {
     String webhookUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/hook";
     DingTalkMessageSender sender =
         new DingTalkMessageSender(target -> {}, DingTalkMessageSender.DEFAULT_CHUNK_SIZE);
-    sender.rememberSession("conv-g", webhookUrl, "staff-9");
+    sender.rememberSession("conv-g", webhookUrl, "staff-9", "msg-1");
     sender.send("conv-g", "答", "msg-1");
 
     JsonNode body = MAPPER.readTree(bodies.get(0));
@@ -100,7 +100,7 @@ class DingTalkMessageSenderTest {
     String webhookUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/bad";
     DingTalkMessageSender sender =
         new DingTalkMessageSender(target -> {}, DingTalkMessageSender.DEFAULT_CHUNK_SIZE);
-    sender.rememberSession("conv-bad", webhookUrl, null);
+    sender.rememberSession("conv-bad", webhookUrl, null, "msg-auto");
 
     IllegalStateException ex =
         assertThrows(IllegalStateException.class, () -> sender.send("conv-bad", "hi", null));
@@ -119,7 +119,7 @@ class DingTalkMessageSenderTest {
     String webhookUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/ok";
     DingTalkMessageSender sender =
         new DingTalkMessageSender(target -> {}, DingTalkMessageSender.DEFAULT_CHUNK_SIZE);
-    sender.rememberSession("conv-ok", webhookUrl, null);
+    sender.rememberSession("conv-ok", webhookUrl, null, "msg-auto");
     sender.send("conv-ok", "ok", null);
     assertEquals(1, bodies.size());
   }
@@ -176,5 +176,49 @@ class DingTalkMessageSenderTest {
         .doesNotContain("user:pass")
         .doesNotContain("session=abc")
         .doesNotContain("frag");
+  }
+
+  @Test
+  @DisplayName("群里换人提问后，前一条的回复仍 @ 原来的提问者")
+  void replyTargetsItsOwnAskerNotTheLatestOne() throws Exception {
+    String webhookUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/hook";
+    DingTalkMessageSender sender =
+        new DingTalkMessageSender(target -> {}, DingTalkMessageSender.DEFAULT_CHUNK_SIZE);
+
+    // A 提问 →（答复还在产出）→ B 也提问
+    sender.rememberSession("conv-g", webhookUrl, "staff-A", "msg-A");
+    sender.rememberSession("conv-g", webhookUrl, "staff-B", "msg-B");
+
+    // 现在发的是对 A 那条的回复
+    sender.send("conv-g", "回答 A", "msg-A");
+
+    JsonNode body = MAPPER.readTree(bodies.get(0));
+    assertEquals(
+        "staff-A",
+        body.path("at").path("atUserIds").get(0).asText(),
+        "回答 A 的问题却 @ 了 B —— 群里换人提问就会串");
+  }
+
+  @Test
+  @DisplayName("群聊 @ 目标的记忆有上界，超出的最早条目被淘汰")
+  void atTargetMemoryIsBounded() throws Exception {
+    String webhookUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/hook";
+    DingTalkMessageSender sender =
+        new DingTalkMessageSender(target -> {}, DingTalkMessageSender.DEFAULT_CHUNK_SIZE);
+
+    int cap = DingTalkMessageSender.MAX_TRACKED_QUESTIONS;
+    for (int i = 0; i <= cap; i++) {
+      sender.rememberSession("conv-g", webhookUrl, "staff-" + i, "msg-" + i);
+    }
+
+    sender.send("conv-g", "答最早的", "msg-0");
+    assertTrue(
+        MAPPER.readTree(bodies.get(0)).path("at").isMissingNode(),
+        "被淘汰的条目应当取不到 @ 目标（宁可不 @，也不要 @ 错人）");
+
+    sender.send("conv-g", "答最近的", "msg-" + cap);
+    assertEquals(
+        "staff-" + cap,
+        MAPPER.readTree(bodies.get(1)).path("at").path("atUserIds").get(0).asText());
   }
 }

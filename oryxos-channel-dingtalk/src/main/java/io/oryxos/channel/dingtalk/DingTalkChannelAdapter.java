@@ -324,7 +324,8 @@ public class DingTalkChannelAdapter implements InboundChannelAdapter {
       if (atUserId == null || atUserId.isBlank()) {
         atUserId = body.path("senderId").asText(null);
       }
-      sender.rememberSession(conversationId, sessionWebhook, atUserId);
+      sender.rememberSession(
+          conversationId, sessionWebhook, atUserId, body.path("msgId").asText(null));
       Optional<InboundMessage> msg = normalizer.normalize(body);
       msg.ifPresent(this::dispatchClaimed);
     } catch (RuntimeException e) {
