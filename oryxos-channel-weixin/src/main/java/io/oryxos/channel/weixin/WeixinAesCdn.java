@@ -63,17 +63,23 @@ final class WeixinAesCdn {
     return pkcs7Unpad(padded);
   }
 
+  /**
+   * 去掉 PKCS7 填充。
+   *
+   * <p>填充不合法时【抛错】而不是把带填充的字节原样返回：调用方拿到它就会当成明文落盘 （尾部最多 16 字节垃圾混进媒体文件），错误被推迟到"文件已写、模型已读到坏内容"之后。 同族的
+   * {@code WeixinKfMsgCrypt} / {@code WeComMediaAesDecrypt} 在同样情形都抛。
+   */
   private static byte[] pkcs7Unpad(byte[] padded) {
     if (padded == null || padded.length == 0) {
       return padded == null ? new byte[0] : padded;
     }
     int padLen = padded[padded.length - 1] & 0xff;
     if (padLen < 1 || padLen > KEY_LEN || padLen > padded.length) {
-      return padded;
+      throw new IllegalStateException("PKCS7 填充非法: " + padLen);
     }
     for (int i = 1; i <= padLen; i++) {
       if ((padded[padded.length - i] & 0xff) != padLen) {
-        return padded;
+        throw new IllegalStateException("PKCS7 填充校验失败");
       }
     }
     byte[] out = new byte[padded.length - padLen];
