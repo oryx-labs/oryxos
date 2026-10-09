@@ -95,4 +95,25 @@ class SkillImportSsrfGuardTest {
             SkillApiController.guardPublicHost(
                 URI.create("http://[2001:db8::200:5efe:808:808]/x")));
   }
+
+  @Test
+  @DisplayName("隧道地址 + 公网嵌入 IPv4：仍按隧道地址自身的 IPv6 作用域拒绝")
+  void tunnelAddressScopeStillBlocks() throws Exception {
+    // 展开后的嵌入 IPv4 都是公网 8.8.8.8，只看展开结果会放行；
+    // 但 fe80::/10 是链路本地、fec0::/10 是站点本地、ff00::/8 是组播 —— 隧道地址本身就不该出网。
+    for (String url :
+        new String[] {
+          "http://[fe80::5efe:8.8.8.8]/x",
+          "http://[fe80::200:5efe:8.8.8.8]/x",
+          "http://[fec0::5efe:8.8.8.8]/x",
+          "http://[ff02::5efe:8.8.8.8]/x"
+        }) {
+      IllegalArgumentException ex =
+          assertThrows(
+              IllegalArgumentException.class,
+              () -> SkillApiController.guardPublicHost(URI.create(url)),
+              "应拒绝 " + url);
+      assertTrue(ex.getMessage().contains("拒绝访问"), url);
+    }
+  }
 }

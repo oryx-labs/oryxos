@@ -280,12 +280,18 @@ public class SkillApiController {
 
   /**
    * IPv4-mapped / NAT64 / 6to4 / Teredo / ISATAP / IPv4-compatible 先展开嵌入 IPv4，再套用内网/元数据判定；与 {@code
-   * WhitelistSandbox} 读路径 SSRF 兜底对齐。
+   * WhitelistSandbox} 读路径 SSRF 兜底的同一套判据（两边必须逐条一致，否则重定向那一跳会成为缺口）。
    */
   private static boolean isBlockedSsrfAddress(InetAddress addr) {
     InetAddress effective = unwrapEmbeddedIpv4(addr);
+    // addr 侧保留原生 IPv6 类别（回环/未指定/链路本地/站点本地/组播）：展开只针对嵌入的
+    // IPv4，隧道地址自身的 IPv6 作用域仍要先判——否则 fe80::/10 之类挂上 ISATAP IID 后，
+    // 展开成公网 IPv4 就被放行。与 WhitelistSandbox 同判据逐条对齐。
     return addr.isLoopbackAddress()
         || addr.isAnyLocalAddress()
+        || addr.isLinkLocalAddress()
+        || addr.isSiteLocalAddress()
+        || addr.isMulticastAddress()
         || effective.isLoopbackAddress()
         || effective.isAnyLocalAddress()
         || effective.isLinkLocalAddress()
