@@ -4,12 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.oryxos.core.channel.ChatKind;
 import io.oryxos.core.channel.InboundAttachment;
 import io.oryxos.core.channel.InboundMessage;
+import io.oryxos.core.channel.MentionStripping;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,7 +32,6 @@ public class SlackEventNormalizer {
   private static final String SUBTYPE_FILE_SHARE = "file_share";
   private static final String MIME_IMAGE_PREFIX = "image/";
   private static final Set<String> ALLOWED_SUBTYPES = Set.of(SUBTYPE_FILE_SHARE);
-  private static final Pattern MENTION = Pattern.compile("<@[A-Z0-9]+>\\s*");
 
   private final String channelName;
 
@@ -42,6 +41,16 @@ public class SlackEventNormalizer {
 
   /** 归一化一条 Events API {@code event} 对象；不支持或结构不完整返回 empty。 */
   public Optional<InboundMessage> normalize(JsonNode event) {
+    return normalize(event, null);
+  }
+
+  /**
+   * 归一化一条 Events API {@code event} 对象。
+   *
+   * @param botUserId 本应用自己的 user id（来自信封的 {@code authorizations[].user_id}）； 取不到时传 {@code null} ——
+   *     此时<b>不剥离任何提及</b>：不知道哪段是自己的，就不该动别人的
+   */
+  public Optional<InboundMessage> normalize(JsonNode event, String botUserId) {
     if (event == null || !event.isObject()) {
       return Optional.empty();
     }
@@ -50,7 +59,7 @@ public class SlackEventNormalizer {
       return Optional.empty();
     }
     if (EVENT_APP_MENTION.equals(type)) {
-      return normalizeAppMention(event);
+      return normalizeAppMention(event, botUserId);
     }
     if (EVENT_MESSAGE.equals(type)) {
       return normalizeMessage(event);
@@ -59,7 +68,7 @@ public class SlackEventNormalizer {
     return Optional.empty();
   }
 
-  private Optional<InboundMessage> normalizeAppMention(JsonNode event) {
+  private Optional<InboundMessage> normalizeAppMention(JsonNode event, String botUserId) {
     if (shouldDrop(event)) {
       return Optional.empty();
     }
@@ -70,7 +79,7 @@ public class SlackEventNormalizer {
       LOG.warn("Slack app_mention 缺关键字段（user/channel/ts），已丢弃");
       return Optional.empty();
     }
-    String content = stripMentions(event.path("text").asText("")).strip();
+    String content = stripMentions(event.path("text").asText(""), botUserId).strip();
     List<InboundAttachment> attachments = extractFiles(event.path(FIELD_FILES));
     if (content.isBlank() && attachments.isEmpty()) {
       return Optional.empty();
@@ -163,11 +172,20 @@ public class SlackEventNormalizer {
     return out;
   }
 
-  static String stripMentions(String text) {
+  /**
+   * 剥离指向 {@code botUserId} 的那段提及，其余（含他人的 {@code <@U…>}）原样保留。
+   *
+   * <p>{@code <@U…>} 是人手可写的文本，用中性的 {@code <@[A-Z0-9]+>} 去删会把别人一起删掉； {@link InboundMessage}
+   * 的契约只要求剥离机器人自己那段。不知道自己的 id 时什么都不剥 —— 少剥是保守的，多剥是改坏用户输入。
+   */
+  static String stripMentions(String text, String botUserId) {
     if (text == null || text.isBlank()) {
       return "";
     }
-    return MENTION.matcher(text).replaceAll("").strip();
+    if (botUserId == null || botUserId.isBlank()) {
+      return text.strip();
+    }
+    return MentionStripping.strip(text, MentionStripping.angleMention(botUserId));
   }
 
   private static String text(JsonNode node, String field) {

@@ -2,6 +2,7 @@ package io.oryxos.channel.slack;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,7 +54,7 @@ class SlackEventNormalizerTest {
     event.put("channel", "C333");
     event.put("ts", "1710000000.000200");
     event.put("text", "<@B0BOT> 帮我查一下天气");
-    Optional<InboundMessage> msg = normalizer.normalize(event);
+    Optional<InboundMessage> msg = normalizer.normalize(event, "B0BOT");
     assertTrue(msg.isPresent());
     InboundMessage m = msg.get();
     assertEquals(ChatKind.GROUP, m.chatKind());
@@ -121,5 +122,49 @@ class SlackEventNormalizerTest {
     assertEquals(InboundAttachment.TYPE_IMAGE, m.attachments().get(0).type());
     assertEquals("shot.png", m.attachments().get(0).fileName());
     assertFalse(m.textual());
+  }
+
+  @Test
+  @DisplayName("只剥离指向本应用的那段，他人的 <@U…> 原样保留")
+  void keepsOtherMembersMentions() {
+    ObjectNode event = MAPPER.createObjectNode();
+    event.put("type", "app_mention");
+    event.put("user", "U111");
+    event.put("channel", "C333");
+    event.put("ts", "1710000000.000210");
+    event.put("text", "<@B0BOT> 请让 <@U0ALICE> 复核一下");
+    Optional<InboundMessage> msg = normalizer.normalize(event, "B0BOT");
+    assertTrue(msg.isPresent());
+    assertEquals("请让 <@U0ALICE> 复核一下", msg.get().content());
+  }
+
+  @Test
+  @DisplayName("拿不到自己的 user id 时什么都不剥（少剥好过多剥）")
+  void withoutOwnUserIdNothingIsStripped() {
+    ObjectNode event = MAPPER.createObjectNode();
+    event.put("type", "app_mention");
+    event.put("user", "U111");
+    event.put("channel", "C333");
+    event.put("ts", "1710000000.000220");
+    event.put("text", "<@B0BOT> 请让 <@U0ALICE> 复核一下");
+    Optional<InboundMessage> msg = normalizer.normalize(event, null);
+    assertTrue(msg.isPresent());
+    assertEquals("<@B0BOT> 请让 <@U0ALICE> 复核一下", msg.get().content());
+  }
+
+  @Test
+  @DisplayName("信封里的 authorizations[].user_id 取得出来；缺失/空数组返回 null")
+  void botUserIdFromEnvelope() {
+    ObjectNode payload = MAPPER.createObjectNode();
+    payload.putArray("authorizations").addObject().put("user_id", "U0BOT").put("is_bot", true);
+    assertEquals("U0BOT", SlackSocketClient.botUserId(payload));
+
+    assertNull(SlackSocketClient.botUserId(MAPPER.createObjectNode()));
+    ObjectNode empty = MAPPER.createObjectNode();
+    empty.putArray("authorizations");
+    assertNull(SlackSocketClient.botUserId(empty));
+    ObjectNode blank = MAPPER.createObjectNode();
+    blank.putArray("authorizations").addObject().put("user_id", "  ");
+    assertNull(SlackSocketClient.botUserId(blank));
   }
 }

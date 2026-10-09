@@ -322,9 +322,9 @@ public class SlackChannelAdapter implements InboundChannelAdapter {
     }
   }
 
-  private void handleEvent(JsonNode event) {
+  private void handleEvent(JsonNode event, String botUserId) {
     try {
-      Optional<InboundMessage> msg = normalizer.normalize(event);
+      Optional<InboundMessage> msg = normalizer.normalize(event, botUserId);
       msg.ifPresent(this::dispatchClaimed);
     } catch (RuntimeException e) {
       LOG.error("Slack 渠道 {} 事件处理异常: {}", sanitize(config.name()), sanitize(e.getMessage()));

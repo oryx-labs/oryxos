@@ -19,6 +19,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,8 +49,19 @@ final class SlackSocketClient implements WebSocket.Listener {
 
   private final String appToken;
   private final OutboundGuard guard;
-  private final Consumer<JsonNode> onEvent;
+  private final BiConsumer<JsonNode, String> onEvent;
   private final Consumer<SlackDisconnectKind> onDisconnected;
+
+  /** {@code payload.authorizations[0].user_id}：本应用自己的 user id，取不到返回 null。 */
+  static String botUserId(JsonNode payload) {
+    JsonNode authorizations = payload.path("authorizations");
+    if (!authorizations.isArray() || authorizations.isEmpty()) {
+      return null;
+    }
+    JsonNode first = authorizations.get(0);
+    String userId = first.path("user_id").asText(null);
+    return userId == null || userId.isBlank() ? null : userId;
+  }
 
   private final AtomicReference<WebSocket> socket = new AtomicReference<>();
   private final AtomicBoolean connected = new AtomicBoolean(false);
@@ -62,7 +74,7 @@ final class SlackSocketClient implements WebSocket.Listener {
   SlackSocketClient(
       String appToken,
       OutboundGuard guard,
-      Consumer<JsonNode> onEvent,
+      BiConsumer<JsonNode, String> onEvent,
       Consumer<SlackDisconnectKind> onDisconnected) {
     this.appToken = Objects.requireNonNull(appToken);
     this.guard = Objects.requireNonNull(guard);
@@ -218,7 +230,9 @@ final class SlackSocketClient implements WebSocket.Listener {
         return;
       }
       try {
-        onEvent.accept(event);
+        // authorizations[].user_id 是【本应用自己】的 user id（Slack 在每个 Events API 信封里都带）。
+        // 归一化要据此只剥离指向自己的那段，所以必须一起递下去 —— 内层 event 里没有它。
+        onEvent.accept(event, botUserId(payload));
       } catch (RuntimeException e) {
         LOG.error("Slack 事件处理异常: {}", sanitize(e.getMessage()));
       }
