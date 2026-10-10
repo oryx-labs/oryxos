@@ -39,6 +39,22 @@ final class WeixinKfApiClient implements WeixinKfClient {
   /** sync_msg：0=AMR（本机 ffmpeg 可解）。 */
   private static final int VOICE_FORMAT_AMR = 0;
 
+  /**
+   * 单条文本上限（字符数），留出与同族渠道一致的余量。
+   *
+   * <p>企业微信官方文档（微信客服 → 会话分配与消息收发 → 发送消息， {@code POST /cgi-bin/kf/send_msg}）对 {@code text.content}
+   * 写的是： 「消息内容，最长不超过 2048 个字节，<b>超出部分截断</b>」。
+   *
+   * <p>★ 两个要点：
+   *
+   * <ol>
+   *   <li>那是<b>字节</b>不是字符。中文在 UTF-8 下一个字符占 3 字节，所以 2048 字节只装得下约 682 个汉字 —— 这里取 600 字符，全中文时约 1800
+   *       字节，仍在上限内。
+   *   <li>官方说超限是<b>截断</b>而不是报错，也就是说用户会收到半条回复而<b>没有任何提示</b> —— 那比整个请求被拒更糟，正是在这一层分段的原因。
+   * </ol>
+   */
+  static final int DEFAULT_CHUNK_SIZE = 600;
+
   private final HttpClient http;
   private final OutboundGuard guard;
   private final Supplier<String> accessToken;
@@ -77,14 +93,28 @@ final class WeixinKfApiClient implements WeixinKfClient {
     return new WeixinKfSyncResult(messages, nextCursor, hasMore == 1);
   }
 
+  /**
+   * 逐段发送。官方对 {@code text.content} 的说明是「最长不超过 2048 个字节，超出部分截断」， 所以不分段时用户会拿到半条回复而链路没有任何提示。分段值见 {@link
+   * #DEFAULT_CHUNK_SIZE}。
+   */
   @Override
   public void sendText(String openKfid, String externalUserId, String text) {
+    for (String chunk : segment(text == null ? "" : text, DEFAULT_CHUNK_SIZE)) {
+      postText(openKfid, externalUserId, chunk);
+    }
+  }
+
+  private void postText(String openKfid, String externalUserId, String text) {
     ObjectNode body = MAPPER.createObjectNode();
     body.put("touser", externalUserId);
     body.put("open_kfid", openKfid);
     body.put("msgtype", "text");
     body.putObject("text").put("content", text == null ? "" : text);
     postJson("/cgi-bin/kf/send_msg", body);
+  }
+
+  static List<String> segment(String text, int chunkSize) {
+    return io.oryxos.core.channel.OutboundTextSegments.split(text, chunkSize);
   }
 
   int getServiceState(String openKfid, String externalUserId) {
