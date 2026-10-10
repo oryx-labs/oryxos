@@ -2,17 +2,28 @@ package io.oryxos.boot;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.spy;
 
 import io.oryxos.cli.OryxOsRuntime;
+import io.oryxos.core.cluster.ClusterProperties;
 import io.oryxos.core.cluster.CoordinationStore;
+import io.oryxos.core.cluster.WorkspaceVersionPoller;
 import io.oryxos.core.knowledge.KnowledgeAdmin;
 import io.oryxos.core.knowledge.KnowledgeBackendRegistry;
 import io.oryxos.core.knowledge.model.DocumentState;
+import io.oryxos.core.knowledge.model.DocumentStatus;
+import io.oryxos.knowledge.LocalKnowledgeBackend;
+import io.oryxos.knowledge.index.KnowledgeIndexService;
+import io.oryxos.knowledge.store.ChunkStore;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -26,6 +37,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 /**
  * 027 US2（SC-002/003）：知识索引恰好一次——双副本同触发恰一执行、死持有者超时接管、 检索恒读已提交代次、rebuild 期间 import 不丢文档（U1）、单机档零认领写。
@@ -110,7 +122,67 @@ class KnowledgeExactlyOnceIT {
     long genA = replicaA.getBean(CoordinationStore.class).committedGeneration(kb).orElseThrow();
     long genB = replicaB.getBean(CoordinationStore.class).committedGeneration(kb).orElseThrow();
     assertEquals(genA, genB, "已提交代次两副本一致");
-    assertEquals(1, admin(replicaA).status(kb).size(), "文档恰一份，无重复索引");
+    awaitSingleReadyDocument(admin(replicaA), kb);
+  }
+
+  @Test
+  @DisplayName("rebuild observation waits for the read replica to consume the generation change")
+  void rebuildObservationWaitsForReadReplicaRefresh() throws Exception {
+    String kb = "kb-read-refresh";
+    KnowledgeAdmin writer = admin(replicaB);
+    writer.createBase(kb, "读副本刷新");
+    Files.writeString(sharedRoot.resolve("knowledge/" + kb + "/doc.md"), "# 文档\n\n等待已提交代次可见。");
+    writer.rebuild(kb); // 同步建立首代，避免READY已可见但异步导入claim尚未释放的fixture窗口。
+
+    // 独立读视图仍使用共享PG存储与真实索引；不启动调度线程，由下方控制消费总线的时点。
+    ChunkStore chunks = replicaA.getBean(ChunkStore.class);
+    KnowledgeIndexService readerIndex =
+        new KnowledgeIndexService(
+            sharedRoot.resolve("knowledge"), chunks, () -> null, Runnable::run);
+    CoordinationStore coordination = replicaA.getBean(CoordinationStore.class);
+    ClusterProperties cluster = replicaA.getBean(ClusterProperties.class);
+    readerIndex.enableClusterCoordination(coordination, cluster);
+    WorkspaceVersionPoller readerPoller =
+        new WorkspaceVersionPoller(
+            coordination,
+            cluster,
+            new ThreadPoolTaskScheduler(),
+            Clock.fixed(Instant.EPOCH, ZoneOffset.UTC));
+    readerPoller.register("knowledge", readerIndex::invalidateGenerationCache);
+    readerPoller.pollOnce();
+    LocalKnowledgeBackend reader =
+        new LocalKnowledgeBackend(sharedRoot.resolve("knowledge"), chunks, readerIndex, () -> null);
+    assertEquals(1, reader.status(kb).size(), "先缓存旧代次");
+
+    writer.rebuild(kb);
+    long committed = coordination.committedGeneration(kb).orElseThrow();
+    assertTrue(committed > readerIndex.activeGeneration(kb), "提交已完成，读视图尚未消费通知");
+    assertTrue(reader.status(kb).isEmpty(), "旧代已清理，未刷新时读状态确实为空");
+
+    // spy仅控制首个真实空状态读取之后发生poll；返回的状态、存储及重载均来自真实实现。
+    LocalKnowledgeBackend observedReader = spy(reader);
+    doAnswer(
+            invocation -> {
+              @SuppressWarnings("unchecked")
+              List<DocumentStatus> statuses = (List<DocumentStatus>) invocation.callRealMethod();
+              if (statuses.isEmpty()) {
+                readerPoller.pollOnce();
+              }
+              return statuses;
+            })
+        .when(observedReader)
+        .status(kb);
+
+    awaitSingleReadyDocument(observedReader, kb);
+    assertEquals(committed, readerIndex.activeGeneration(kb), "读取已提交的新代次，而非旧索引");
+  }
+
+  private static void awaitSingleReadyDocument(KnowledgeAdmin admin, String kbName)
+      throws InterruptedException {
+    awaitReady(admin, kbName);
+    List<DocumentStatus> statuses = admin.status(kbName);
+    assertEquals(1, statuses.size(), "文档恰一份，无重复索引");
+    assertEquals(DocumentState.READY, statuses.get(0).state(), "重建后的文档必须就绪");
   }
 
   private static String rebuildOutcome(
