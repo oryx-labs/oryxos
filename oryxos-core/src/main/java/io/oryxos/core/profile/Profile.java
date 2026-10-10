@@ -1,6 +1,7 @@
 package io.oryxos.core.profile;
 
 import io.oryxos.core.capability.CapabilityAssembly;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -182,7 +183,14 @@ public record Profile(
   }
 
   /** key locates a configuration within a Profile; name is for display only. */
-  public record ScheduleConfig(String key, String name, String cron, String zone, String message) {}
+  public record ScheduleConfig(String key, String name, String cron, String zone, String message) {
+    private static final ZoneId DEFAULT_ZONE = ZoneId.of("UTC");
+
+    /** 校验与调度共用的有效时区；空配置固定为 UTC，原始 zone 值保持不变。 */
+    public static ZoneId resolveZone(String zone) {
+      return zone == null || zone.isBlank() ? DEFAULT_ZONE : ZoneId.of(zone);
+    }
+  }
 
   public record Settings(int maxIterations, int maxHistoryTurns) {
     private static final int DEFAULT_MAX_ITERATIONS = 10;

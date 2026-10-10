@@ -244,6 +244,7 @@ schedules:
   - key: daily-brief
     name: Daily brief
     cron: "0 0 9 * * *"
+    zone: Asia/Shanghai
 settings:
   max_iterations: 10
   max_history_turns: 20
@@ -251,6 +252,8 @@ settings:
 
 You are a professional DevOps assistant. When triggered, ... (task instructions)
 ```
+
+Schedules with an omitted or blank `zone` use UTC, consistently across replicas. To keep a local-time schedule when upgrading from the previous system-time-zone default, set `zone` explicitly to the deployment's former time zone. For example, a daily `09:00` schedule without `zone` now runs at `17:00` in Shanghai; set `zone: Asia/Shanghai` to keep `09:00` Shanghai time.
 
 In single-node mode, `WorkspaceWatcher` registers workspace changes without restarting. In cluster mode, use the management API; direct file changes require a stopped-writer maintenance window and are picked up by periodic reconciliation. Agents can also be created via `POST /api/v1/agents` or drafted from one sentence via the admin console.
 
