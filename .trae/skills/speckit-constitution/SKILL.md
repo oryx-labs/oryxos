@@ -1,13 +1,10 @@
 ---
 name: "speckit-constitution"
 description: "Create or update the project constitution from interactive or provided principle inputs."
-argument-hint: "Principles or values for the project constitution"
 compatibility: "Requires spec-kit project structure with .specify/ directory"
 metadata:
   author: "github-spec-kit"
   source: "templates/commands/constitution.md"
-user-invocable: true
-disable-model-invocation: false
 ---
 
 

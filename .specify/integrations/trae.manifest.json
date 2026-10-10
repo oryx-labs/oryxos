@@ -1,0 +1,17 @@
+{
+  "integration": "trae",
+  "version": "1.0.13",
+  "installed_at": "2026-09-30T13:25:32.564212+00:00",
+  "files": {
+    ".trae/skills/speckit-analyze/SKILL.md": "60cbd0a4bb5c01bc5d447e5d42543b02ebf1560a2b9bfcb750b3502c5941a711",
+    ".trae/skills/speckit-clarify/SKILL.md": "457e6985a30cf6b3d89990b9ab0f198803398c5cd1a35b62f4ee3e59c8dc30d3",
+    ".trae/skills/speckit-constitution/SKILL.md": "177600a10d466eac78014a3b65d78663e24c05463266df539b5be9830a81c18e",
+    ".trae/skills/speckit-implement/SKILL.md": "0c565295d8b1de03821812be86e6d5bba68268f40d52550499110ab9cad1b118",
+    ".trae/skills/speckit-converge/SKILL.md": "90c6a2cf400d114a41945745aeadc94ebcd69f4eb12dd723635ca153806bced6",
+    ".trae/skills/speckit-plan/SKILL.md": "c77d361665b34d5870dd1ffe9d2c805700a36cfacd35c63a935ea6edcb100762",
+    ".trae/skills/speckit-checklist/SKILL.md": "43009036898a3242742336fd3582c2c5909d12fd9a7d6894eb8608b43ccd27ad",
+    ".trae/skills/speckit-specify/SKILL.md": "342dd2173103ce701b2bae2f489b462da19fc7369d920c93df10754be2216be8",
+    ".trae/skills/speckit-tasks/SKILL.md": "4dfb5cb2fd544f7ad5f1ddb9ff44bf230082fc312090db7e36102fe400dfab77",
+    ".trae/skills/speckit-taskstoissues/SKILL.md": "a25c75b567310292548df39ebaef19b98e3fa9c0b28de32a177c677256acf743"
+  }
+}

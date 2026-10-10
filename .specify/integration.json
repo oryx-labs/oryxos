@@ -1,15 +1,15 @@
 {
-  "version": "0.12.3.dev0",
+  "version": "1.0.13",
   "integration_state_schema": 1,
   "installed_integrations": [
-    "claude"
+    "trae"
   ],
   "integration_settings": {
-    "claude": {
+    "trae": {
       "script": "sh",
       "invoke_separator": "-"
     }
   },
-  "integration": "claude",
-  "default_integration": "claude"
+  "integration": "trae",
+  "default_integration": "trae"
 }
