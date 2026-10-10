@@ -21,7 +21,24 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class QqMessageSender {
 
-  static final int DEFAULT_CHUNK_SIZE = 2000;
+  /**
+   * 单条消息上限（字符数）。
+   *
+   * <p>★ 这个值<b>不来自官方文档</b> —— QQ 官方没有公布消息长度上限：字段页对 {@code content} 只写「文本内容。{@code msg_type=0}
+   * 时为全文」；错误码里有 {@code 40054007 消息长度超限} 与 {@code 40054018 消息过长或异常}，但都不给数字。
+   *
+   * <p>它来自 2026-10-10 的真机实测：
+   *
+   * <ul>
+   *   <li><b>API 侧根本不拦</b> —— 单条 100 万字符也被接受（返回 {@code id}）。
+   *   <li><b>真正的约束在客户端渲染</b>。HarmonyOS 版 QQ 上：15000 字符完整显示 （结尾标记可见）；16000 / 17000 / 20000
+   *       看不到（被折叠或转成聊天记录卡片）。 ⇒ 边界落在 15000~16000。
+   *   <li>故取 <b>15000</b> —— 实测确认能完整显示的最大值。取到边界而非留余量是刻意的： 它是唯一有实测支持的数字；比它小的值（如
+   *       12000）里那点「余量」只是对其它客户端 （iOS / Android / PC）的推测，推测不比实测硬。
+   *       <p>顺带：超限后的表现是<b>折叠 / 转聊天记录卡片</b>而不是报错，用户得手动点开才看得到， 所以这里宁可保守。
+   */
+  static final int DEFAULT_CHUNK_SIZE = 15000;
+
   static final String API_BASE_URL = QqAccessTokenClient.API_BASE_URL;
   private static final int HTTP_STATUS_OK_MIN = 200;
   private static final int HTTP_STATUS_OK_MAX_EXCLUSIVE = 300;
