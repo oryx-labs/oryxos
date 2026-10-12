@@ -45,10 +45,10 @@
         <!-- Boot 3.5.x line; 2.9+/3.x need Boot 4 -->
         <springdoc.version>2.8.17</springdoc.version>
         <!-- springdoc 2.8.17 still ships older swagger-ui; override for DOMPurify CVEs -->
-        <swagger-ui.version>5.32.15</swagger-ui.version>
+        <swagger-ui.version>5.33.1</swagger-ui.version>
 
         <!-- Quality / format / security plugins -->
-        <spotless.version>3.10.3</spotless.version>
+        <spotless.version>3.10.4</spotless.version>
         <!-- PMD 7 requires maven-pmd-plugin 3.22+; 3.28 ships 7.17, we override to 7.27. -->
         <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
         <pmd.version>7.27.0</pmd.version>
@@ -141,22 +141,22 @@
             <dependency>
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-stdlib</artifactId>
-                <version>2.4.20</version>
+                <version>2.4.21</version>
             </dependency>
             <dependency>
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-stdlib-jdk8</artifactId>
-                <version>2.4.20</version>
+                <version>2.4.21</version>
             </dependency>
             <dependency>
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-stdlib-jdk7</artifactId>
-                <version>2.4.20</version>
+                <version>2.4.21</version>
             </dependency>
             <dependency>
                 <groupId>org.jetbrains.kotlin</groupId>
                 <artifactId>kotlin-reflect</artifactId>
-                <version>2.4.20</version>
+                <version>2.4.21</version>
             </dependency>
             <!-- kotlin-stdlib-common 2.x 起只发 pom 无 jar（classes 并入主件），不可钉版本；
                  升 okio 到 3.9+（其 okio-jvm 直依 kotlin-stdlib，不再传递引入 common）断根 -->
