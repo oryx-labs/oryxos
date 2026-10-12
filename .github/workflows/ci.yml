@@ -114,7 +114,7 @@ jobs:
       # #453：PR / Checks 上展示 Surefire（及 Failsafe 若存在）JUnit XML
       - name: Publish Surefire / Failsafe test report
         if: always()
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0
         with:
           name: Surefire Tests
           # TEST-*.xml 避免匹配 failsafe-summary.xml（非 JUnit）
@@ -125,7 +125,7 @@ jobs:
       # GITHUB_TOKEN, so Checks must be published from a base-repo workflow.
       - name: Upload Surefire / Failsafe JUnit XML
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: surefire-junit-xml
           path: |
@@ -135,7 +135,7 @@ jobs:
           retention-days: 7
       - name: Upload JaCoCo aggregate report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: jacoco-aggregate
           path: |
@@ -180,7 +180,7 @@ jobs:
         run: mvn -B -Dowasp.skip=false org.owasp:dependency-check-maven:aggregate
       - name: Upload Dependency-Check report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dependency-check-report
           path: |
@@ -259,13 +259,13 @@ jobs:
           exit-code: '0'
           skip-setup-trivy: true
       - name: Upload Trivy SARIF to code scanning
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         continue-on-error: true
         with:
           sarif_file: trivy-results.sarif
       - name: Upload Trivy SARIF artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: trivy-image-sarif
           path: trivy-results.sarif
@@ -309,7 +309,7 @@ jobs:
       - name: Generate CycloneDX aggregate BOM
         run: mvn -B org.cyclonedx:cyclonedx-maven-plugin:makeAggregateBom
       - name: Upload CycloneDX SBOM artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cyclonedx-sbom
           path: |
@@ -351,7 +351,7 @@ jobs:
           -Dpmd.skip=true -Dspotbugs.skip=true
       - name: Publish integration test report
         if: always()
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0
         with:
           name: Integration Tests (*IT)
           path: "**/target/surefire-reports/TEST-*.xml"
@@ -359,7 +359,7 @@ jobs:
           fail-on-empty: "false"
       - name: Upload IT JUnit XML
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: surefire-it-junit-xml
           path: "**/target/surefire-reports/TEST-*.xml"
@@ -392,7 +392,7 @@ jobs:
       - name: docker build
         run: docker build --build-arg JAR_FILE=oryxos-boot/target/oryxos-boot-*.jar -t oryxos:ci .
       - name: create kind cluster
-        uses: helm/kind-action@06c1ae10762d3b9c1644e7fe69596ae519e015a2 # v1.15.0
+        uses: helm/kind-action@1544676c07bb3570fcb70166beaa07c4528fd4aa # v1.15.1
         with:
           cluster_name: oryxos-ci
       - name: kind install smoke
