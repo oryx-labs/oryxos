@@ -31,6 +31,11 @@ final class QqAccessTokenClient {
   private static final String FIELD_ACCESS_TOKEN = "access_token";
   private static final String FIELD_EXPIRES_IN = "expires_in";
 
+  /** HTTP 2xx 判定，与同族渠道的 token 客户端（weixin-kf / weixin-mp / weixin-mini）同一套常数。 */
+  private static final int HTTP_OK_MIN = 200;
+
+  private static final int HTTP_OK_MAX_EXCLUSIVE = 300;
+
   private final HttpClient http;
   private final OutboundGuard guard;
   private final String appId;
@@ -85,6 +90,13 @@ final class QqAccessTokenClient {
               .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body)))
               .build();
       HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() < HTTP_OK_MIN || response.statusCode() >= HTTP_OK_MAX_EXCLUSIVE) {
+        throw new IllegalStateException(
+            "QQ getAppAccessToken HTTP "
+                + response.statusCode()
+                + ": "
+                + sanitize(response.body()));
+      }
       JsonNode root = MAPPER.readTree(response.body() == null ? "{}" : response.body());
       String token = root.path(FIELD_ACCESS_TOKEN).asText("");
       if (token.isBlank()) {
