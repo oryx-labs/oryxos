@@ -33,7 +33,7 @@
   "message": "ok",
   "data": {
     "status": "ok",
-    "version": "0.1.7-RELEASE",
+    "version": "0.1.8-RELEASE",
     "build": "a1b2c3d"
   }
 }

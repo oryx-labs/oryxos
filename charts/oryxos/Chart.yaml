@@ -7,6 +7,6 @@ type: application
 # chart 自身版本（模板演进独立演版）
 version: 0.1.0
 # 对应应用镜像版本（与 pom <version> 同口径，release 时同步）
-appVersion: "0.1.7-RELEASE"
+appVersion: "0.1.8-RELEASE"
 keywords: [ai, agent, llm, self-hosted]
 home: https://github.com/oryx-labs/oryxos

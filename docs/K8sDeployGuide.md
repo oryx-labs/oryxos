@@ -54,7 +54,7 @@ curl -s localhost:8080/actuator/health/readiness
 ## 升级与回滚
 
 ```bash
-helm upgrade oryxos charts/oryxos --reuse-values --set image.tag=v0.1.7-RELEASE
+helm upgrade oryxos charts/oryxos --reuse-values --set image.tag=v0.1.8-RELEASE
 helm rollback oryxos            # 回上一版
 ```
 

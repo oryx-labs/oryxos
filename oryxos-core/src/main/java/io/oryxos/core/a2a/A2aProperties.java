@@ -20,7 +20,7 @@ public record A2aProperties(
     @DefaultValue("OryxOS Agent Harness — local agents advertised for A2A discovery")
         String description,
     @DefaultValue("http://localhost:8080") String publicBaseUrl,
-    @DefaultValue("0.1.7-RELEASE") String version,
+    @DefaultValue("0.1.8-RELEASE") String version,
     @DefaultValue("0.3.0") String protocolVersion,
     /** Default local agent when params.metadata.agent is omitted. */
     @DefaultValue("") String defaultAgent,
@@ -48,7 +48,7 @@ public record A2aProperties(
         publicBaseUrl == null || publicBaseUrl.isBlank()
             ? "http://localhost:8080"
             : publicBaseUrl.strip().replaceAll("/+$", "");
-    version = version == null || version.isBlank() ? "0.1.7-RELEASE" : version.strip();
+    version = version == null || version.isBlank() ? "0.1.8-RELEASE" : version.strip();
     protocolVersion =
         protocolVersion == null || protocolVersion.isBlank() ? "0.3.0" : protocolVersion.strip();
     defaultAgent = defaultAgent == null ? "" : defaultAgent.strip();
@@ -74,7 +74,7 @@ public record A2aProperties(
         "OryxOS",
         "OryxOS Agent Harness — local agents advertised for A2A discovery",
         "http://localhost:8080",
-        "0.1.7-RELEASE",
+        "0.1.8-RELEASE",
         "0.3.0",
         "",
         "",

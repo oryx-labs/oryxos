@@ -279,7 +279,7 @@ class DingTalkStreamClient implements WebSocket.Listener {
     body.put("clientId", clientId);
     body.put("clientSecret", clientSecret);
     body.set("subscriptions", subscriptions);
-    body.put("ua", "oryxos-channel-dingtalk/0.1.7-RELEASE");
+    body.put("ua", "oryxos-channel-dingtalk/0.1.8-RELEASE");
     HttpRequest request =
         HttpRequest.newBuilder()
             .uri(URI.create(API_BASE_URL + OPEN_CONNECTION_PATH))

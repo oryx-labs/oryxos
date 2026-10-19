@@ -8,13 +8,13 @@
 
 - 健康端点：`SystemApiController.health()` 当前返回 `ApiResponse.ok(Map.of("status","ok"))`，即 `{code,message,data:{status:"ok"}}`。
 - 同类端点：`/info` 用 `InfoView(application, providers)` record 承载结构化视图——本特性应对齐这一既有风格，用 record 做视图而非裸 Map。
-- 版本来源：项目**未**配置 `spring-boot-maven-plugin` 的 `build-info` goal，也未配置 git sha 插件。项目 Maven 版本为 `0.1.7-RELEASE`（根 pom `<version>`）；注意根 pom 里的 `4.1.1` 是 `spring-boot-starter-parent` 的父版本，**不是**项目版本，`version` 字段应回显 `0.1.7-RELEASE`。
+- 版本来源：项目**未**配置 `spring-boot-maven-plugin` 的 `build-info` goal，也未配置 git sha 插件。项目 Maven 版本为 `0.1.8-RELEASE`（根 pom `<version>`）；注意根 pom 里的 `4.1.1` 是 `spring-boot-starter-parent` 的父版本，**不是**项目版本，`version` 字段应回显 `0.1.8-RELEASE`。
 - 审计/鉴权：`/health` 在核心阶段匿名可访问（SystemApiController 类注释与 SuppressFBWarnings 已说明），本特性不得改变。
 
 ## Decision 1：version 取 Maven 项目版本号，经 build-info 注入
 
 - **Decision**: 启用 `spring-boot-maven-plugin` 的 `build-info` goal，构建期生成 `META-INF/build-info.properties`；运行期由 Spring Boot 自动装配的 `BuildProperties` Bean 读取 `version`。
-- **Rationale**: 这是 Spring Boot 官方标准做法，`BuildProperties` 开箱即用，version 天然与项目 Maven `<version>`（当前 `0.1.7-RELEASE`）同源（满足 spec "与构建产物版本同源"）。无需自写版本常量，不会与 pom 漂移。
+- **Rationale**: 这是 Spring Boot 官方标准做法，`BuildProperties` 开箱即用，version 天然与项目 Maven `<version>`（当前 `0.1.8-RELEASE`）同源（满足 spec "与构建产物版本同源"）。无需自写版本常量，不会与 pom 漂移。
 - **Alternatives considered**:
   - 硬编码版本常量 / 读 `application.yml` 占位：会与 pom 版本漂移，违反同源，否决。
   - 读 `Implementation-Version`（jar manifest）：IDE / `mvn spring-boot:run` 下 manifest 常缺失，开发期拿不到，不如 build-info 稳定。

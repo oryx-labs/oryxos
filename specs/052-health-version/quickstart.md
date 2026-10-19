@@ -17,7 +17,7 @@ java -jar oryxos-boot/target/oryxos-*.jar &   # 或 bin/start.sh
 curl -s http://localhost:8080/api/v1/health | jq .data
 ```
 
-**预期**：`data` 含 `status:"ok"`、`version`（= 项目 Maven 版本号，当前 `0.1.7-RELEASE`）、`build`（git short sha，如 `a1b2c3d`）。对应 US1 / C-2 / C-3。
+**预期**：`data` 含 `status:"ok"`、`version`（= 项目 Maven 版本号，当前 `0.1.8-RELEASE`）、`build`（git short sha，如 `a1b2c3d`）。对应 US1 / C-2 / C-3。
 
 ## 场景 2：多次请求取值稳定
 
