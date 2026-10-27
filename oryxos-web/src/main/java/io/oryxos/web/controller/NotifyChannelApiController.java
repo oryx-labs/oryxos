@@ -3,12 +3,14 @@ package io.oryxos.web.controller;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.oryxos.core.notify.NotifyChannelDef;
 import io.oryxos.core.notify.NotifyChannelRegistry;
+import io.oryxos.core.secret.SensitiveConfigKeys;
 import io.oryxos.web.common.ApiResponse;
 import io.oryxos.web.controller.dto.CreateNotifyChannelRequest;
 import io.oryxos.web.controller.dto.CredentialMasks;
 import io.oryxos.web.controller.dto.NotifyChannelView;
 import io.oryxos.web.controller.dto.UpdateNotifyChannelRequest;
 import io.oryxos.web.error.ResourceNotFoundException;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -118,8 +120,10 @@ public class NotifyChannelApiController {
         registry
             .find(name)
             .orElseThrow(() -> new ResourceNotFoundException("通知渠道不存在: " + name)); // → 404
-    // 022：前端编辑表单回填的是敏感项掩码；提交掩码原样或留空 = 未修改，保留原值——否则打码值会覆盖真实凭证
-    Map<String, String> config = keepUnchangedSecrets(existing.config(), req.config());
+    // 同类型编辑保留未修改的凭证；切换渠道类型时不把旧凭证带到新出口。
+    Map<String, String> config =
+        keepUnchangedSecrets(
+            existing.type().equals(req.type()) ? existing.config() : Map.of(), req.config());
     String url = normalizeUrl(req.type(), req.url());
     // webhook URL 同口径：提交值等于原 URL 的掩码 = 未修改，保留原 URL
     if (CredentialMasks.maskWebhookUrl(existing.url()).equals(url)) {
@@ -131,18 +135,24 @@ public class NotifyChannelApiController {
     return ApiResponse.ok(NotifyChannelView.from(saved));
   }
 
-  /** 敏感项未修改判定（ProviderApiController 同款范式）：提交值为空或等于原值掩码 → 沿用原值；否则取新值。 */
+  /** 敏感项未提交、留空或等于原值掩码时保留；其余配置仍按提交内容替换。 */
   private static Map<String, String> keepUnchangedSecrets(
       Map<String, String> existing, Map<String, String> submitted) {
+    Map<String, String> out = new LinkedHashMap<>();
+    existing.forEach(
+        (key, value) -> {
+          if (SensitiveConfigKeys.isSensitive(key)) {
+            out.put(key, value);
+          }
+        });
     if (submitted == null || submitted.isEmpty()) {
-      return submitted;
+      return out;
     }
     Map<String, String> masked = NotifyChannelView.maskConfig(existing);
-    Map<String, String> out = new java.util.LinkedHashMap<>();
     submitted.forEach(
         (key, value) -> {
           boolean unchanged =
-              io.oryxos.core.secret.SensitiveConfigKeys.isSensitive(key)
+              SensitiveConfigKeys.isSensitive(key)
                   && existing.containsKey(key)
                   && (value == null || value.isBlank() || value.equals(masked.get(key)));
           out.put(key, unchanged ? existing.get(key) : value);

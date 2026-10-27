@@ -1069,7 +1069,7 @@ async function loadNotifyChannels() {
 }
 
 // 新建/编辑表单：editing 存被编辑渠道的 name（此时 name 只读），null 表示新建
-const nc = reactive({ open: false, editing: null, name: '', type: 'feishu', url: '', description: '', host: '', port: '', from: '', to: '', username: '', password: '', subject: '', encryption: '', token: '', chatId: '', channelId: '', phoneNumberId: '', homeserver: '', roomId: '', groupOpenid: '', userOpenid: '', busy: false, error: null })
+const nc = reactive({ open: false, editing: null, name: '', type: 'feishu', url: '', description: '', secret: '', host: '', port: '', from: '', to: '', username: '', password: '', subject: '', encryption: '', token: '', chatId: '', channelId: '', phoneNumberId: '', homeserver: '', roomId: '', groupOpenid: '', userOpenid: '', busy: false, error: null })
 
 function notifyNeedsUrl(type) {
   return !['email', 'telegram', 'slack', 'discord', 'whatsapp', 'matrix', 'qq'].includes(type)
@@ -1078,6 +1078,7 @@ function notifyNeedsUrl(type) {
 function buildNotifyConfig() {
   if (nc.type === 'email') return buildEmailConfig()
   const config = {}
+  if (nc.type === 'feishu' && nc.secret) config.secret = nc.secret
   if (nc.token) config.token = nc.token
   if (nc.type === 'telegram' && nc.chatId) config.chat_id = nc.chatId
   if ((nc.type === 'slack' || nc.type === 'discord') && nc.channelId) config.channel_id = nc.channelId
@@ -1136,6 +1137,7 @@ function editNotifyChannel(row) {
   nc.url = row.url || ''
   nc.description = row.description || ''
   const c = row.config || {}
+  nc.secret = c.secret || ''
   nc.host = c.host || ''; nc.port = c.port || ''; nc.from = c.from || ''; nc.to = c.to || ''
   nc.username = c.username || ''; nc.password = c.password || ''; nc.subject = c.subject || ''; nc.encryption = c.encryption || ''
   nc.token = c.token || ''; nc.chatId = c.chat_id || ''; nc.channelId = c.channel_id || ''
@@ -1155,6 +1157,7 @@ function buildEmailConfig() {
 
 function cancelNc() {
   nc.open = false; nc.editing = null; nc.name = ''; nc.type = 'feishu'; nc.url = ''; nc.description = ''
+  nc.secret = ''
   nc.host = ''; nc.port = ''; nc.from = ''; nc.to = ''; nc.username = ''; nc.password = ''; nc.subject = ''; nc.encryption = ''
   nc.token = ''; nc.chatId = ''; nc.channelId = ''; nc.phoneNumberId = ''; nc.homeserver = ''; nc.roomId = ''
   nc.groupOpenid = ''; nc.userOpenid = ''
@@ -3785,6 +3788,7 @@ const outputRows = computed(() =>
                     <option value="qq">qq</option>
                   </select>
                   <input v-if="nc.type !== 'email'" v-model="nc.url" class="gen-input" :placeholder="notifyNeedsUrl(nc.type) ? 'Webhook URL' : 'Webhook URL（可选；也可用下方 token 字段）'" />
+                  <input v-if="nc.type === 'feishu'" v-model="nc.secret" class="gen-input" type="password" autocomplete="new-password" aria-label="飞书签名密钥" :placeholder="nc.editing ? '签名密钥（留空保留原值）' : '签名密钥（可选）'" />
                   <template v-if="nc.type === 'telegram'">
                     <input v-model="nc.token" class="gen-input" placeholder="Bot Token（建议 ${TELEGRAM_BOT_TOKEN}）" />
                     <input v-model="nc.chatId" class="gen-input" placeholder="chat_id（私聊数字 ID，群为负数）" />
