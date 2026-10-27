@@ -1078,7 +1078,7 @@ function notifyNeedsUrl(type) {
 function buildNotifyConfig() {
   if (nc.type === 'email') return buildEmailConfig()
   const config = {}
-  if (nc.type === 'feishu' && nc.secret) config.secret = nc.secret
+  if (nc.type === 'feishu' && (nc.editing || nc.secret)) config.secret = nc.secret
   if (nc.token) config.token = nc.token
   if (nc.type === 'telegram' && nc.chatId) config.chat_id = nc.chatId
   if ((nc.type === 'slack' || nc.type === 'discord') && nc.channelId) config.channel_id = nc.channelId
@@ -3788,7 +3788,7 @@ const outputRows = computed(() =>
                     <option value="qq">qq</option>
                   </select>
                   <input v-if="nc.type !== 'email'" v-model="nc.url" class="gen-input" :placeholder="notifyNeedsUrl(nc.type) ? 'Webhook URL' : 'Webhook URL（可选；也可用下方 token 字段）'" />
-                  <input v-if="nc.type === 'feishu'" v-model="nc.secret" class="gen-input" type="password" autocomplete="new-password" aria-label="飞书签名密钥" :placeholder="nc.editing ? '签名密钥（留空保留原值）' : '签名密钥（可选）'" />
+                  <input v-if="nc.type === 'feishu'" v-model="nc.secret" class="gen-input" type="password" autocomplete="new-password" aria-label="飞书签名密钥" :placeholder="nc.editing ? '签名密钥（清空后移除）' : '签名密钥（可选）'" />
                   <template v-if="nc.type === 'telegram'">
                     <input v-model="nc.token" class="gen-input" placeholder="Bot Token（建议 ${TELEGRAM_BOT_TOKEN}）" />
                     <input v-model="nc.chatId" class="gen-input" placeholder="chat_id（私聊数字 ID，群为负数）" />

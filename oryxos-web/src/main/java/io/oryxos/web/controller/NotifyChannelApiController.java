@@ -38,6 +38,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/notify-channels")
 public class NotifyChannelApiController {
 
+  private static final String TYPE_FEISHU = "feishu";
   private static final String TYPE_EMAIL = "email";
   private static final String TYPE_SLACK = "slack";
   private static final String TYPE_DISCORD = "discord";
@@ -45,6 +46,7 @@ public class NotifyChannelApiController {
   private static final String TYPE_WHATSAPP = "whatsapp";
   private static final String TYPE_MATRIX = "matrix";
   private static final String TYPE_QQ = "qq";
+  private static final String CFG_SECRET = "secret";
   private static final String CFG_URL = "url";
   private static final String CFG_TOKEN = "token";
   private static final String CFG_CHANNEL_ID = "channel_id";
@@ -62,7 +64,7 @@ public class NotifyChannelApiController {
   private static final Set<String> SUPPORTED_TYPES =
       Set.of(
           "webhook",
-          "feishu",
+          TYPE_FEISHU,
           "wecom",
           "dingtalk",
           TYPE_EMAIL,
@@ -123,7 +125,9 @@ public class NotifyChannelApiController {
     // 同类型编辑保留未修改的凭证；切换渠道类型时不把旧凭证带到新出口。
     Map<String, String> config =
         keepUnchangedSecrets(
-            existing.type().equals(req.type()) ? existing.config() : Map.of(), req.config());
+            req.type(),
+            existing.type().equals(req.type()) ? existing.config() : Map.of(),
+            req.config());
     String url = normalizeUrl(req.type(), req.url());
     // webhook URL 同口径：提交值等于原 URL 的掩码 = 未修改，保留原 URL
     if (CredentialMasks.maskWebhookUrl(existing.url()).equals(url)) {
@@ -135,9 +139,9 @@ public class NotifyChannelApiController {
     return ApiResponse.ok(NotifyChannelView.from(saved));
   }
 
-  /** 敏感项未提交、留空或等于原值掩码时保留；其余配置仍按提交内容替换。 */
+  /** 未提交或回传掩码的敏感项保留；飞书签名密钥显式留空时移除，其他敏感项留空仍保留。 */
   private static Map<String, String> keepUnchangedSecrets(
-      Map<String, String> existing, Map<String, String> submitted) {
+      String type, Map<String, String> existing, Map<String, String> submitted) {
     Map<String, String> out = new LinkedHashMap<>();
     existing.forEach(
         (key, value) -> {
@@ -151,6 +155,12 @@ public class NotifyChannelApiController {
     Map<String, String> masked = NotifyChannelView.maskConfig(existing);
     submitted.forEach(
         (key, value) -> {
+          if (TYPE_FEISHU.equals(type)
+              && CFG_SECRET.equals(key)
+              && (value == null || value.isBlank())) {
+            out.remove(key);
+            return;
+          }
           boolean unchanged =
               SensitiveConfigKeys.isSensitive(key)
                   && existing.containsKey(key)
