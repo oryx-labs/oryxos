@@ -74,12 +74,13 @@ java -jar oryxos-boot/target/oryxos-boot-*.jar serve
    git checkout -b feat/add-slack-channel
    ```
 
-3. **写代码**：小步、聚焦。一个 PR 只做一件事——好评审、好合并。
-4. **本地自测**：提交前务必让 `mvn clean verify` **全绿**（下面「质量门禁」有说明）。
-5. **提交**：写清楚的 commit message（见下）。
-6. **推分支 + 开 PR**：PR 标题说清楚做了什么，正文说清楚为什么、怎么验证。关联相关 issue（`Closes #123`）。
-7. **参与评审**：maintainer 会来看你的 PR。有意见就一起改——这是学习最快的环节，别有压力。
-8. **合并**：拿到 LGTM / Approve、CI 全绿，maintainer 就会帮你合。🎉
+3. **先讨论提案类工作**：选择匹配的 issue 类型和模板，在该 issue 下面讨论。等预期方案和验收标准达成一致并记录后，再根据 issue 内容开始实现。小型、范围明确的修复可以直接开 PR。
+4. **写代码**：小步、聚焦。一个 PR 只做一件事——好评审、好合并。
+5. **本地自测**：提交前务必让 `mvn clean verify` **全绿**（下面「质量门禁」有说明）。
+6. **提交**：写清楚的 commit message（见下）。
+7. **推分支 + 开 PR**：使用仓库提供的 PR 模板，写清楚为什么改、如何验证；PR 完成某个 issue 时关联它（`Closes #123`）。
+8. **参与评审**：maintainer 会来看你的 PR。有意见就一起改——这是学习最快的环节，别有压力。
+9. **合并**：拿到 LGTM / Approve、CI 全绿，maintainer 就会帮你合。🎉
 
 ## 提交规范
 
@@ -96,7 +97,28 @@ chore: 升级版本到 0.1.1
 
 常用类型：`feat`（新功能）、`fix`（修 bug）、`docs`（文档）、`test`（测试）、`refactor`（重构）、`chore`（杂项/构建）。
 
-**PR 标题**同样清晰即可。一个约定：**PR 标题以 `release:` 开头并合入 `main`，会触发自动发版**（打 Release + 上传 tarball），所以普通 PR 别用这个前缀。
+**PR 标题**使用上面的约定式提交格式，例如 `fix(web): 修复过期会话` 或 `docs: 补充配置说明`。`release: ...` 仅供 maintainer 批准的发版 PR 使用。标题本身不会触发发版；当前发版由与 `pom.xml` 版本匹配的 tag 推送触发。
+
+## AI 辅助撰写 Issue 和 PR
+
+AI 可以帮助选择 issue 类型、根据你提供的信息起草 issue、实现已经讨论通过的提案，并填写 PR 描述。Issue 是讨论和决策的依据：未解决的问题在 issue 下面讨论，达成一致后把方案记录清楚，再让 AI 开始实现。
+
+AI 不得编造缺失的复现步骤、环境信息、范围、验收标准或测试结果。让它标注未知项或向你确认。你需要检查实际改动，并对最终 issue 和 PR 负责。详细的、与工具无关的说明见仓库中的 [`.github/AI_CONTRIBUTION.md`](https://github.com/oryx-labs/oryxos/blob/main/.github/AI_CONTRIBUTION.md)。
+
+## Issue 类型与标签
+
+每个请求选择一种 issue 类型。标签是仓库自己的配置，不是 GitHub 固定不可变的标准。v1 只用标签描述 issue 类型，不要求工作状态、优先级或 area 标签。
+
+| 类型 | 标题前缀 | 标签 |
+|------|----------|------|
+| Bug | `[bug]` | `bug` |
+| 功能或改进 | `[feature]` | `enhancement` |
+| 文档 | `[docs]` | `documentation` |
+| 提案 | `[proposal]` | `proposal` |
+| 维护任务 | `[task]` | `task` |
+| 问题或支持 | `[question]` | `question` |
+
+请使用匹配的 issue 模板，让 issue 在讨论前就具备足够上下文。提案的讨论保留在对应 issue 中，达成一致后把方案和验收标准记录在 issue 里，再开始实现。
 
 ## 质量门禁（务必看）
 

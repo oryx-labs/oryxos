@@ -1,0 +1,46 @@
+name: Proposal
+description: Propose a change to discuss and agree in this issue before implementation.
+title: "[proposal] "
+labels: ["proposal"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and context
+      description: What problem should this proposal solve, and who is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe the desired behavior or result. The issue comments are where we refine and agree on the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What observable results would mean this proposal is implemented?
+    validations:
+      required: true
+  - type: textarea
+    id: questions
+    attributes:
+      label: Questions for discussion
+      description: List decisions or trade-offs to resolve in this issue's comments.
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Alternatives, compatibility concerns, sketches, or references.
+    validations:
+      required: false

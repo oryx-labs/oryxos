@@ -35,7 +35,13 @@ git push origin fix/typo-in-readme
 推完后，GitHub 页面会提示你 **Compare & pull request**。点它，填标题和正文：
 
 - **标题**：一句话说清做了什么。
-- **正文**：为什么改、怎么验证的；关联 issue 写 `Closes #123`（合并后自动关掉那个 issue）。
+- **正文**：使用仓库的 PR 模板说明修改原因、范围、验证方式和兼容性；关联 issue 写 `Closes #123`（合并后自动关闭该 issue）。
+
+提案类工作应在实现前先开一个匹配类型的 issue。提案及讨论都留在该 issue 中；预期方案和验收标准达成一致并记录后，再开始实现，PR 关联回对应 issue。小型、范围明确的修复可以直接开 PR。
+
+PR 标题使用约定式提交格式，例如 `fix(web): 修复过期会话` 或 `docs: 补充配置说明`。`release: ...` 仅供 maintainer 批准的发版 PR 使用。标题前缀本身不会发布版本；发版流程由匹配版本号的 tag 触发。
+
+AI 可以协助起草 issue/PR，或根据已达成一致的 issue 实现。它只能使用已知事实和实际观察到的测试结果；未知内容应标注或询问，不可编造。提交前请检查实际 diff，并对最终内容负责。详见仓库的 [AI 辅助贡献说明](https://github.com/oryx-labs/oryxos/blob/main/.github/AI_CONTRIBUTION.md)。
 
 一个好 PR = **小、聚焦、有说明、带测试**。别一个 PR 塞十件事——那样没人评审得动。
 

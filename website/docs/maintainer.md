@@ -47,8 +47,10 @@ Meet these, an existing maintainer nominates you, the group agrees, and you're a
 - **Merge PRs**: after CI is green and there are enough Approvals.
 - **Tend issues**: triage, label, reply, save `good first issue` for newcomers.
 - **Mentor newcomers**: the most important thing. The person you help today maintains the project with you tomorrow.
-- **Help with releases**: follow the release flow in [GitHub Contribution Basics](./github-workflow) (a `release:` PR title triggers automatic release).
+- **Help with releases**: follow the release flow in [GitHub Contribution Basics](./github-workflow). `release:` is reserved for maintainer-approved release PRs; publishing is triggered by a matching version tag.
 - **Guard the foundation**: security, audit, sandbox, architectural principles — maintainers help keep the line (see `CLAUDE.md`).
+
+For proposed work, keep the issue as the decision record. Confirm that the intended behavior and acceptance criteria are clear in the issue before asking a contributor or AI assistant to implement it. AI may draft the issue or PR and help implement an agreed proposal, but maintainers review the actual diff and evidence and make the final decision.
 
 ## Power and responsibility
 

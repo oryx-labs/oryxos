@@ -74,12 +74,13 @@ If you're new to open source, this flow is the same as on almost every GitHub pr
    git checkout -b feat/add-slack-channel
    ```
 
-3. **Write code** in small, focused steps. One PR does one thing — easy to review, easy to merge.
-4. **Test locally**: `mvn clean verify` must be **green** before you push (see Quality Gates below).
-5. **Commit** with a clear message (see below).
-6. **Push and open a PR**: the title says what you did; the body says why and how to verify. Link related issues (`Closes #123`).
-7. **Engage in review**: a maintainer will look at your PR. Address the feedback together — this is the fastest way to learn, so relax.
-8. **Merge**: with an LGTM/Approve and green CI, a maintainer merges it. 🎉
+3. **Discuss proposed work first**: choose the matching issue type and template, then discuss the proposal in that issue. Once the intended solution and acceptance criteria are agreed and recorded, implementation can start from that issue context. Small, self-contained fixes can go directly to a PR.
+4. **Write code** in small, focused steps. One PR does one thing — easy to review, easy to merge.
+5. **Test locally**: `mvn clean verify` must be **green** before you push (see Quality Gates below).
+6. **Commit** with a clear message (see below).
+7. **Push and open a PR**: use the repository PR template, describe why and how you verified the change, and link the issue (`Closes #123`) when the PR completes it.
+8. **Engage in review**: a maintainer will look at your PR. Address the feedback together — this is the fastest way to learn, so relax.
+9. **Merge**: with an LGTM/Approve and green CI, a maintainer merges it. 🎉
 
 ## Commit conventions
 
@@ -96,7 +97,28 @@ chore: bump version to 0.1.1
 
 Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`.
 
-**PR titles** should be just as clear. One convention: **a PR whose title starts with `release:` and is merged to `main` triggers an automatic release** (creates a Release + uploads the tarball), so don't use that prefix on regular PRs.
+**PR titles** should use the Conventional Commit style shown above, for example `fix(web): handle expired session` or `docs: clarify setup`. `release: ...` is reserved for maintainer-approved release PRs. It does not itself publish a release: publishing is triggered by pushing a version tag that matches `pom.xml`.
+
+## AI-assisted issue and PR drafting
+
+AI can help select an issue type, draft the issue from information you provide, implement an agreed proposal, and prepare a PR description. Keep the issue as the source of truth: discuss open questions there and record the agreed solution before asking AI to implement it.
+
+AI must not invent missing reproduction steps, environment details, scope, acceptance criteria, or test results. Ask it to mark unknowns or ask you. Review the actual changes and own the final issue and PR. The repository's detailed, tool-agnostic instructions are in [`.github/AI_CONTRIBUTION.md`](https://github.com/oryx-labs/oryxos/blob/main/.github/AI_CONTRIBUTION.md).
+
+## Issue types and labels
+
+Choose one issue type for each request. Labels are repository configuration, not a fixed GitHub standard. In v1, labels describe the issue type only; workflow-state, priority, and area labels are not required.
+
+| Type | Title prefix | Label |
+|------|--------------|-------|
+| Bug | `[bug]` | `bug` |
+| Feature or enhancement | `[feature]` | `enhancement` |
+| Documentation | `[docs]` | `documentation` |
+| Proposal | `[proposal]` | `proposal` |
+| Maintenance task | `[task]` | `task` |
+| Question or support | `[question]` | `question` |
+
+Use the matching issue form so the issue contains enough context for discussion. For a proposal, keep the discussion in the issue and record the agreed solution and acceptance criteria there before implementation.
 
 ## Quality gates (please read)
 

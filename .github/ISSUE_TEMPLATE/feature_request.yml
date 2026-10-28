@@ -1,0 +1,40 @@
+name: Feature or enhancement
+description: Suggest a new capability or improvement to an existing behavior.
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or user need
+      description: What are you trying to do, and what is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe what OryxOS should enable or how behavior should improve.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or other approaches have you considered?
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and open questions
+      description: Note affected capabilities, constraints, or questions to discuss in this issue.
+    validations:
+      required: false
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Sketches, references, or examples from other projects.
+    validations:
+      required: false

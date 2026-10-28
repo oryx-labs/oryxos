@@ -1,0 +1,57 @@
+name: Bug report
+description: Report behavior that does not match what OryxOS should do.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: What happened?
+      description: Summarize the problem and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reliable sequence of steps.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include relevant errors or stack traces in a code block.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OryxOS version/commit, Java version, OS/architecture, provider, deployment mode, and trigger path.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Share only sanitized excerpts. Never post credentials or sensitive data.
+    validations:
+      required: false
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots or a minimal reproducer, if useful.
+    validations:
+      required: false

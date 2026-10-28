@@ -1,0 +1,25 @@
+name: Question or support
+description: Ask a project question and keep the answer in this issue.
+title: "[question] "
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: State what you want to understand or achieve.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and what you have tried
+      description: Include relevant versions and steps where useful.
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      validations:
+        required: false

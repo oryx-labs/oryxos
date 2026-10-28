@@ -1,0 +1,35 @@
+name: Documentation
+description: Report a documentation gap or propose a documentation improvement.
+title: "[docs] "
+labels: ["documentation"]
+body:
+  - type: textarea
+    id: page
+    attributes:
+      label: Page or documentation area
+      description: Link the page or describe where the missing information belongs.
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: What is missing or unclear?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Suggested change or expected result
+    validations:
+      required: true
+  - type: dropdown
+    id: languages
+    attributes:
+      label: Documentation language impact
+      multiple: true
+      options:
+        - English
+        - Chinese
+        - Both
+    validations:
+      required: true

@@ -1,0 +1,32 @@
+name: PR contract
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-contract-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Title and description format (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Only trusted base-branch code runs for the metadata-only check.
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Test the contract checker
+        run: node --test .github/scripts/check-pr-contract.test.cjs
+      - name: Check title and required sections
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: node .github/scripts/check-pr-contract.cjs --advisory

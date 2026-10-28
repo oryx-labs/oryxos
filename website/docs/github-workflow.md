@@ -35,7 +35,13 @@ git push origin fix/typo-in-readme
 After pushing, GitHub shows **Compare & pull request**. Click it and fill in:
 
 - **Title**: one line saying what you did.
-- **Body**: why, and how you verified it; link issues with `Closes #123` (auto-closes that issue on merge).
+- **Body**: use the repository PR template to explain why, scope, verification, and compatibility; link issues with `Closes #123` (auto-closes that issue on merge).
+
+For proposed work, open the matching issue before implementation. Keep the proposal and its discussion in that issue. Once the intended solution and acceptance criteria are agreed and recorded there, implementation can proceed and the PR should link back to it. Small, self-contained fixes can go directly to a PR.
+
+Use a Conventional Commit-style title such as `fix(web): handle expired session` or `docs: clarify setup`. `release: ...` is reserved for maintainer-approved release PRs. The title prefix does not publish a release; the release workflow is triggered by a matching version tag.
+
+AI can help draft an issue or PR, or implement an agreed issue. It must use known facts and observed test results only. Ask it to mark unknowns instead of filling gaps, then review the actual diff and own the final submission. See [AI-assisted contribution guidance](https://github.com/oryx-labs/oryxos/blob/main/.github/AI_CONTRIBUTION.md).
 
 A good PR = **small, focused, well-described, tested.** Don't cram ten things into one PR — nobody can review that.
 

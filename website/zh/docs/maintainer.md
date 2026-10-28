@@ -47,8 +47,10 @@ Committer 再往前一步就是 maintainer。看的不是时间长短，而是�
 - **合并 PR**：确认 CI 全绿、拿到足够 Approve 后合入。
 - **打理 Issue**：分类、打标签、回复、把 `good first issue` 留给新人。
 - **带新人**：这是最重要的一件事。你今天帮的人，明天就是和你一起维护项目的人。
-- **参与发版**：跟着[GitHub 贡献入门](./github-workflow)里的发布流程走（PR 标题 `release:` 触发自动发版）。
+- **参与发版**：跟着[GitHub 贡献入门](./github-workflow)里的发布流程走。`release:` 仅供 maintainer 批准的发版 PR 使用；实际发布由匹配版本号的 tag 触发。
 - **守住地基**：安全、审计、沙箱、架构宪法这些底线，maintainer 帮忙把关（见 `CLAUDE.md`）。
+
+对于提案类工作，请把 issue 作为决策记录。只有当 issue 中的预期行为和验收标准已经说清楚后，才让贡献者或 AI 开始实现。AI 可以起草 issue/PR 或协助实现已经达成一致的提案，但 maintainer 仍需检查实际 diff 和验证证据，并作出最终决定。
 
 ## 权力与责任
 
