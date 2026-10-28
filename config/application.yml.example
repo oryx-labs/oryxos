@@ -1,16 +1,16 @@
-# OryxOS 运行配置模板（外部 yaml）——复制成 config/application.yml 后填入真实 api-key。
+# OryxOS external configuration template. The default provider is keyless mock.
 #
-# 用法：
+# Usage:
 #   cp config/application.yml.example config/application.yml
-#   # 然后编辑 config/application.yml，把各 provider 的 api-key 填上
-# 真实的 config/application.yml 已在 .gitignore（勿提交密钥）；start.sh 会自动加载它。
-# 本 .example 不含任何真实凭证，随仓库提交，作为部署参考。
+# Do not paste credentials into this file. For a one-time provider seed, use an
+# environment placeholder below. Existing database providers are not overwritten.
+# start.sh loads config/application.yml automatically; it is gitignored.
 #
 # 本文件铺开常用的「运行期默认」供部署时按机器调整；框架内部管道
 # （spring.autoconfigure.exclude、jpa 方言、sql.init、management、springdoc）
 # 不在此重复，继续从 jar 内置 application.yml 继承，避免与 jar 漂移。
-# 注意：列表类键（file/shell/http、oryxos.providers）Spring 是整体替换不是合并——
-# 在此覆盖时须与 jar 内置 application.yml 的对应列表保持一致，别只改一半造成两份分歧。
+# 注意：列表类键（file/shell/http、oryxos.providers）Spring 是整体替换不是合并。
+# 本模板有意用 keyless mock 替换 jar 内置的外部 Provider 默认项；自定义白名单列表时需提供完整列表。
 
 # ── 服务 ────────────────────────────────────────────────
 server:
@@ -142,7 +142,7 @@ logging:
     root: INFO
     io.oryxos: DEBUG
 
-# ── 工作区 + Provider 清单（宪法三显式映射；凭证勿提交）────
+# -- Workspace and provider registry seed ------------------------------------
 oryxos:
   # Agent 工作区根目录（可自定义路径与名字：agents/ memory/ logs/ mcp_servers.yaml 都在其下）。
   # 此 yaml 值对 serve/gateway 生效；轻命令（init/status/profile 不启动 Spring）改用环境变量
@@ -150,20 +150,23 @@ oryxos:
   # 运行时会把该根自动纳入文件白名单。
   root: .oryxos
   providers:
-    - name: deepseek
-      api-key: ""                # ← 填入你的 DeepSeek API Key（留空启动会点名报错）
-      base-url: https://api.deepseek.com
-    - name: codex
-      api-key: ""                # ← 可选：填入 Codex / OpenAI API Key（不用可删掉本条）
-      base-url: https://ai.soulecho.cc   # codex 中转代理；OryxOS 运行时走 /v1/chat/completions
-    # 内置 mock provider：不连真实模型、无需 key，用于无 key 自测全链路。
-    # 用它建/配一个 provider: mock 的 Agent，发一条"记住…"消息，即可在管理台看到
-    # 会话/记忆/工具端点被填充（一次 save_memory 工具调用 + 两轮 ReAct）。生产可删。
     - name: mock
-  # 「一句话生成 Agent 草稿」调 LLM 用的作者模型；provider 缺省取 providers 第一个
+
+    # Optional one-time seed for an external OpenAI-compatible provider.
+    # Uncomment this entry and export DEEPSEEK_API_KEY before the first start.
+    # - name: deepseek
+    #   api-key: ${DEEPSEEK_API_KEY:}
+    #   base-url: https://api.deepseek.com
+
+    # Optional OpenAI-compatible endpoint seed; credentials remain in the environment.
+    # - name: codex
+    #   api-key: ${CODEX_API_KEY:}
+    #   base-url: https://ai.soulecho.cc
+
+  # The default author model works without a real LLM provider.
   author:
-    provider: deepseek
-    model: deepseek-v4-flash     # deepseek-chat 已废弃；可选 deepseek-v4-flash（快/省）| deepseek-v4-pro（强）
+    provider: mock
+    model: mock-model
   # 管理台 Basic Auth（012-web-auth）。默认关=裸内网现状不变；
   # 开启后 /admin/** 需账密（/api/v1/** REST 不受影响）。
   # 开启前先跑 `oryxos user add <username>` 建账号，否则启动阻断。

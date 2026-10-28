@@ -299,7 +299,7 @@ null
 
 Provider **动态管理**，持久化在 SQLite（`providers` 表）。运行时按 provider 名从注册表解析 `ChatModel`，并按 `(name | apiKey | baseUrl)` 缓存，因此改 key 或 URL 会在下次调用时重建模型。名字 `mock` 是内置的假模型，不需要 key 或 URL。`application.yml` 里的 `oryxos.providers[]` 仅在表中缺失时于启动时**播种**进去——此后以数据库为准。
 
-> 按用户选择，`apiKey` 以**明文**回显（核心阶段内网部署）。
+> Provider key 落库加密，Provider API 响应中的 `apiKey` 只返回掩码值，不会回显存储的凭证。
 
 ### 创建 Provider
 
@@ -321,7 +321,7 @@ Provider **动态管理**，持久化在 SQLite（`providers` 表）。运行时
 // data —— ProviderView
 {
   "name": "deepseek",
-  "apiKey": "sk-xxxxxxxx",
+  "apiKey": "****xxxx",
   "baseUrl": "https://api.deepseek.com",
   "description": "DeepSeek chat"
 }
@@ -334,7 +334,7 @@ Provider **动态管理**，持久化在 SQLite（`providers` 表）。运行时
 ```json
 // data —— ProviderView[]
 [
-  { "name": "deepseek", "apiKey": "sk-xxxxxxxx", "baseUrl": "https://api.deepseek.com", "description": "DeepSeek chat" },
+  { "name": "deepseek", "apiKey": "****xxxx", "baseUrl": "https://api.deepseek.com", "description": "DeepSeek chat" },
   { "name": "mock",     "apiKey": null,          "baseUrl": null,                       "description": "内置假模型" }
 ]
 ```
@@ -347,7 +347,7 @@ Provider **动态管理**，持久化在 SQLite（`providers` 表）。运行时
 
 ```json
 // data —— ProviderView
-{ "name": "deepseek", "apiKey": "sk-xxxxxxxx", "baseUrl": "https://api.deepseek.com", "description": "DeepSeek chat" }
+{ "name": "deepseek", "apiKey": "****xxxx", "baseUrl": "https://api.deepseek.com", "description": "DeepSeek chat" }
 ```
 
 ### 更新 Provider
@@ -363,7 +363,7 @@ name 在路径上，这里改 key / URL / 描述。
 
 ```json
 // data —— ProviderView
-{ "name": "deepseek", "apiKey": "sk-yyyyyyyy", "baseUrl": "https://api.deepseek.com", "description": "已轮换的 key" }
+{ "name": "deepseek", "apiKey": "****yyyy", "baseUrl": "https://api.deepseek.com", "description": "已轮换的 key" }
 ```
 
 ### 删除 Provider

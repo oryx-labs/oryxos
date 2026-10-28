@@ -32,6 +32,8 @@ curl -s localhost:8080/actuator/health/readiness
 
 缺密文配置或 shared-posix 的 identity 时渲染即报错；PVC 身份文件缺失、不匹配或能力不满足时应用拒绝启动。Chart 为兼容旧部署仍默认 `provider: local`，不会自动获得共享卷身份保护；上例显式启用 shared-posix。
 
+Helm Chart 会为数据库和 `ORYXOS_MASTER_KEY` 配置 Secret；目前没有为任意 Provider key 提供专用 Secret 注入项。部署后可通过管理台/API 配置 Provider；如需 YAML 播种，请通过自行维护的 Kubernetes workload overlay 注入环境变量。不要把 Provider 凭证放入 `extraConfig` 或 ConfigMap。YAML 仅用于播种：Provider 写入数据库后，以加密注册表为准，修改环境变量不会轮换库中凭证。请通过管理台或 `PUT /api/v1/providers/{name}` 轮换。应备份并保持 `ORYXOS_MASTER_KEY` 不变；密钥丢失或更换会导致已存凭证无法解密。
+
 ## 常用 values
 
 | 键 | 默认 | 说明 |

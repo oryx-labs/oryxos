@@ -152,7 +152,7 @@ Modules are decoupled through interfaces. Adding a new Channel or Tool requires 
 
 ## Quick Start
 
-**Prerequisites**: Java 21, Maven 3.9+, and an LLM API key (DeepSeek / Qwen / OpenAI / Ollama). The Maven build installs a local Node.js on first run to bundle the admin UI — no global Node.js required.
+**Prerequisites**: Java 21 and Maven 3.9+. The default local setup uses the built-in `mock` provider and needs no LLM API key. The Maven build installs a local Node.js on first run to bundle the admin UI — no global Node.js required.
 
 **Quickest setup — [SDKMAN!](https://sdkman.io/)** (recommended): the repo ships a `.sdkmanrc` that pins the exact JDK and Maven versions. After installing SDKMAN, enable `sdkman_auto_env=true` in `~/.sdkman/etc/config`, then:
 
@@ -173,14 +173,15 @@ cd oryxos
 mvn package -DskipTests          # compiles all modules + bundles the Vue admin UI into the fat JAR
 ```
 
-### 2 · Configure the LLM key
+### 2 · Optional: configure an external provider
 
 ```bash
 cp config/application.yml.example config/application.yml
-# edit config/application.yml → fill in the deepseek api-key
+export DEEPSEEK_API_KEY=your-key-here
+# Uncomment the deepseek entry in config/application.yml and set author.provider: deepseek
 ```
 
-`config/application.yml` is gitignored, so your key stays local and is never committed. Only **one** provider key is needed to boot — Spring AI's eager OpenAI auto-config is excluded, so `serve` starts without `spring.ai.openai.api-key`.
+The example starts with `mock`; no provider key is required to boot. For an external provider, keep the key in an environment variable (or deployment Secret) and reference it with `${DEEPSEEK_API_KEY:}` in the provider seed. Do not paste the key into YAML. The example config is gitignored, but that is not a reason to store credentials there.
 
 ### 3 · One-click start — server + manager
 
@@ -189,14 +190,17 @@ bin/start.sh                     # defaults to port 8080; or: bin/start.sh 9000
 bin/stop.sh                      # stop
 ```
 
-`start.sh` launches a single process that serves **both** the REST API and the Web Manager on the same port, waits for the health check to pass, then prints the URLs (`/api/v1/health`, `/admin/`, `/swagger-ui`). Logs stream to `logs/oryxos.log`. On the first run it creates `config/application.yml` from the template and asks you to fill in the key.
+`start.sh` launches a single process that serves **both** the REST API and the Web Manager on the same port, waits for the health check to pass, then prints the URLs (`/api/v1/health`, `/admin/`, `/swagger-ui`). Logs stream to `logs/oryxos.log`. On first run it creates `config/application.yml` from the keyless template and starts with `mock`.
+
+Provider YAML entries seed only providers missing from the database. Once seeded, the encrypted database registry is authoritative; changing an environment variable or YAML value does not rotate an existing provider. Add or rotate runtime credentials through the admin console or `PUT /api/v1/providers/{name}`. Back up and keep `ORYXOS_MASTER_KEY` stable in production so stored credentials remain decryptable; losing or changing it can make existing credentials unavailable.
 
 ### CLI alternative
 
 ```bash
 JAR=oryxos-boot/target/oryxos-boot-*.jar
 java -jar $JAR init                       # initialize the .oryxos/ workspace (agents/ memory/ sessions/ logs/)
-export DEEPSEEK_API_KEY=your-key-here      # the CLI reads the key from the environment
+# For an external provider, add its environment-placeholder seed to config/application.yml first.
+export DEEPSEEK_API_KEY=your-key-here
 java -jar $JAR chat --profile default      # interactive multi-turn chat
 java -jar $JAR serve --port 8080           # REST API + Web Manager (same as start.sh)
 ```

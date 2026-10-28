@@ -299,7 +299,7 @@ Saves a (possibly user-edited) set of Agent files. Saving takes effect immediate
 
 Providers are managed **dynamically** and stored in SQLite (the `providers` table). At runtime the `ChatModel` is resolved by provider name from the registry and cached by `(name | apiKey | baseUrl)`, so editing a key or URL rebuilds the model on the next call. The name `mock` is a built-in fake model that needs no key or URL. The `oryxos.providers[]` entries in `application.yml` are **seeded** into the table on startup only when absent — after that the DB is authoritative.
 
-> The `apiKey` is returned in **plaintext** by design (core-phase internal-network deployment).
+> Provider keys are encrypted at rest. Provider API responses return a masked `apiKey`; they never reveal the stored credential.
 
 ### Create a provider
 
@@ -321,7 +321,7 @@ Providers are managed **dynamically** and stored in SQLite (the `providers` tabl
 // data — ProviderView
 {
   "name": "deepseek",
-  "apiKey": "sk-xxxxxxxx",
+  "apiKey": "****xxxx",
   "baseUrl": "https://api.deepseek.com",
   "description": "DeepSeek chat"
 }
@@ -334,7 +334,7 @@ Providers are managed **dynamically** and stored in SQLite (the `providers` tabl
 ```json
 // data — ProviderView[]
 [
-  { "name": "deepseek", "apiKey": "sk-xxxxxxxx", "baseUrl": "https://api.deepseek.com", "description": "DeepSeek chat" },
+  { "name": "deepseek", "apiKey": "****xxxx", "baseUrl": "https://api.deepseek.com", "description": "DeepSeek chat" },
   { "name": "mock",     "apiKey": null,          "baseUrl": null,                       "description": "built-in fake model" }
 ]
 ```
@@ -347,7 +347,7 @@ Returns `404` if the provider does not exist.
 
 ```json
 // data — ProviderView
-{ "name": "deepseek", "apiKey": "sk-xxxxxxxx", "baseUrl": "https://api.deepseek.com", "description": "DeepSeek chat" }
+{ "name": "deepseek", "apiKey": "****xxxx", "baseUrl": "https://api.deepseek.com", "description": "DeepSeek chat" }
 ```
 
 ### Update a provider
@@ -363,7 +363,7 @@ The name stays in the path; this updates the key / URL / description.
 
 ```json
 // data — ProviderView
-{ "name": "deepseek", "apiKey": "sk-yyyyyyyy", "baseUrl": "https://api.deepseek.com", "description": "rotated key" }
+{ "name": "deepseek", "apiKey": "****yyyy", "baseUrl": "https://api.deepseek.com", "description": "rotated key" }
 ```
 
 ### Delete a provider

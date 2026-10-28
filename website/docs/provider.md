@@ -11,7 +11,7 @@ A provider record has four fields:
 | Field | Meaning |
 | --- | --- |
 | `name` | Global unique key. Agents reference it in their `AGENT.md`. |
-| `apiKey` | Credential for the endpoint. Stored and returned in plaintext by design (see below). |
+| `apiKey` | Credential for the endpoint. Encrypted at rest; API responses show a masked value. |
 | `baseUrl` | OpenAI-compatible endpoint base URL. Required for every provider except `mock`. |
 | `description` | Free-text note. |
 
@@ -20,6 +20,8 @@ The special name `mock` is a built-in fake model — it needs no `apiKey` and no
 ## Startup seeding — config to database
 
 On startup OryxOS reads the `oryxos.providers` list from `application.yml` and **seeds** each entry into the `providers` table **only if a provider with that name does not already exist**. After seeding, the **database is authoritative**: editing `oryxos.providers` in config will not overwrite a provider that is already in the DB. Manage live providers through the API or the admin console, not by editing config.
+
+The tracked local example starts with the built-in `mock` provider and needs no API key. For a one-time external provider seed, keep the key in an environment variable and reference it from YAML. Once seeded, changing the environment variable does not rotate the database credential; edit the provider through the admin console or API instead. Provider credentials entered there are encrypted at rest with the instance master key. Back up and preserve `ORYXOS_MASTER_KEY` in production so those credentials remain decryptable.
 
 ```yaml
 # application.yml — seeds the DB on first startup only
@@ -48,7 +50,7 @@ All endpoints live under `/api/v1` and wrap their payload in the unified `{ code
 | `PUT` | `/api/v1/providers/{name}` | Update (`apiKey`, `baseUrl`, `description`) |
 | `DELETE` | `/api/v1/providers/{name}` | Delete |
 
-The list and get responses (`ProviderView`) return `name`, `apiKey`, `baseUrl`, and `description`. The **`apiKey` is returned in plaintext** — a deliberate choice for the internal-network core phase, where the admin console needs to display and edit it. Do not expose these endpoints on an untrusted network.
+The list and get responses (`ProviderView`) return `name`, a masked `apiKey`, `baseUrl`, and `description`. The admin console never reads the plaintext credential back; when rotating it, submit the new key. Protect these management endpoints with authentication and network controls before exposing them beyond a trusted environment.
 
 ## Provider routing
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# 启动 OryxOS Web Service（REST API + 管理台 /admin，同一进程）。
-# deepseek 等 Provider 凭证从 config/application.yml 读（不需要 export 环境变量）。
-# 用法：bin/start.sh [端口]（默认 8080）
+# Start OryxOS Web Service (REST API + admin console /admin in one process).
+# The default mock provider needs no key. External provider keys should come from
+# environment variables referenced by optional provider seed entries in the YAML.
+# Usage: bin/start.sh [port] (default: 8080)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,12 +20,10 @@ if [ -z "$JAR" ]; then
   exit 1
 fi
 
-# 2. 配置在不在——首次从模板生成并提示填 key
+# 2. Create keyless config on first run.
 if [ ! -f "$CONFIG" ]; then
   cp "$ROOT/config/application.yml.example" "$CONFIG"
-  echo "[INFO] 已生成 $CONFIG"
-  echo "[ACTION] 请在其中填入 deepseek 的 api-key，然后重跑：bin/start.sh"
-  exit 1
+  echo "[INFO] Created $CONFIG with the keyless mock provider."
 fi
 
 # 3. 是否已在运行

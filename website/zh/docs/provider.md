@@ -11,7 +11,7 @@ Provider 不再是启动时固定不变的映射表。它现在是**存储在 SQ
 | 字段 | 含义 |
 | --- | --- |
 | `name` | 全局唯一 key，Agent 在自己的 `AGENT.md` 里按它引用 |
-| `apiKey` | 端点凭证。按设计以明文存储、明文返回（见下文） |
+| `apiKey` | 端点凭证。落库加密，接口只返回掩码值 |
 | `baseUrl` | OpenAI 兼容端点的 base URL。除 `mock` 外每个 Provider 都必填 |
 | `description` | 自由文本备注 |
 
@@ -34,7 +34,7 @@ oryxos:
     - name: mock                          # 内置假模型，无需 key/url
 ```
 
-API key 来自配置里的环境变量占位符（`${...}`）——不得明文写死。注意 Spring 对列表型配置是**整体替换**而非合并，所以外部覆盖 `oryxos.providers` 会替换掉整个列表。
+本地示例默认使用 `mock`，无需 API key。首次播种外部 Provider 时，凭证应保存在环境变量中并通过 `${...}` 占位符引用，不要写入 YAML。Provider 播种后，修改环境变量不会轮换数据库中的凭证；应通过管理台或 API 更新。管理台/API 录入的凭证使用实例主密钥加密存储；生产环境必须备份并保持 `ORYXOS_MASTER_KEY` 不变。注意 Spring 对列表型配置是**整体替换**而非合并，所以外部覆盖 `oryxos.providers` 会替换掉整个列表。
 
 ## 通过 REST 管理 Provider
 
@@ -48,7 +48,7 @@ API key 来自配置里的环境变量占位符（`${...}`）——不得明文�
 | `PUT` | `/api/v1/providers/{name}` | 更新（`apiKey`、`baseUrl`、`description`） |
 | `DELETE` | `/api/v1/providers/{name}` | 删除 |
 
-列表和单查响应（`ProviderView`）返回 `name`、`apiKey`、`baseUrl`、`description`。其中 **`apiKey` 以明文返回**——这是内网核心阶段的有意选择，管理台需要展示和编辑它。不要把这些端点暴露到不可信网络。
+列表和单查响应（`ProviderView`）返回 `name`、掩码后的 `apiKey`、`baseUrl`、`description`。管理台不会读回明文凭证；轮换时提交新 key 即可。将这些管理端点暴露到不可信网络前，必须先配置认证和网络访问控制。
 
 ## Provider 路由
 

@@ -245,24 +245,32 @@ oryxos user oidc-map admin <issuer> <sub>  # 040：把 OIDC 外源主体映射�
 
 ## 5. 配置与凭证
 
-### 5.0 主密钥（022）——落库凭证的保险柜钥匙
+### 5.0 主密钥（022）
 
-管理台/API 录入的第三方凭证（Provider API key、通知渠道的 SMTP 密码等敏感项）落库前经主密钥 AES-256-GCM 加密（`enc:v1:` 前缀），数据库文件单独外流（备份外传/误拷）不再等于凭证泄露。主密钥两档：
+管理台/API 录入的第三方凭证（Provider API key、SMTP 密码等敏感项）落库前经主密钥 AES-256-GCM 加密（`enc:v1:` 前缀）。单独拿到数据库文件不等于拿到凭证。
 
-- **本地试用**：什么都不用配——首次启动自动生成 `.oryxos/master.key`（仅属主可读 0600），全程无感。
-- **生产部署**：设置环境变量 `ORYXOS_MASTER_KEY`（`openssl rand -base64 32` 生成，K8s 走 Secret 注入），存在时优先于文件档。
+- **本地试用**：无需配置；首次启动自动生成 `.oryxos/master.key`，权限仅属主可读（0600）。
+- **生产部署**：设置环境变量 `ORYXOS_MASTER_KEY`，值为 Base64 编码的 32 字节密钥，可用 `openssl rand -base64 32` 生成；Kubernetes 从 Secret 注入。环境变量优先于本地密钥文件。
 
-密钥丢失或不匹配时启动即报错并指路恢复（找回原密钥，或经管理台删除重录凭证——凭证均可在服务商处再生），绝不静默降级明文。威胁边界如实：本机制防**数据库文件单独外流**；文件档钥匙与库同目录，不防整机沦陷——生产环境请使用环境变量档。存量明文库升级后首次启动自动完成加密迁移（日志「已加密 N 条凭证」）。
+生产环境应安全备份并保持主密钥不变。密钥丢失或更换后，已有凭证将无法解密；需恢复原密钥，或删除并重新录入相关凭证。本地密钥文件只防止数据库文件单独外流，不防整机沦陷。升级后首次启动会将存量明文记录迁移为密文。
 
+### 5.1 Provider 播种与运行时数据源
 
-**凭证只走环境变量，绝不明文写进任何文件**（宪法约束）：
+仓库中的 `config/application.yml.example` 默认使用内置 `mock` Provider，本地启动无需 LLM key。如需在首次启动时播种外部 Provider，在 `oryxos.providers` 中使用环境变量占位符，并在启动前导出环境变量：
 
-```bash
-export DEEPSEEK_API_KEY=sk-xxx    # Provider 凭证
+```yaml
+oryxos:
+  providers:
+    - name: deepseek
+      api-key: ${DEEPSEEK_API_KEY:}
+      base-url: https://api.deepseek.com
 ```
 
-- 实例级 Provider 清单声明在打包配置（`application.yml` 的 `oryxos.providers` 段）；Profile 里只写 `provider.name` + `model` 引用它；
-- 环境变量缺失时，重命令启动会**点名报错**（`provider deepseek 的 api-key 未配置或环境变量未解析`），不会静默跑过。
+```bash
+export DEEPSEEK_API_KEY=your-key-here
+```
+
+YAML 只会播种数据库中尚不存在的 Provider。播种后，运行时以数据库中的加密 Provider 注册表为准；修改 YAML 或环境变量不会覆盖或轮换已存在 Provider。请通过管理台或 `PUT /api/v1/providers/{name}` 新增 Provider 或轮换凭证。Provider key 落库加密，API 只返回掩码值。管理端点暴露到可信网络之外前，必须配置认证和网络访问控制。
 
 ---
 
@@ -279,7 +287,7 @@ export DEEPSEEK_API_KEY=sk-xxx    # Provider 凭证
 
 | 现象 | 原因与处理 |
 |------|-----------|
-| chat 启动报 `api-key 未配置或环境变量未解析` | 对应 Provider 的环境变量没设，`export DEEPSEEK_API_KEY=...` 后重试 |
+| chat 启动提示 api-key 未配置或环境变量未解析 | 首次 YAML 播种时设置对应环境变量；如 Provider 已在数据库中管理，则通过管理台/API 配置。 |
 | chat 报 Profile 不存在 | `oryxos profile list` 确认名字；没有就 `profile create`；注意运行目录是否对 |
 | `session list` 显示暂无会话，但明明聊过 | 换了运行目录——`oryxos.db` 在当前目录下，回到当初跑 chat 的目录 |
 | 轻命令也很慢 | 确认跑的不是 chat/serve/gateway；轻命令不启动 Spring，正常应亚秒返回 |

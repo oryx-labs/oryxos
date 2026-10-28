@@ -5,7 +5,9 @@
 #
 # 状态（config/ 工作区 .oryxos/ oryxos.db logs/）全部在 named volume oryxos-data 里，
 # 升级换镜像不丢数据。零 key 即可启动，Provider 在管理台 http://localhost:8080/admin/ 配置；
-# 也可挂载自己的 config/application.yml（见下 volumes 注释）。
+# 也可挂载自己的 config/application.yml（见下 volumes 注释）；如用环境变量占位符播种 Provider，
+# 请将相应变量配置在 environment 中（例如 DEEPSEEK_API_KEY），不要把 key 写入 YAML。
+# 生产环境请从受保护的运行时密钥来源注入 ORYXOS_MASTER_KEY 并做好备份；不要把主密钥写入此文件。
 #
 # 注意：默认 SQLite 单机存储 ⇒ 只能单副本。多副本：/data/config/application.yml 把 datasource 指向
 # 企业 PostgreSQL（025，url + 账密自动识别）并开 oryxos.cluster.enabled=true + 每副本唯一 instance-id

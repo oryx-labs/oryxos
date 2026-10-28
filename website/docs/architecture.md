@@ -80,7 +80,7 @@ All endpoints live under `/api/v1`, speak JSON, and (in the core phase, on the a
 A Vue 3 + Vite single-page app is served at `/admin/`, styled to match the marketing website. The sidebar groups: **概览 (Overview)** / **Agent 列表** / **定时任务 (Schedules)** / **Skill 列表** (placeholder) / **知识库 (Knowledge Base)** (placeholder) / and an **OS Runtime** group holding **会话列表 (Sessions)**, **Provider 列表**, **Tool 列表**, **Notify 渠道**, and **SandBox 列表**.
 
 - The Agent list shows a description column and per-row **立即触发 (trigger now, via a console session)**, **详情 (detail)**, and **删除 (delete)** actions; the detail view has tabs for basic info / generate / files / session / memory, including the one-sentence "generate" flow (preview then save). The memory tab shows two tables — 核心记忆 (core) and 归档记忆 (archival).
-- The Provider and Notify-channel pages offer full CRUD; provider api-keys are shown in plaintext by design.
+- The Provider and Notify-channel pages offer full CRUD; provider api-keys are encrypted at rest and shown only as masks.
 - Add/edit forms are modal dialogs, and every list has a refresh button. The workspace file browser exposes the on-disk agent tree.
 
 ## Module Structure

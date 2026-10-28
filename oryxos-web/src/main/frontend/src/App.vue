@@ -12,7 +12,7 @@ import ApprovalsView from './features/approvals/ApprovalsView.vue'
 import GovernanceRevisionHistory from './features/governance/GovernanceRevisionHistory.vue'
 import CostDashboardView from './features/cost/CostDashboardView.vue'
 import { isNearBottom } from './chat-scroll.js'
-import { providerApiKeyMissing } from './provider-form.js'
+import { providerApiKeyMissing, providerUpdatePayload } from './provider-form.js'
 import { applyRunNav, parseRunNav, runHash, runListHash } from './features/runs/run-navigation.js'
 import { DEFAULT_MCP_REQUEST_TIMEOUT_SECONDS, normalizeMcpRequestTimeout } from './mcp-timeout.js'
 import { filterSkills, hiddenSelectedCount, selectAllVisible, clearVisible, renderSet } from './skill-filter.js'
@@ -1171,7 +1171,7 @@ async function deleteNotifyChannel(name) {
   } catch (e) { notifyChannels.value = { ...notifyChannels.value, error: e.message } }
 }
 
-// —— Provider 管理（CRUD /api/v1/providers）：命名的模型 Provider，apiKey 明文返回 ——
+// —— Provider 管理（CRUD /api/v1/providers）：命名的模型 Provider，apiKey 仅回显掩码 ——
 const providers = ref({ loading: false, error: null, data: [] })
 const providerTests = ref({})
 async function loadProviders() {
@@ -1215,9 +1215,9 @@ async function testProvider(name) {
 }
 
 // 新建/编辑表单：editing 存被编辑 Provider 的 name（此时 name 只读），null 表示新建
-const pv = reactive({ open: false, editing: null, name: '', apiKey: '', baseUrl: '', description: '', busy: false, error: null })
+const pv = reactive({ open: false, editing: null, name: '', apiKey: '', currentApiKey: '', apiKeyVisible: false, baseUrl: '', description: '', busy: false, error: null })
 // 后端要求非 mock 的 provider 必须有 api-key（否则 400）；缺 key 时直接禁用提交，不让用户白点一次
-const pvApiKeyMissing = computed(() => providerApiKeyMissing(pv.name, pv.apiKey))
+const pvApiKeyMissing = computed(() => pv.editing && !pv.apiKey ? false : providerApiKeyMissing(pv.name, pv.apiKey))
 
 async function saveProvider() {
   pv.busy = true; pv.error = null
@@ -1226,7 +1226,7 @@ async function saveProvider() {
       ? `/api/v1/providers/${encodeURIComponent(pv.editing)}`
       : '/api/v1/providers'
     const payload = pv.editing
-      ? { apiKey: pv.apiKey, baseUrl: pv.baseUrl, description: pv.description }
+      ? providerUpdatePayload(pv)
       : { name: pv.name, apiKey: pv.apiKey, baseUrl: pv.baseUrl, description: pv.description }
     const res = await fetch(url, {
       method: pv.editing ? 'PUT' : 'POST',
@@ -1242,7 +1242,9 @@ async function saveProvider() {
 function editProvider(row) {
   pv.editing = row.name
   pv.name = row.name
-  pv.apiKey = row.apiKey || ''
+  pv.apiKey = ''
+  pv.currentApiKey = row.apiKey || ''
+  pv.apiKeyVisible = false
   pv.baseUrl = row.baseUrl || ''
   pv.description = row.description || ''
   pv.error = null
@@ -1250,7 +1252,7 @@ function editProvider(row) {
 }
 
 function cancelPv() {
-  pv.open = false; pv.editing = null; pv.name = ''; pv.apiKey = ''; pv.baseUrl = ''; pv.description = ''; pv.error = null
+  pv.open = false; pv.editing = null; pv.name = ''; pv.apiKey = ''; pv.currentApiKey = ''; pv.apiKeyVisible = false; pv.baseUrl = ''; pv.description = ''; pv.error = null
 }
 
 async function deleteProvider(name) {
@@ -3939,7 +3941,7 @@ const outputRows = computed(() =>
             </div>
           </div>
 
-          <!-- Provider：命名模型 Provider 的 CRUD（新建/编辑/删除），apiKey 明文展示 -->
+          <!-- Provider：命名模型 Provider 的 CRUD（新建/编辑/删除），apiKey 仅显示掩码 -->
           <div v-else-if="active === 'providers'">
             <div class="toolbar">
               <button class="btn btn-primary" @click="pv.open = true">+ 新建 Provider</button>
@@ -3950,7 +3952,14 @@ const outputRows = computed(() =>
                 <div class="modal-head"><h3>{{ pv.editing ? '编辑 Provider' : '新建 Provider' }}</h3><button class="modal-x" @click="cancelPv()">✕</button></div>
                 <div class="modal-body">
                   <input v-model="pv.name" class="gen-input" :disabled="!!pv.editing" placeholder="Provider 名（唯一标识）" />
-                  <input v-model="pv.apiKey" class="gen-input" placeholder="api-key；mock provider 可留空" />
+                  <div class="secret-input-wrap">
+                    <input v-model="pv.apiKey" class="gen-input" :type="pv.apiKeyVisible ? 'text' : 'password'" :placeholder="pv.editing ? '输入新 api-key；留空保持当前值' : 'api-key；mock provider 可留空'" autocomplete="new-password" />
+                    <button class="btn secret-toggle" type="button" :aria-label="pv.apiKeyVisible ? '隐藏新 API key' : '显示新 API key'" :title="pv.apiKeyVisible ? '隐藏新 API key' : '显示新 API key'" @click="pv.apiKeyVisible = !pv.apiKeyVisible">
+                      <svg v-if="pv.apiKeyVisible" aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+                      <svg v-else aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 18 18M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A11.7 11.7 0 0 1 12 5c6.4 0 10 7 10 7a15.8 15.8 0 0 1-3.1 3.9M6.2 6.2C3.5 8 2 12 2 12s3.6 7 10 7c1 0 1.9-.2 2.8-.5"/></svg>
+                    </button>
+                  </div>
+                  <p v-if="pv.editing" class="empty secret-current">当前已配置：{{ pv.currentApiKey || '未配置' }}。留空表示不修改。</p>
                   <input v-model="pv.baseUrl" class="gen-input" placeholder="https://api.deepseek.com；mock 可留空" />
                   <input v-model="pv.description" class="gen-input" placeholder="描述（可选）" />
                   <p class="empty">{{ pv.editing ? '编辑现有 Provider，Provider 名不可改。' : 'name 为 ProviderService 显式映射的 key；apiKey / baseUrl 对 mock provider 可留空。' }}</p>
@@ -4355,6 +4364,10 @@ th { color: var(--text-2); font-weight: 500; }
 .gen-box { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 20px; }
 .gen-row { display: flex; gap: 10px; align-items: center; }
 .gen-input { flex: 1; background: var(--bg-mute); color: var(--text-1); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; width: 100%; }
+.secret-input-wrap { display: flex; align-items: center; gap: 6px; width: 100%; margin-bottom: 10px; }
+.secret-input-wrap .gen-input { min-width: 0; margin-bottom: 0; }
+.secret-toggle { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; padding: 0; margin: 0; }
+.secret-current { margin: -4px 0 2px; }
 .gen-draft { width: 100%; background: var(--bg-mute); color: var(--text-1); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px; margin-bottom: 10px; resize: vertical; }
 /* 列表页新建按钮工具栏：新建类按钮靠右 */
 .toolbar { display: flex; justify-content: flex-end; margin-bottom: 16px; }

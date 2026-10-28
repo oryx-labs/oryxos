@@ -7,3 +7,11 @@ export function providerApiKeyMissing(name, apiKey) {
   }
   return String(apiKey ?? '').trim() === ''
 }
+
+export function providerUpdatePayload({ apiKey, baseUrl, description }) {
+  const payload = { baseUrl, description }
+  if (String(apiKey ?? '') !== '') {
+    payload.apiKey = apiKey
+  }
+  return payload
+}
