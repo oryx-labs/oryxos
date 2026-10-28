@@ -1,7 +1,7 @@
 name: PR contract
 
 on:
-  pull_request_target:
+  pull_request:
     branches: [main]
     types: [opened, edited, synchronize, reopened]
 
@@ -20,8 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Only trusted base-branch code runs for the metadata-only check.
-          ref: ${{ github.event.pull_request.base.sha }}
+          # This is an advisory, read-only check with no secrets.
           persist-credentials: false
       - name: Test the contract checker
         run: node --test .github/scripts/check-pr-contract.test.cjs
