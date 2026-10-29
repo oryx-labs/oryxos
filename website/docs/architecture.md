@@ -151,4 +151,4 @@ Modules communicate through interfaces. Adding a new Channel or Tool implementat
 | Logging | Logback + SLF4J, structured JSON output |
 | Build | Maven multi-module |
 | Future: native binary | GraalVM Native Image (extension phase, reduces startup from ~3s to <100ms) |
-| Future: observability | Micrometer + Prometheus (extension phase) |
+| Observability | OpenTelemetry / OTLP traces and runtime metrics (available; broader evaluation and cross-application operations are evolving) |

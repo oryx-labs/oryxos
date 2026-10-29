@@ -151,4 +151,4 @@ Provider 和通知渠道不再是静态配置——两者都存储在 SQLite 中
 | 日志 | Logback + SLF4J，结构化 JSON 输出 |
 | 构建 | Maven 多模块 |
 | 未来：原生二进制 | GraalVM Native Image（扩展阶段，启动时间从约 3 秒降至 100ms 以下） |
-| 未来：可观测性 | Micrometer + Prometheus（扩展阶段） |
+| 可观测性 | OpenTelemetry / OTLP Trace 与运行时指标（当前可用；更完整的评测和跨应用运营能力演进中） |

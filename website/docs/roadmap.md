@@ -1,10 +1,16 @@
 # Roadmap
 
-OryxOS is built with a clear philosophy: **slow is smooth, smooth is fast**. Start with a solid single-node runtime kernel. Make it actually usable. Then grow distributed capabilities on top of it — step by step, each phase proven by real usage.
+OryxOS is built with a clear philosophy: **stable runtime semantics, open extensions, and incremental proof**. Start with a usable single-node Agent Runtime. Then add durable Task, governance, and distributed capabilities step by step, with each phase verified by real usage.
 
-## Phase 1 — Single-node Runtime Kernel *(current)*
+The roadmap distinguishes three statuses:
 
-Get the five core capabilities working on a single node:
+- **Available** — implemented and usable in the current repository.
+- **Evolving** — actively being extended or made consistent across applications and deployments.
+- **Exploratory** — longer-term direction that still needs design, validation, or community agreement.
+
+## Available — Single-node Runtime Kernel
+
+The current kernel provides the base Agent Runtime and its extension points:
 
 - One directory = one Agent: an `AGENT.md` directory, no code required — drop it in and it goes live
 - Multi-agent coexistence: multiple agents running on the same instance
@@ -18,9 +24,19 @@ Get the five core capabilities working on a single node:
 - MCP integration: connect any community MCP server with zero code
 - Full audit trail: `tool_invocations` and `llm_calls` written from day one
 
-**Goal**: single-node running and managing a fleet of agents — actually usable, not a prototype.
+**Boundary**: this is a usable single-node Agent Runtime, not the complete enterprise Control Plane. Durable Task lifecycle, broad governance workflows, and cross-application optimization remain separate roadmap work.
 
-## Phase 2 — Distributed Foundation *(partially landed; docs catching up)*
+## Evolving — Task Runtime and Control Plane
+
+Make enterprise AI work durable, governed, and operable across applications:
+
+- Durable Task lifecycle: queued, running, waiting for approval, completed, failed, cancelled
+- Checkpoint, retry, idempotency, cancellation, recovery, and Artifact semantics
+- Identity context, authorization, Tool Policy, approval gates, and auditable decisions
+- Trace, Metrics, Evaluation, cost attribution, budgets, and regression feedback
+- Stable Runtime APIs and extension contracts for applications and enterprise systems
+
+## Evolving — Distributed Foundation
 
 Make the runtime horizontally scalable:
 
@@ -29,14 +45,15 @@ Make the runtime horizontally scalable:
 - Multi-replica deployment: run multiple OryxOS instances behind a load balancer
 - High availability: no single point of failure
 
-## Phase 3 — Cross-node Agent Collaboration *(vision)*
+## Exploratory — Cross-application and Agent Collaboration
 
-Let agents on different nodes find, delegate to, and coordinate with each other:
+Use stable Task and governance semantics to support broader platform optimization and multi-Agent collaboration:
 
-- Integrate the A2A (Agent-to-Agent) open protocol
-- Cross-node agent discovery and registration
-- Reliable async task delegation between agents
-- Message delivery guarantees across nodes
+- Cross-application model and capability optimization
+- Shared evaluation sets, cost models, policy feedback, and operational learning
+- Governed planner, specialist, reviewer, and A2A collaboration
+- Cross-node Agent discovery, delegation, and reliable message delivery
+- Portable extensions across runtimes, identity systems, and execution hosts
 
 ## Horizontal Capabilities *(added across all phases)*
 
@@ -44,17 +61,19 @@ These capabilities are built incrementally alongside the main phases:
 
 | Capability | Status |
 | --- | --- |
-| Web management console | Done |
-| Dynamic agent lifecycle (CRUD + upload-to-live) | Done |
-| Provider registry CRUD | Done |
-| Notify channels CRUD | Done |
-| Scheduled task management | Done |
-| Workspace file browser | Done |
-| Multi-tenancy | Partial (org/team ACLs; full tenancy deferred) |
-| SSO / authentication | Partial (OIDC, default off) |
-| Complete audit UI | Done (016 reports) |
-| Tool policies and RBAC | Partial (020 + 039, default off) |
-| Observability (metrics, tracing) | Done (OTel/OTLP) |
-| SSE streaming responses | Done (019) |
-| Episodic memory with vector search | Partial (015 semantic recall) |
-| WebSocket channel | Planned |
+| Web management console | Available |
+| Dynamic Agent lifecycle (CRUD + upload-to-live) | Available |
+| Provider registry CRUD | Available |
+| Notify channels CRUD | Available |
+| Scheduled Task management | Available |
+| Workspace file browser | Available |
+| Multi-tenancy | Evolving (organization/team ACLs; broader tenancy deferred) |
+| SSO / authentication | Evolving (OIDC, default off) |
+| Complete audit UI | Available (016 reports) |
+| Tool policies and RBAC | Evolving (020 + 039, default off) |
+| Observability (metrics, tracing) | Available (OTel/OTLP) |
+| SSE streaming responses | Available (019) |
+| Episodic memory with vector search | Evolving (015 semantic recall) |
+| Durable Task and approval lifecycle | Evolving |
+| Cost and evaluation operations | Evolving |
+| WebSocket channel | Exploratory |
