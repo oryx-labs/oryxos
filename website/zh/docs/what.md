@@ -62,7 +62,7 @@ Task -> Identity -> Authorization -> Policy -> Approval
 
 ### 记忆系统
 
-当前两层。会话记忆保存对话历史，持久化、重启可恢复。长期记忆**按 Agent 隔离**——每个 Agent 通过 `save_memory` 写入自己的 `MEMORY.md`、通过 `recall_memory` 检索；每次触发还会自动记入它的归档记忆。记忆注入每次系统提示词，让 Agent 跨对话保持上下文。升级路径——语义化的向量记忆 + 内置知识库——是[路线图](./roadmap)上的头部项。
+当前两层。会话记忆保存对话历史，持久化、重启可恢复。长期记忆**按 Agent 隔离**——每个 Agent 通过 `save_memory` 写入自己的 `MEMORY.md`、通过 `recall_memory` 检索；每次触发还会自动记入它的归档记忆。记忆注入每次系统提示词，让 Agent 跨对话保持上下文。配置 `embedding.*` 后，语义检索会组合向量、关键词和时间近度路由；更广泛的共享记忆后端和跨应用优化仍在[路线图](./roadmap)中。
 
 ### 工具体系
 

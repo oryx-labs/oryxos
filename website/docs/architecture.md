@@ -146,7 +146,7 @@ Modules communicate through interfaces. Adding a new Channel or Tool implementat
 | CLI | Picocli |
 | YAML parsing | SnakeYAML |
 | Persistence | SQLite + Spring Data JPA (`schema.sql` maintained by hand; `CREATE TABLE IF NOT EXISTS`, no fragile SQLite `ALTER`) |
-| Long-term memory | per-agent `MEMORY.md` flat file, keyword search; vector retrieval planned for extension phase |
+| Long-term memory | per-agent `MEMORY.md` flat file with keyword search; semantic vector/keyword/recency retrieval when `embedding.*` is configured; broader shared backends are evolving |
 | MCP integration | MCP Java SDK (MCP Client for connecting to external MCP servers) |
 | Logging | Logback + SLF4J, structured JSON output |
 | Build | Maven multi-module |

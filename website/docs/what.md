@@ -62,7 +62,7 @@ A self-implemented reasoning engine — no external agent framework wrapping it.
 
 ### Memory
 
-Two layers today. Session memory holds the conversation history, persisted and recoverable across restarts. Long-term memory is **per-agent** — each agent writes to its own `MEMORY.md` via `save_memory` and searches it via `recall_memory`; every trigger is also auto-recorded to its archival memory. The memory is injected into every system prompt so agents keep context across conversations. The upgrade path — semantic, vector-backed memory plus a built-in knowledge base — is a headline item on the [Roadmap](./roadmap).
+Two layers today. Session memory holds the conversation history, persisted and recoverable across restarts. Long-term memory is **per-agent** — each agent writes to its own `MEMORY.md` via `save_memory` and searches it via `recall_memory`; every trigger is also auto-recorded to its archival memory. The memory is injected into every system prompt so agents keep context across conversations. When `embedding.*` is configured, semantic retrieval combines vector, keyword, and recency routes; broader shared memory backends and cross-application optimization remain on the [Roadmap](./roadmap).
 
 ### Tool System
 

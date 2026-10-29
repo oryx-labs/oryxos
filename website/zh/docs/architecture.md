@@ -146,7 +146,7 @@ Provider 和通知渠道不再是静态配置——两者都存储在 SQLite 中
 | 命令行 | Picocli |
 | YAML 解析 | SnakeYAML |
 | 持久化 | SQLite + Spring Data JPA（`schema.sql` 手动维护；`CREATE TABLE IF NOT EXISTS`，不依赖脆弱的 SQLite `ALTER`） |
-| 长期记忆 | 每个 Agent 的 `MEMORY.md` 平文件 + 关键词检索；扩展阶段规划向量检索 |
+| 长期记忆 | 每个 Agent 的 `MEMORY.md` 平文件 + 关键词检索；配置 `embedding.*` 后支持向量/关键词/时间近度语义检索；更广泛的共享后端演进中 |
 | MCP 集成 | MCP Java SDK（MCP Client 用于连接外部 MCP server） |
 | 日志 | Logback + SLF4J，结构化 JSON 输出 |
 | 构建 | Maven 多模块 |
