@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 320" width="1080" height="320">
+  <defs>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="rgba(249,115,22,0.32)"/>
+    </filter>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L0,7 L8,3.5 Z" fill="#f97316"/>
+    </marker>
+  </defs>
+
+  <rect width="1080" height="320" fill="#0a0a0a" rx="14"/>
+  <text x="540" y="34" font-family="'SF Mono','Fira Code','PingFang SC','Microsoft YaHei',monospace" font-size="13" fill="#f97316" text-anchor="middle" letter-spacing="2.5" font-weight="bold">业务应用 → 统一运行时 → 受治理的 AI 行动</text>
+
+  <rect x="34" y="70" width="250" height="178" rx="10" fill="#111" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="159" y="98" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#3b82f6" text-anchor="middle" font-weight="bold">企业 AI 应用</text>
+  <text x="159" y="128" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#e5e7eb" text-anchor="middle">研发自动化</text>
+  <text x="159" y="150" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#e5e7eb" text-anchor="middle">知识支持</text>
+  <text x="159" y="172" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#e5e7eb" text-anchor="middle">工单协同</text>
+  <text x="159" y="194" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#e5e7eb" text-anchor="middle">运维诊断</text>
+  <text x="159" y="224" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#6b7280" text-anchor="middle">业务逻辑 · 用户体验 · 交付结果</text>
+
+  <line x1="284" y1="158" x2="330" y2="158" stroke="#f97316" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="334" y="56" width="412" height="206" rx="12" fill="#1a0f06" stroke="#f97316" stroke-width="2" filter="url(#glow)"/>
+  <text x="540" y="86" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="15" fill="#f97316" text-anchor="middle" font-weight="bold">OryxOS Agent Harness OS</text>
+  <rect x="354" y="104" width="372" height="52" rx="7" fill="#2d1700" stroke="#f97316" stroke-width="1"/>
+  <text x="540" y="126" font-family="'SF Mono','Fira Code',monospace" font-size="11" fill="#fb923c" text-anchor="middle" font-weight="bold">Agent Runtime + Task Runtime</text>
+  <text x="540" y="144" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#9ca3af" text-anchor="middle">上下文 · 会话 · 模型循环 · 工具 · 状态 · 交付物</text>
+  <rect x="354" y="168" width="176" height="68" rx="7" fill="#130d1f" stroke="#a855f7" stroke-width="1"/>
+  <text x="442" y="193" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#c084fc" text-anchor="middle" font-weight="bold">Control Plane</text>
+  <text x="442" y="211" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="8.5" fill="#9ca3af" text-anchor="middle">身份 · 策略 · 审批</text>
+  <text x="442" y="226" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="8.5" fill="#9ca3af" text-anchor="middle">审计 · 成本 · Trace · Eval</text>
+  <rect x="550" y="168" width="176" height="68" rx="7" fill="#0f1729" stroke="#3b82f6" stroke-width="1"/>
+  <text x="638" y="193" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#93c5fd" text-anchor="middle" font-weight="bold">可扩展能力</text>
+  <text x="638" y="211" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="8.5" fill="#9ca3af" text-anchor="middle">模型 · 知识 · Tool · MCP</text>
+  <text x="638" y="226" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="8.5" fill="#9ca3af" text-anchor="middle">存储 · 通道 · 业务系统</text>
+
+  <line x1="746" y1="158" x2="792" y2="158" stroke="#f97316" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="796" y="70" width="250" height="178" rx="10" fill="#111" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="921" y="98" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="12" fill="#22c55e" text-anchor="middle" font-weight="bold">企业行动</text>
+  <text x="921" y="128" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#e5e7eb" text-anchor="middle">模型调用与 Tool 执行</text>
+  <text x="921" y="150" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#e5e7eb" text-anchor="middle">企业数据与业务系统</text>
+  <text x="921" y="172" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="10" fill="#e5e7eb" text-anchor="middle">文件、通知与系统变更</text>
+  <text x="921" y="204" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#6b7280" text-anchor="middle">统一身份 · 策略 · 运行证据</text>
+  <text x="921" y="224" font-family="'PingFang SC','Microsoft YaHei',sans-serif" font-size="9" fill="#6b7280" text-anchor="middle">安全 · 可观测 · 可恢复</text>
+</svg>
