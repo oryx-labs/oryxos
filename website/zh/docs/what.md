@@ -1,17 +1,28 @@
 # OryxOS 是什么
 
-***OryxOS 是企业私有部署的 Agent 操作系统：你用一句自然语言发布任务，它把任务拆解、组织一支 Agent 团队分工协作、把结果交付给你。让每一家公司，都能用自然语言跑起来自己的 Agent。***
+***OryxOS 是面向企业 AI 应用的开源 Agent Harness OS。应用带来自己的业务规则、数据、系统和用户体验；OryxOS 为 Agent 与 Task 提供共享 Runtime 和治理底座。***
 
-![一句话任务 → 拆解 → 组织一支 Agent 团队 → 分工协作 → 交付结果](/images/pipeline-zh.svg)
+![企业 AI 应用连接 OryxOS Agent Runtime 与治理底座](/images/runtime-governance-zh.svg)
 
 ![OryxOS Architecture](/images/architecture.svg)
 
 ## 这条路我们走到了哪
 
-已交付的和还在路上的，明明白白：
+我们将目标平台模型与当前 Runtime 已具备的能力分开说明：
 
-- **今天已交付**：用**一句话**（或一个 markdown 目录）定义一个 Agent，它立刻上线——免重启、零代码。它自带记忆、24 个内置工具、MCP 连接器、全局 Skill 库、通知推送、cron 定时、沙箱执行和全链路审计——全部跑在你自己的基础设施上。
-- **北极星**（设计推进中，见[路线图](./roadmap)）：一句话发布一个任务，一支 Agent **团队**自组织交付——协调者拆解、专家们并行干活、评审者合并把关——每一步都有审计，危险动作有人审批。
+- **当前可用**：通过**一句话**或一个 Markdown 目录定义 Agent，并在自己的基础设施上使用模型 Provider、Memory、Knowledge、内置 Tool、MCP、Skill、通知、调度、沙箱控制、审计记录、REST API 和 Web Manager。
+- **演进中**：让持久、受治理的 **Task** 成为企业 AI 应用的共同执行单元，持续建设 Checkpoint/Recovery、审批、策略、成本、评测、分布式 Runtime 和 Control Plane 能力。
+- **探索中**：在多个应用之间优化模型、能力、质量、成本和风险，支持受治理的多 Agent 协作与更广泛的生态互操作。参见[路线图](./roadmap)。
+
+每一次有实际影响的 AI 行动都应遵循一致的执行链路：
+
+```text
+Task -> Identity -> Authorization -> Policy -> Approval
+     -> Model / Tool Execution -> Audit / Trace / Cost
+     -> Artifact / State Update
+```
+
+这是项目的目标方向，各项能力会分阶段交付，并在文档中明确标注状态。
 
 ## Agent 公式
 
@@ -19,7 +30,7 @@
 
 ![自然语言 + Memory + Tool + MCP + Skill + 知识库 + Notify = 一个能干活的 Agent](/images/agent-formula-zh.svg)
 
-这就是 OryxOS 的全部要义：**把「定义一个 Agent」的成本压到趋近于零。** 你写想要什么，OS 负责供给能力、安全护栏和审计记录。
+这是 OryxOS 的务实起点：**把「定义一个 Agent」的成本压到趋近于零。** 你写想要什么，Runtime 负责供给能力、安全边界和执行证据。
 
 具体形态是 **一个目录 = 一个 Agent**：`.oryxos/agents/<name>/` 下的一个目录，一份 `AGENT.md`——YAML frontmatter 是这个 Agent 的 profile（身份、对话的模型、引用哪些工具 / Skill），正文是任务指令。目录放进去就上线。通过 REST API 或 Web 管理台在运行时创建、编辑、删除 Agent——包括用一句话生成一个完整的 Agent。业务系统走 HTTP 接入。数据始终不出你的基础设施。
 
@@ -27,17 +38,17 @@
 
 **Agent harness（运行骨架）**是套在模型外面、把模型变成能干活的 Agent 的那层脚手架：驱动 reason → act → observe 的循环、它能调用的工具与执行工具的机制、每次 LLM 调用前组装好的上下文、它积累的记忆、约束它的沙箱、记录它做过什么的审计。裸模型只会生成文本——harness 才让它可靠、安全地『做事』。
 
-而企业从来不会只跑一个 Agent。OryxOS 是一个 **Agent Harness OS**：给每个 Agent 同一套生产级 harness，并像操作系统调度进程一样运行一整队 Agent。三层看——**模型 → Harness → OS**：
+企业需要运行多个 Agent，但平台也必须让每个应用共享同一套运行和治理语义。OryxOS 是一个 **Agent Harness OS**：给每个 Agent 一致的 Harness，并在多个应用之间组织 Task。三层看——**模型 → Harness → OS**：
 
 | | 裸模型 | Agent Harness | Agent Harness OS |
 | --- | --- | --- | --- |
-| 范围 | 单次 LLM 调用 | 单个可靠的 Agent | 一整队 Agent |
+| 范围 | 单次 LLM 调用 | 单个可靠的 Agent | 企业应用及其 Task |
 | 提供什么 | 文本生成 | 循环、工具 + 执行、上下文、记忆、沙箱、审计、投递 | 生命周期、渠道接入、路由、共享注册表、调度、治理、管理台 + API |
 | 入口 | 对模型的一次 API 调用 | 一次库调用或框架调用 | 带 REST API 的可部署二进制 |
-| 多 Agent | 不在范围内 | 不在范围内 | 一等公民：多 Agent、共享能力、运行时生命周期管理 |
+| 多 Agent | 不在范围内 | 不在范围内 | 建立在共享 Task 与治理之上的演进能力 |
 | 类比 | 一条 CPU 指令 | 一个带运行时的进程 | 运行一群进程的操作系统 |
 
-模型生成文本。Harness 把一个模型变成一个真正能干活的 Agent。Harness **OS** 把同一套 harness 交给每个 Agent、运行整支队伍——也只有在这一层，「Agent 团队」才成为可能。
+模型生成文本。Harness 把一个模型变成一个真正能干活的 Agent。Harness **OS** 为每个 Agent 和应用提供统一的执行、能力与治理语义；多 Agent 团队是建立在这套底座之上的演进用例。
 
 ## 五项核心能力
 

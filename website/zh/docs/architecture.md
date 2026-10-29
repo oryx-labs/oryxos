@@ -2,7 +2,28 @@
 
 OryxOS 是一个 Spring Boot 3.x 单体应用，运行在 JDK 21 上，整个系统——LLM 路由、推理循环、记忆系统、工具体系、REST API 以及 Web 管理台——打包在一个 fat JAR 里交付。除了 JVM 和你配置的 LLM Provider 凭证，不需要任何外部依赖。状态存储在 SQLite 和工作区目录下的本地文件系统中（默认 `.oryxos/`，可配置——见下文）。
 
-推理引擎是自实现的 ReAct Loop。Spring AI 的 OpenAI connector 负责 OpenAI 兼容 LLM 协议转换；循环本身、上下文组装、工具调度和审计记录，都由 OryxOS 自己掌控。
+推理引擎是自实现的 ReAct Loop。Spring AI 的 OpenAI connector 负责 OpenAI 兼容 LLM 协议转换；循环本身、上下文组装、工具调度和审计记录，都由 OryxOS 自己掌控。当前实现是单节点 Runtime；项目更广泛的方向是为企业 AI 应用提供共享的 Agent Runtime、Task Runtime 和 Control Plane。
+
+## 应用、Runtime 与治理模型
+
+企业应用负责领域逻辑、用户体验、数据连接和交付物。OryxOS 提供共享的执行底座：
+
+```text
+企业 AI 应用
+        -> Agent Runtime + Task Runtime
+        -> Control Plane 与可扩展能力
+        -> 模型、知识、Tool、MCP 与企业系统
+```
+
+目标执行语义将每一次有实际影响的行动与业务和治理上下文连接起来：
+
+```text
+Task -> Identity -> Authorization -> Policy -> Approval
+     -> Model / Tool Execution -> Audit / Trace / Cost
+     -> Artifact / State Update
+```
+
+这是架构方向。单节点 Agent Runtime、Provider 注册表、Memory、Knowledge、Tool、MCP、调度、沙箱控制、审计记录、REST API 和 Web Manager 当前可用；持久 Task 恢复、更完整的审批与 Control Plane 流程、跨应用优化和受治理的多 Agent 协作属于演进中或探索中能力。
 
 ## 架构图
 
@@ -19,6 +40,8 @@ OryxOS 是一个 Spring Boot 3.x 单体应用，运行在 JDK 21 上，整个系
 **能力层** — 引擎调用的能力。`ProviderService` 将 LLM 调用路由到配置的 Provider，运行时按名称从 Provider 注册表动态解析。`MemoryService` 提供对话历史和长期记忆。`ToolRegistry` 存储所有已注册的工具，包括内置工具和 MCP 对接的工具。
 
 **基础层** — 持久化。SQLite 存储会话、工具调用与 LLM 调用审计记录、定时任务及其执行历史、每个 Agent 的记忆条目、通知渠道和 Provider 定义。文件系统存储 Agent 目录（`AGENT.md` 及可选的 `skills/`、`scripts/`、`REFERENCE.md`）、Bootstrap 文件和 `MEMORY.md`——凡是用户可能想直接编辑或纳入 git 管理的内容。
+
+分层图描述的是当前实现边界。目标 Control Plane 是横跨 Runtime 和能力层的关注点：身份、授权、策略、审批、审计、Trace、成本和评测必须跟随模型与 Tool 行动，而不能只作为事后的管理报表存在。
 
 ## 一个目录 = 一个 Agent
 
@@ -54,7 +77,7 @@ Provider 和通知渠道不再是静态配置——两者都存储在 SQLite 中
 
 ## REST API 一览
 
-所有端点都在 `/api/v1` 下，使用 JSON，且（核心阶段假设内网）无需认证。**每一个**响应都包裹在统一信封中：
+所有端点都在 `/api/v1` 下并使用 JSON。认证可配置，默认仅为本地开发关闭；在暴露受保护操作前，请配置 Web 认证、API Key 和授权。**每一个**响应都包裹在统一信封中：
 
 ```json
 { "code": 0, "message": "success", "data": {}, "timestamp": 1720000000000 }
@@ -77,11 +100,10 @@ Provider 和通知渠道不再是静态配置——两者都存储在 SQLite 中
 
 ## Web 管理台
 
-一个 Vue 3 + Vite 单页应用，通过 `/admin/` 提供，视觉风格与官网一致。侧边栏分组：**概览** / **Agent 列表** / **定时任务** / **Skill 列表** / **知识库** / 以及 **OS 运行时** 分组下的 **会话列表**、**Provider 列表**、**Tool 列表**、**Notify 渠道**、**SandBox 列表**。
+一个 Vue 3 + Vite 单页应用，通过 `/admin/` 提供，视觉风格与项目官网一致。管理台提供 Agent、定时任务、会话、Provider、通知渠道、Tool、沙箱白名单和工作区文件管理；知识库与更完整的 Control Plane 页面仍在演进。
 
-- Agent 列表带描述列，每行有 **立即触发**（经 console 会话）、**详情**、**删除** 操作；详情视图有 基本信息 / 生成 / 文件 / 会话 / 记忆 标签页，包含一句话「生成」流程（先预览再保存）。记忆标签页展示两张表——核心记忆和归档记忆。
-- 知识库页（014）：列表（名称/描述/后端/文档数/片段数/索引状态）、详情（文档清单 + 两段式上传 + 双缓冲重建 + 单文档删除）、使用看板（检索次数/零结果率/降级率/命中分布/出处引用率，只消费审计数据）；管理操作按后端插件的能力声明渲染。Agent 详情页可管理知识库绑定（`agents/<name>/knowledge/<库名>` 相对软连接为唯一事实源），新建 Agent 表单可多选，「一句话生成」会按需求给出绑定建议。
-- Provider 与 Notify 渠道页面提供完整 CRUD；Provider 的 api-key 落库加密，界面只显示掩码值。
+- Agent 列表带描述列，每行有触发、详情、删除操作；详情视图有基本信息、生成、文件、会话和记忆标签页，包含一句话生成流程（先预览再保存）。记忆标签页展示核心记忆和归档记忆。
+- Provider 与 Notify 渠道页面提供完整 CRUD；Provider API Key 落库加密，界面只显示掩码值。
 - 新增/编辑表单均为弹窗对话框，每个列表都有刷新按钮。工作区文件浏览器暴露磁盘上的 Agent 目录树。
 
 ## 模块结构

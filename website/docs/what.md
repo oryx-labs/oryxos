@@ -1,17 +1,28 @@
 # What is OryxOS
 
-***OryxOS is the self-hosted Agent Operating System for the enterprise. Describe a task in plain language — OryxOS breaks it down, assembles a team of agents, and they collaborate to deliver the result. So every company can run its own agents, in plain language.***
+***OryxOS is an open-source Agent Harness OS for enterprise AI applications. Applications bring their business rules, data, systems, and user experience; OryxOS provides the shared runtime and governance foundation for Agents and Tasks.***
 
-![one sentence → decompose → assemble an agent team → collaborate → deliver the result](/images/pipeline-en.svg)
+![enterprise AI applications connect to the OryxOS Agent Runtime and governance foundation](/images/runtime-governance-en.svg)
 
 ![OryxOS Architecture](/images/architecture.svg)
 
 ## Where we are on that road
 
-We say exactly what's shipped and what's ahead — no hand-waving:
+We distinguish the target platform model from what is available in the current runtime:
 
-- **Shipped today**: define an agent in **one sentence** (or one markdown directory) and it goes live instantly — no restart, no code. It comes with memory, 24 built-in tools, MCP connectors, a global skill library, notifications, cron scheduling, sandboxed execution, and a full audit trail — running entirely on your own infrastructure.
-- **The north star** (in active design — see the [Roadmap](./roadmap)): publish a task in one sentence and an agent **team** self-organizes to deliver it — a planner decomposes, specialists work in parallel, a reviewer merges and checks — every step audited, with humans approving the dangerous ones.
+- **Available today**: define an Agent in **one sentence** or one markdown directory and run it on your own infrastructure with model providers, Memory, Knowledge, built-in Tools, MCP, Skills, notifications, scheduling, sandbox controls, audit records, REST APIs, and a Web Manager.
+- **Evolving**: make a durable, governed **Task** the common unit for enterprise AI applications, with stronger checkpoint/recovery, approval, policy, cost, evaluation, distributed-runtime, and Control Plane capabilities.
+- **Exploratory**: optimize models, capabilities, quality, cost, and risk across applications; support governed multi-Agent collaboration and broad ecosystem interoperability. See the [Roadmap](./roadmap).
+
+Every meaningful AI action should follow a consistent execution path:
+
+```text
+Task -> Identity -> Authorization -> Policy -> Approval
+     -> Model / Tool Execution -> Audit / Trace / Cost
+     -> Artifact / State Update
+```
+
+The path is the project direction. Individual capabilities are delivered incrementally and are labeled accordingly in this documentation.
 
 ## The Agent formula
 
@@ -19,7 +30,7 @@ Everything an agent needs is **built into the OS**. An agent is just a declarati
 
 ![natural language + Memory + Tools + MCP + Skills + Knowledge + Notify = a working Agent](/images/agent-formula-en.svg)
 
-This is the whole point of OryxOS: **drive the cost of defining an agent toward zero.** You write what you want; the OS supplies the capabilities, the safety rails, and the audit trail.
+This is the practical starting point of OryxOS: **drive the cost of defining an Agent toward zero.** You write what you want; the runtime supplies capabilities, safety boundaries, and execution evidence.
 
 Concretely, **one directory = one Agent**: a folder under `.oryxos/agents/<name>/` with an `AGENT.md` — YAML frontmatter as the agent's profile (identity, which LLM it talks to, which tools/skills it references) plus a body of task instructions. Drop the directory in and it goes live. Create, edit, and delete agents at runtime over the REST API or the web console — including generating a complete agent from a single sentence. Business systems integrate over HTTP. Data never leaves your infrastructure.
 
@@ -27,17 +38,17 @@ Concretely, **one directory = one Agent**: a folder under `.oryxos/agents/<name>
 
 An **agent harness** is the scaffolding around a model that turns it into a working agent: the loop that drives reason → act → observe, the tools it can call and the execution that runs them, the context assembled before every LLM call, the memory it accumulates, the sandbox that contains it, and the audit trail that records what it did. A bare model only generates text — the harness is what lets it *do* things, reliably and safely.
 
-An enterprise never runs just one agent. OryxOS is an **Agent Harness OS**: it gives every agent the same production-grade harness, and runs the whole fleet like an operating system runs processes. Three layers — **Model → Harness → OS**:
+An enterprise needs more than one Agent, but the platform must also give every application the same runtime and governance semantics. OryxOS is an **Agent Harness OS**: it gives every Agent a consistent harness and organizes Tasks across applications. Three layers — **Model → Harness → OS**:
 
 | | Bare Model | Agent Harness | Agent Harness OS |
 | --- | --- | --- | --- |
-| Scope | A single LLM call | One reliable agent | A fleet of agents |
+| Scope | A single LLM call | One reliable Agent | Enterprise applications and their Tasks |
 | Provides | Text generation | Loop, tools + execution, context, memory, sandbox, audit, delivery | Lifecycle, channels, routing, shared registries, scheduling, governance, admin + API |
 | Entry point | An API call to a model | A library or framework call | A deployable binary with a REST API |
-| Multi-agent | Not in scope | Not in scope | First-class: many agents, shared capabilities, runtime lifecycle management |
+| Multi-agent | Not in scope | Not in scope | An evolving capability built on shared Tasks and governance |
 | Analogy | A CPU instruction | A process with its runtime | An OS running many processes |
 
-A model generates text. A harness turns one model into one agent that actually works. A Harness **OS** gives every agent the same harness and runs the whole fleet — and it's the layer where an agent *team* becomes possible.
+A model generates text. A harness turns one model into one Agent that actually works. A Harness **OS** gives every Agent and application shared execution, capability, and governance semantics; multi-Agent teams are an evolving use case on top of that foundation.
 
 ## Five Core Capabilities
 

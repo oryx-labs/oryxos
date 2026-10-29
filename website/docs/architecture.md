@@ -2,7 +2,28 @@
 
 OryxOS is a Spring Boot 3.x single-binary application running on JDK 21. The entire system — LLM routing, reasoning loop, memory, tools, REST API, and the web admin console — ships as one fat JAR. No external dependencies are required beyond a JVM and the LLM provider credentials you configure. State is stored in SQLite and on the local filesystem under the workspace directory (`.oryxos/` by default, configurable — see below).
 
-The reasoning engine is a self-implemented ReAct loop. Spring AI's OpenAI connector handles OpenAI-compatible LLM protocol translation; OryxOS owns the loop, the context assembly, the tool dispatch, and the audit records.
+The reasoning engine is a self-implemented ReAct loop. Spring AI's OpenAI connector handles OpenAI-compatible LLM protocol translation; OryxOS owns the loop, the context assembly, the tool dispatch, and the audit records. The current implementation is a single-node runtime; the broader project direction is a shared Agent Runtime, Task Runtime, and Control Plane for enterprise AI applications.
+
+## Application, Runtime, and Governance Model
+
+Enterprise applications own their domain logic, user experience, data connections, and deliverables. OryxOS provides the shared execution foundation:
+
+```text
+Enterprise AI applications
+        -> Agent Runtime + Task Runtime
+        -> Control Plane and capability extensions
+        -> models, knowledge, Tools, MCP, and enterprise systems
+```
+
+The target execution semantics connect every meaningful action to its business and governance context:
+
+```text
+Task -> Identity -> Authorization -> Policy -> Approval
+     -> Model / Tool Execution -> Audit / Trace / Cost
+     -> Artifact / State Update
+```
+
+This is the architectural direction. The single-node Agent Runtime, provider registry, Memory, Knowledge, Tools, MCP, scheduling, sandbox controls, audit records, REST API, and Web Manager are available today. Durable Task recovery, broader approval and Control Plane workflows, cross-application optimization, and governed multi-Agent coordination are evolving or exploratory capabilities.
 
 ## Architecture Diagram
 
@@ -19,6 +40,8 @@ The reasoning engine is a self-implemented ReAct loop. Spring AI's OpenAI connec
 **Capability Layer** — what the engine calls out to. `ProviderService` routes LLM calls to the configured provider, resolved dynamically by name from the provider registry. `MemoryService` provides conversation history and long-term memory. `ToolRegistry` holds all registered tools, built-in and MCP-backed alike.
 
 **Storage Layer** — persistence. SQLite stores sessions, tool-invocation and LLM-call audit records, scheduled tasks and their execution history, per-agent memory entries, notify channels, and provider definitions. The filesystem stores agent directories (`AGENT.md` plus optional `skills/`, `scripts/`, `REFERENCE.md`), Bootstrap files, and `MEMORY.md` — anything a user might want to edit directly or track in git.
+
+The layer diagram describes the current implementation boundary. The target Control Plane is a cross-cutting concern over the runtime and capability layers: identity, authorization, policy, approval, audit, trace, cost, and evaluation must follow model and Tool actions rather than exist only as administrative reports.
 
 ## One Directory = One Agent
 
@@ -54,7 +77,7 @@ The configured root is auto-added to the file sandbox whitelist at runtime, so c
 
 ## REST API Surface
 
-All endpoints live under `/api/v1`, speak JSON, and (in the core phase, on the assumption of an internal network) require no authentication. **Every** response is wrapped in a unified envelope:
+All endpoints live under `/api/v1` and speak JSON. Authentication is configurable and disabled by default for local development; configure web authentication, API keys, and authorization before exposing protected operations. **Every** response is wrapped in a unified envelope:
 
 ```json
 { "code": 0, "message": "success", "data": {}, "timestamp": 1720000000000 }
@@ -77,10 +100,10 @@ All endpoints live under `/api/v1`, speak JSON, and (in the core phase, on the a
 
 ## Web Admin Console
 
-A Vue 3 + Vite single-page app is served at `/admin/`, styled to match the marketing website. The sidebar groups: **概览 (Overview)** / **Agent 列表** / **定时任务 (Schedules)** / **Skill 列表** (placeholder) / **知识库 (Knowledge Base)** (placeholder) / and an **OS Runtime** group holding **会话列表 (Sessions)**, **Provider 列表**, **Tool 列表**, **Notify 渠道**, and **SandBox 列表**.
+A Vue 3 + Vite single-page app is served at `/admin/`, styled to match the project website. The console manages Agents, schedules, sessions, providers, notify channels, Tools, sandbox allowlists, and workspace files. Knowledge and broader Control Plane surfaces continue to evolve.
 
-- The Agent list shows a description column and per-row **立即触发 (trigger now, via a console session)**, **详情 (detail)**, and **删除 (delete)** actions; the detail view has tabs for basic info / generate / files / session / memory, including the one-sentence "generate" flow (preview then save). The memory tab shows two tables — 核心记忆 (core) and 归档记忆 (archival).
-- The Provider and Notify-channel pages offer full CRUD; provider api-keys are encrypted at rest and shown only as masks.
+- The Agent list shows a description column and per-row trigger, detail, and delete actions; the detail view has tabs for basic info, generation, files, session, and memory, including the one-sentence generation flow (preview then save). The memory tab shows core and archival memory.
+- The Provider and Notify-channel pages offer full CRUD; provider API keys are encrypted at rest and shown only as masks.
 - Add/edit forms are modal dialogs, and every list has a refresh button. The workspace file browser exposes the on-disk agent tree.
 
 ## Module Structure
