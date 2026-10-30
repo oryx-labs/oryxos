@@ -1,17 +1,19 @@
 # OryxOS 是什么
 
-***OryxOS 是面向企业 AI 应用的开源 Agent Harness OS。应用带来自己的业务规则、数据、系统和用户体验；OryxOS 为 Agent 与 Task 提供共享 Runtime 和治理底座。***
+***OryxOS 是面向企业 AI 应用的开源 Agent Harness OS。应用带来自己的业务规则、数据、系统和用户体验；OryxOS 为 Agent 与 Task 提供共享 Runtime、治理与运行优化底座。***
 
-![企业 AI 应用连接 OryxOS Agent Runtime 与治理底座](/images/runtime-governance-zh.svg)
+![OryxOS 整体架构](/images/oryxos-overview-zh.svg)
 
-![OryxOS Architecture](/images/architecture.svg)
+应用团队可以组合 Agent、模型、Knowledge、Tool、MCP Server 和 Flow，构建面向具体业务的问题解决方案；OryxOS 则提供统一的执行语义，让这些应用能够在企业中稳定运行、持续扩展并被统一管理。
+
+核心原则很简单：**应用可以自由组合能力，但不能绕过治理。** 身份、权限、策略、审批、模型路由、Tool 执行、审计、Trace、成本归集和状态更新，都属于执行路径的一部分。
 
 ## 这条路我们走到了哪
 
 我们将目标平台模型与当前 Runtime 已具备的能力分开说明：
 
 - **当前可用**：通过**一句话**或一个 Markdown 目录定义 Agent，并在自己的基础设施上使用模型 Provider、Memory、Knowledge、内置 Tool、MCP、Skill、通知、调度、沙箱控制、审计记录、REST API 和 Web Manager。
-- **演进中**：让持久、受治理的 **Task** 成为企业 AI 应用的共同执行单元，持续建设 Checkpoint/Recovery、审批、策略、成本、评测、分布式 Runtime 和 Control Plane 能力。
+- **演进中**：让持久、受治理的 **Task** 成为企业 AI 应用的共同执行单元，持续建设 Checkpoint/Recovery、审批、策略、模型路由、成本优化、评测、分布式 Runtime 和 Control Plane 能力。
 - **探索中**：在多个应用之间优化模型、能力、质量、成本和风险，支持受治理的多 Agent 协作与更广泛的生态互操作。参见[路线图](./roadmap)。
 
 每一次有实际影响的 AI 行动都应遵循一致的执行链路：
@@ -24,13 +26,13 @@ Task -> Identity -> Authorization -> Policy -> Approval
 
 这是项目的目标方向，各项能力会分阶段交付，并在文档中明确标注状态。
 
-## Agent 公式
+## 应用如何使用 OryxOS
 
-一个 Agent 需要的一切能力都**内置在 OS 里**，Agent 本身只是一份按名引用这些能力的意图声明：
+OryxOS 为应用提供共享能力层。应用选择自己需要的 Agent、模型、知识、Tool、MCP Server 与 Flow；平台负责围绕它们提供 Runtime 与治理语义。
 
-![自然语言 + Memory + Tool + MCP + Skill + 知识库 + Notify = 一个能干活的 Agent](/images/agent-formula-zh.svg)
+这样，业务团队可以构建自己的领域应用，不需要在每一个应用中重复建设 AI 基础设施。同一套 Runtime 可以承载研发自动化、知识支持、工单协同、运维诊断和更多企业场景。
 
-这是 OryxOS 的务实起点：**把「定义一个 Agent」的成本压到趋近于零。** 你写想要什么，Runtime 负责供给能力、安全边界和执行证据。
+一个目录 = 一个 Agent 仍然是务实的使用入口：你描述意图，Runtime 提供能力、安全边界和执行证据。
 
 具体形态是 **一个目录 = 一个 Agent**：`.oryxos/agents/<name>/` 下的一个目录，一份 `AGENT.md`——YAML frontmatter 是这个 Agent 的 profile（身份、对话的模型、引用哪些工具 / Skill），正文是任务指令。目录放进去就上线。通过 REST API 或 Web 管理台在运行时创建、编辑、删除 Agent——包括用一句话生成一个完整的 Agent。业务系统走 HTTP 接入。数据始终不出你的基础设施。
 
@@ -50,11 +52,11 @@ Task -> Identity -> Authorization -> Policy -> Approval
 
 模型生成文本。Harness 把一个模型变成一个真正能干活的 Agent。Harness **OS** 为每个 Agent 和应用提供统一的执行、能力与治理语义；多 Agent 团队是建立在这套底座之上的演进用例。
 
-## 五项核心能力
+## 核心平台能力
 
-### LLM 路由
+### 模型路由与成本优化
 
-对主流模型的 Provider 抽象：DeepSeek、通义、Kimi、智谱、混元、豆包、Anthropic、OpenAI，以及任何兼容 OpenAI 协议的端点。Agent 与 Provider 解耦——Agent 按名字声明用哪个 Provider，感知不到背后是哪家厂商。Provider 存放在动态注册表里，支持完整 CRUD（REST 或管理台）——首次启动从配置播种，之后以数据库为准，运行时新增或换密钥都不用重启。多 Provider 通过显式的名称到模型路由并存；支持通过 Ollama 或 vLLM 接入本地推理。
+OryxOS 根据任务对质量、时延、可用性、成本和数据边界的要求路由模型。Provider 抽象让应用不绑定任何一家厂商，动态注册表则支持运行时接入、调整和切换 Provider。降级、预算、配额和组织级成本优化属于持续演进能力。
 
 ### ReAct Loop
 
@@ -87,6 +89,7 @@ Task -> Identity -> Authorization -> Policy -> Approval
 ## 设计原则
 
 - **平台优先于 Agent**——最重要的交付物是让任何 Agent 可靠运行的环境，而不是某个具体的 Agent
+- **应用自由组合，治理不可绕过**——模型与 Tool 可以灵活组合，但策略、审批、审计和运行证据必须跟随每一次有实际影响的行动
 - **核心自实现，管道复用**——推理循环手写；各厂商协议适配委托给成熟的适配层
 - **一个目录 = 一个 Agent**——一个 Agent 由一个 markdown 目录定义，不需要写代码
 - **开放标准**——工具用 MCP，Agent 间协作用 A2A，技能用开放格式

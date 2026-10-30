@@ -1,7 +1,7 @@
 ---
 layout: home
-title: OryxOS — Enterprise Agent OS
-description: Enterprise Agent OS built on Java — run multiple AI agents on your own infrastructure
+title: OryxOS — Agent Harness OS for Enterprise AI Applications
+description: Build enterprise AI applications on a shared runtime and govern every AI action
 ---
 
 <Home />

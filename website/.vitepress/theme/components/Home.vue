@@ -9,10 +9,10 @@ const t = (zh, en) => isZh.value ? zh : en
 const capabilities = computed(() => [
   {
     num: '01',
-    title: t('一个目录 = 一个 Agent', 'One Directory = One Agent'),
+    title: t('Agent 与 Task Runtime', 'Agent & Task Runtime'),
     desc: t(
-      '一个 Agent 就是一个目录：AGENT.md = frontmatter（profile）+ 正文（任务指令），可选 skills/、scripts/。REST 创建、一句话 LLM 生成，或直接拖入目录，WorkspaceWatcher 热加载即上线，无需重启。',
-      'An agent is a directory: AGENT.md = frontmatter (its profile) + a body of instructions, plus optional skills/ and scripts/. Create via REST, generate from one sentence with an LLM, or drop in a directory — WorkspaceWatcher makes it live with no restart.'
+      '为企业应用提供一致的 Agent 执行、Task 生命周期、上下文、记忆、状态与交付物语义。应用关注业务，运行底座负责把工作可靠地跑起来。',
+      'Gives enterprise applications consistent semantics for Agent execution, Task lifecycle, context, memory, state, and artifacts. Applications focus on business work; the platform runs it reliably.'
     ),
     code: `.oryxos/agents/ops-agent/
 ├── AGENT.md        # frontmatter + task body
@@ -24,10 +24,10 @@ const capabilities = computed(() => [
   },
   {
     num: '02',
-    title: t('动态多模型路由', 'Dynamic Multi-Provider Routing'),
+    title: t('模型路由与成本优化', 'Model Routing & Cost Optimization'),
     desc: t(
-      'Provider 存 SQLite，支持运行时 CRUD——随时增删改。Agent 不感知具体厂商，显式 name → ChatModel 映射保证路由正确；改 key/base-url 下次调用自动重建。',
-      'Providers live in SQLite with runtime CRUD — add, edit, remove anytime. Agents are provider-agnostic; explicit name → ChatModel routing stays correct, and the model rebuilds when its key or base URL changes.'
+      '根据质量、时延、可用性、成本和数据边界选择模型。Provider 可动态接入与切换，路由、降级、预算、配额和成本归集逐步成为跨应用的共同能力。',
+      'Selects models by quality, latency, availability, cost, and data boundaries. Providers can be added and switched dynamically; routing, fallback, budgets, quotas, and cost attribution evolve into shared capabilities across applications.'
     ),
     code: `# Providers are runtime-mutable, stored in SQLite
 POST /api/v1/providers
@@ -41,10 +41,10 @@ provider:
   },
   {
     num: '03',
-    title: t('自实现 ReAct 循环', 'Self-implemented ReAct Loop'),
+    title: t('知识与上下文', 'Knowledge & Context'),
     desc: t(
-      '完整掌控 Reason → Act → Observe 循环，同步执行 + 虚拟线程，不被任何外部 Agent 框架包裹。协议差异交给适配层吸收，工具执行始终由自己掌控，全程透明可查。',
-      'Full control over Reason → Act → Observe — synchronous execution on virtual threads, wrapped by no external agent framework. Vendor protocol differences are absorbed by an adapter layer; tool execution stays fully in-house and inspectable.'
+      '把知识库、检索、长期记忆与业务上下文组装为应用可复用的能力。上下文不再散落在每个业务应用中，也能持续演进。',
+      'Packages knowledge bases, retrieval, long-term memory, and business-context assembly as reusable application capabilities instead of scattering them across every application.'
     ),
     code: `User message
   → PromptBuilder: system + memory + history + tools
@@ -58,10 +58,10 @@ provider:
   },
   {
     num: '04',
-    title: t('分层记忆系统', 'Layered Memory System'),
+    title: t('Tool、MCP 与企业系统接入', 'Tools, MCP & Enterprise Integrations'),
     desc: t(
-      '会话记忆 + 按 Agent 的长期记忆（.oryxos/agents/<name>/MEMORY.md，关键词检索、带时间戳）。自动注入每次 system prompt，Agent 跨会话保持一致，后续可无缝升级向量检索。',
-      'Session memory plus per-agent long-term memory (.oryxos/agents/<name>/MEMORY.md, keyword search, timestamped). Auto-injected into every system prompt so agents stay consistent across sessions — with a clear upgrade path to vector search.'
+      '应用通过内置 Tool、MCP Server、Skill、渠道与自定义扩展连接模型之外的真实世界；这些能力被多个应用复用。',
+      'Applications connect to the real world through built-in Tools, MCP servers, Skills, channels, and custom extensions that can be reused across applications.'
     ),
     code: `# Agent saves a preference
 Tool: save_memory
@@ -75,10 +75,10 @@ Input: {"query": "user preferences"}`,
   },
   {
     num: '05',
-    title: t('沙箱工具 + MCP', 'Sandboxed Tools + MCP'),
+    title: t('治理 Runtime', 'Governance Runtime'),
     desc: t(
-      '内置文件 / Shell 走路径与命令白名单；HTTP 读写分治（读：默认放行 + SSRF；写：域名白名单）。不用 SecurityManager，可运行时管理。三档插件：零代码 SKILL.md → 自定义 MCP server → 原生 @Tool。Notify 渠道按名寻址。',
-      'Built-in file / shell use path and command whitelists; HTTP is split (reads: default allow + SSRF; writes: domain whitelist). No SecurityManager; manageable at runtime. Three-tier plugins: zero-code SKILL.md → custom MCP server → native @Tool. Notify channels addressed by name.'
+      '身份、授权、策略、审批、沙箱边界和审计进入每一次模型与 Tool 行动的执行路径。应用可以组合能力，但不能绕过治理。',
+      'Identity, authorization, policy, approval, sandbox boundaries, and audit travel with every model and Tool action. Applications can compose capabilities, but cannot bypass governance.'
     ),
     code: `# Whitelists, not SecurityManager
 shell.allowed_commands: [ls, cat, python3]
@@ -90,10 +90,10 @@ POST /api/v1/sandbox/whitelist/SHELL
   },
   {
     num: '06',
-    title: t('Web 管理台', 'Web Admin Console'),
+    title: t('运行、成本与可靠性', 'Operations, Cost & Reliability'),
     desc: t(
-      '/admin/ 控制台（Vue 3 + Vite，与官网同源风格）：Agent 管理与一句话生成、Provider / Notify 渠道 CRUD、定时任务、工作区文件浏览、记忆查看。审计表 llm_calls、tool_invocations 第一天就写入。',
-      'A Vue 3 + Vite console at /admin/ (same theme as this site): agent management with one-sentence generation, Provider / Notify-channel CRUD, scheduled tasks, workspace file browser, and memory views. Audit tables llm_calls and tool_invocations are written from day one.'
+      '将 Trace、成本归集、评测、重试、恢复与可观测性放在统一底座中，让企业能够运行、观察并持续优化生产中的 AI 应用。',
+      'Places traceability, cost attribution, evaluation, retries, recovery, and observability in one foundation so enterprises can run, observe, and continuously optimize production AI applications.'
     ),
     code: `❯ oryxos serve --port 8080
 
@@ -141,8 +141,8 @@ const scenarios = computed(() => [
   },
   {
     num: '08',
-    title: t('多 Agent 协作', 'Multi-Agent Collaboration'),
-    desc: t('多个 Agent 共享同一个 OryxOS 实例，各自拥有独立的 Profile、工具和记忆。', 'Multiple agents share one OryxOS instance, each with its own profile, tools, and memory.'),
+    title: t('企业研发自动化', 'Engineering Automation'),
+    desc: t('把代码、知识、工具与研发流程组合成可治理的研发自动化应用。', 'Compose code, knowledge, tools, and engineering workflows into governed automation applications.'),
   },
 ])
 
@@ -151,34 +151,33 @@ const roadmapPhases = computed(() => [
     phase: t('阶段一', 'Phase 1'),
     status: t('当前', 'CURRENT'),
     active: true,
-    title: t('单节点运行内核', 'Single-node Runtime Kernel'),
+    title: t('单节点 Runtime 内核', 'Single-node Runtime Kernel'),
     items: [
-      t('5 大核心能力', '5 core capabilities'),
-      t('多 Agent 并存', 'Multi-agent on one node'),
-      t('REST API 暴露', 'REST API exposure'),
-      t('MCP 工具协议', 'MCP tool protocol'),
+      t('Agent 与 Task 执行', 'Agent and Task execution'),
+      t('知识、Tool 与 MCP', 'Knowledge, Tools, and MCP'),
+      t('审计、沙箱与 API', 'Audit, sandbox, and APIs'),
     ],
   },
   {
     phase: t('阶段二', 'Phase 2'),
     status: t('规划中', 'PLANNED'),
     active: false,
-    title: t('分布式基础', 'Distributed Foundation'),
+    title: t('企业执行底座', 'Enterprise Execution Foundation'),
     items: [
-      t('无状态节点设计', 'Stateless node design'),
-      t('外部状态存储', 'External state store'),
-      t('多副本水平扩展', 'Multi-replica horizontal scale'),
+      t('持久 Task 与恢复', 'Durable Tasks and recovery'),
+      t('模型路由与成本优化', 'Model routing and cost optimization'),
+      t('治理 Control Plane', 'Governance Control Plane'),
     ],
   },
   {
     phase: t('阶段三', 'Phase 3'),
     status: t('愿景', 'VISION'),
     active: false,
-    title: t('跨节点 A2A 协作', 'Cross-node A2A Collaboration'),
+    title: t('跨应用持续优化', 'Cross-application Optimization'),
     items: [
-      t('Agent 发现与注册', 'Agent discovery & registry'),
-      t('跨 Agent 任务委托', 'Cross-agent task delegation'),
-      t('A2A 协议标准化', 'A2A protocol standard'),
+      t('评测与运行反馈', 'Evaluation and operational feedback'),
+      t('分布式基础与 Flow', 'Distributed foundation and Flows'),
+      t('受治理的多 Agent 协作', 'Governed multi-Agent collaboration'),
     ],
   },
 ])
@@ -222,21 +221,21 @@ const flowColumns = computed(() => [
         </p>
 
         <h1 class="hero-headline">
-          <span class="headline-tag">{{ t('企业 Agent 操作系统', 'The Enterprise Agent OS') }}</span><br>
-          <span class="headline-white">{{ t('说一句话，', 'Say it in plain language.') }}</span><br>
-          <span class="headline-amber">{{ t('一支 Agent 团队替你交付', 'A team of agents delivers.') }}</span>
+          <span class="headline-tag">{{ t('企业 AI 应用的 Agent Harness OS', 'The Agent Harness OS for Enterprise AI') }}</span><br>
+          <span class="headline-white">{{ t('构建企业 AI 应用，', 'Build enterprise AI applications.') }}</span><br>
+          <span class="headline-amber">{{ t('统一治理每一次 AI 行动。', 'Govern every AI action.') }}</span>
         </h1>
 
         <p class="hero-sub">
           {{ t(
-            '你用一句自然语言发布任务 → OryxOS 把它拆解 → 组织一支 Agent 团队 → 分工协作 → 交付结果。今天：一句话定义一个 Agent，带记忆、24 个内置工具、MCP、Skill、定时与全链路审计，立刻上线。私有部署在你自己的 K8s 或服务器上，数据不出域——让每一家公司，都能用自然语言跑起来自己的 Agent。',
-            'Describe a task in one sentence → OryxOS decomposes it → assembles a team of agents → they collaborate → the result is delivered. Today: define an agent in one sentence — memory, 24 built-in tools, MCP, skills, scheduling, and a full audit trail included — and it goes live instantly. Self-hosted on your own K8s or servers, data stays home. So every company can run its own agents, in plain language.'
+            '企业团队在 OryxOS 上组合 Agent、模型、知识、Tool、MCP 与 Flow，构建自己的研发自动化、知识支持、工单协同和运维应用。OryxOS 提供共享 Runtime、治理、模型路由与成本优化；应用自由组合能力，但不能绕过治理。',
+            'Enterprise teams compose Agents, models, knowledge, Tools, MCP, and Flows on OryxOS to build their own engineering automation, knowledge support, ticketing, and operations applications. OryxOS provides the shared Runtime, governance, model routing, and cost optimization; applications compose freely, but cannot bypass governance.'
           ) }}
         </p>
 
         <div class="hero-ctas">
           <a class="btn-primary" :href="withBase(t('/zh/docs/what', '/docs/what'))">
-            {{ t('快速开始', 'Get Started') }}
+            {{ t('了解 OryxOS', 'Explore OryxOS') }}
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h10M8 3l4 4-4 4"/></svg>
           </a>
           <a class="btn-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">
@@ -256,31 +255,30 @@ const flowColumns = computed(() => [
           <div class="terminal-body">
             <div class="term-line">
               <span class="term-prompt">❯</span>
-              <span class="term-cmd">oryxos init</span>
+            <span class="term-cmd">POST /tasks</span>
             </div>
-            <div class="term-output">✓ Workspace initialized at .oryxos/</div>
-            <div class="term-output dim">  agents/ · memory/ · sessions/ · logs/ · oryxos.db</div>
+            <div class="term-output">✓ Task accepted: release-diagnostics</div>
+            <div class="term-output dim">  identity · business context · requested capability</div>
             <div class="term-spacer"></div>
             <div class="term-line">
               <span class="term-prompt">❯</span>
-              <span class="term-cmd">oryxos chat --profile ops-agent</span>
+            <span class="term-cmd">oryxos runtime execute release-diagnostics</span>
             </div>
-            <div class="term-output dim">Loaded profile: ops-agent (deepseek-chat)</div>
-            <div class="term-output dim">Memory: 3 entries loaded from MEMORY.md</div>
+            <div class="term-output dim">Policy: production-readonly · approval required for changes</div>
+            <div class="term-output dim">Model route: quality=balanced · cost=within budget</div>
             <div class="term-spacer"></div>
             <div class="term-line">
-              <span class="term-user">you</span>
-              <span class="term-msg">{{ t('检查一下 nginx 最近的错误日志', 'Check nginx error logs from the last hour') }}</span>
+              <span class="term-user">task</span>
+              <span class="term-msg">{{ t('定位本次发布后的异常并生成报告', 'Diagnose post-release errors and produce a report') }}</span>
             </div>
             <div class="term-spacer"></div>
-            <div class="term-output agent-label">{{ t('[ops-agent] 思考中...', '[ops-agent] Thinking...') }}</div>
-            <div class="term-output dim">  → Tool: shell</div>
-            <div class="term-output dim">  → Input: tail -n 100 /var/log/nginx/error.log | grep "$(date +%H)"</div>
-            <div class="term-output dim">  → SandboxChecker: ✓ allowed</div>
+            <div class="term-output agent-label">{{ t('[runtime] 受治理执行中...', '[runtime] Governed execution...') }}</div>
+            <div class="term-output dim">  → Knowledge: release runbook</div>
+            <div class="term-output dim">  → Tool: observability query</div>
+            <div class="term-output dim">  → Policy + sandbox: ✓ allowed</div>
             <div class="term-spacer"></div>
-            <div class="term-output agent-label">{{ t('[ops-agent]', '[ops-agent]') }}</div>
-            <div class="term-output">{{ t('过去 1 小时发现 3 个 502 错误，均来自 upstream backend:8080', 'Found 3 × 502 errors in the last hour, all from upstream backend:8080') }}</div>
-            <div class="term-output">{{ t('建议检查后端服务健康状态。需要我运行诊断命令吗？', 'Recommend checking backend service health. Want me to run a diagnostic?') }}</div>
+            <div class="term-output agent-label">{{ t('[audit] 执行证据已记录', '[audit] Execution evidence recorded') }}</div>
+            <div class="term-output">{{ t('报告已生成；模型、Tool、成本与 Trace 均可追溯。', 'Report ready; model, Tool, cost, and trace are all attributable.') }}</div>
             <div class="term-spacer"></div>
             <div class="term-line">
               <span class="term-prompt">❯</span>
@@ -295,28 +293,28 @@ const flowColumns = computed(() => [
     <div class="stats-bar">
       <div class="stats-inner">
         <div class="stat">
-          <span class="stat-num">1</span>
-          <span class="stat-label">{{ t('句话定义一个 Agent', 'sentence defines an agent') }}</span>
+          <span class="stat-num">01</span>
+          <span class="stat-label">{{ t('共享 Runtime', 'shared Runtime') }}</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
-          <span class="stat-num">30+</span>
-          <span class="stat-label">{{ t('REST 端点', 'REST endpoints') }}</span>
+          <span class="stat-num">02</span>
+          <span class="stat-label">{{ t('统一治理', 'governed actions') }}</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
-          <span class="stat-num">24</span>
-          <span class="stat-label">{{ t('内置工具', 'built-in tools') }}</span>
+          <span class="stat-num">03</span>
+          <span class="stat-label">{{ t('模型路由', 'model routing') }}</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
-          <span class="stat-num">3</span>
-          <span class="stat-label">{{ t('记忆层', 'memory layers') }}</span>
+          <span class="stat-num">04</span>
+          <span class="stat-label">{{ t('成本优化', 'cost optimization') }}</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat">
-          <span class="stat-num">∞</span>
-          <span class="stat-label">{{ t('并发 Agent', 'concurrent agents') }}</span>
+          <span class="stat-num">05</span>
+          <span class="stat-label">{{ t('开放扩展', 'open extensions') }}</span>
         </div>
       </div>
     </div>
@@ -325,12 +323,12 @@ const flowColumns = computed(() => [
     <section class="section section-dark">
       <div class="section-inner">
         <div class="section-header">
-          <span class="section-label">{{ t('运行原理', 'HOW IT WORKS') }}</span>
-          <h2 class="section-h2">{{ t('Runtime 跑一个，OS 管一群。', 'Runtime for one. OS for many.') }}</h2>
+          <span class="section-label">{{ t('整体架构', 'ARCHITECTURE') }}</span>
+          <h2 class="section-h2">{{ t('企业应用构建在统一运行与治理底座之上。', 'Enterprise applications, one shared runtime and governance foundation.') }}</h2>
         </div>
 
         <div class="arch-diagram">
-          <img :src="withBase('/images/architecture.svg')" alt="OryxOS Architecture" class="arch-img"/>
+          <img :src="withBase(t('/images/oryxos-overview-zh.svg', '/images/oryxos-overview-en.svg'))" :alt="t('OryxOS 整体架构', 'OryxOS architecture overview')" class="arch-img"/>
         </div>
       </div>
     </section>
@@ -340,7 +338,7 @@ const flowColumns = computed(() => [
       <div class="section-inner">
         <div class="section-header">
           <span class="section-label">{{ t('核心能力', 'CORE CAPABILITIES') }}</span>
-          <h2 class="section-h2">{{ t('一个目录，无限 Agent。', 'One directory. Unlimited agents.') }}</h2>
+          <h2 class="section-h2">{{ t('应用负责业务，OryxOS 负责让能力可组合、行动可治理。', 'Applications own the business. OryxOS makes capabilities composable and actions governable.') }}</h2>
         </div>
 
         <div class="caps-grid">
@@ -350,7 +348,6 @@ const flowColumns = computed(() => [
               <h3 class="cap-title">{{ cap.title }}</h3>
               <p class="cap-desc">{{ cap.desc }}</p>
             </div>
-            <pre class="cap-code"><code>{{ cap.code }}</code></pre>
           </div>
         </div>
       </div>
@@ -379,7 +376,7 @@ const flowColumns = computed(() => [
       <div class="section-inner">
         <div class="section-header">
           <span class="section-label">{{ t('路线图', 'ROADMAP') }}</span>
-          <h2 class="section-h2">{{ t('慢就是快，分阶段克制。', 'Built to grow. Phase by phase.') }}</h2>
+          <h2 class="section-h2">{{ t('先把共同运行语义做稳，再让能力跨应用积累。', 'Stabilize shared runtime semantics first, then let capabilities compound across applications.') }}</h2>
         </div>
 
         <div class="roadmap-grid">
@@ -403,8 +400,8 @@ const flowColumns = computed(() => [
         <div class="cta-grid">
           <div class="cta-left">
             <span class="section-label label-dark">{{ t('立即开始', 'GET STARTED') }}</span>
-            <h2 class="cta-h2">{{ t('从一个 Agent 到一群 Agent 的运行底座。', 'From one agent to a fleet.') }}</h2>
-            <p class="cta-sub">{{ t('初始化工作区、配置 LLM Provider、开始对话。5 分钟搭起你的第一个 Agent，随时扩展到一群。', 'Initialize the workspace, configure an LLM provider, and start chatting. Your first agent in under 5 minutes — scale to a fleet whenever you\'re ready.') }}</p>
+            <h2 class="cta-h2">{{ t('为企业构建自己的 AI 应用运行底座。', 'Build the operating foundation for your enterprise AI applications.') }}</h2>
+            <p class="cta-sub">{{ t('从一个受治理的应用开始，将模型、知识、Tool 与企业系统组合起来；治理、成本与运行证据由底座统一承接。', 'Start with one governed application. Compose models, knowledge, Tools, and enterprise systems while the platform carries governance, cost, and execution evidence.') }}</p>
             <div class="cta-btns">
               <a class="btn-dark" :href="withBase(t('/zh/docs/what', '/docs/what'))">{{ t('查看文档', 'Read the Docs') }}</a>
               <a class="btn-dark-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">GitHub</a>
@@ -417,17 +414,15 @@ const flowColumns = computed(() => [
                 <span class="dot dot-dark"></span>
                 <span class="dot dot-dark"></span>
               </div>
-              <pre class="cta-code"><code><span class="code-comment"># 1. {{ t('初始化工作区', 'Initialize the workspace') }}</span>
-<span class="code-prompt">❯</span> oryxos init
+              <pre class="cta-code"><code><span class="code-comment"># 1. {{ t('构建并启动 Runtime', 'Build and start the Runtime') }}</span>
+<span class="code-prompt">❯</span> mvn package -DskipTests
+<span class="code-prompt">❯</span> bin/start.sh
 
-<span class="code-comment"># 2. {{ t('配置你的 LLM Provider', 'Configure your LLM provider') }}</span>
-<span class="code-prompt">❯</span> export DEEPSEEK_API_KEY=your-key-here
+<span class="code-comment"># 2. {{ t('组合你的业务能力', 'Compose business capabilities') }}</span>
+<span class="code-prompt">❯</span> Agent + Knowledge + Tools + MCP + Flow
 
-<span class="code-comment"># 3. {{ t('启动你的第一个 Agent', 'Start your first agent') }}</span>
-<span class="code-prompt">❯</span> oryxos chat --profile ops-agent
-
-<span class="code-comment"># {{ t('或启动 REST API 服务', 'Or launch the REST API') }}</span>
-<span class="code-prompt">❯</span> oryxos serve --port 8080</code></pre>
+<span class="code-comment"># 3. {{ t('运行并治理每一次行动', 'Run and govern every action') }}</span>
+<span class="code-prompt">❯</span> Task → Policy → Model / Tool → Audit</code></pre>
             </div>
           </div>
         </div>
@@ -439,7 +434,7 @@ const flowColumns = computed(() => [
       <div class="footer-inner">
         <div class="footer-brand">
           <span class="footer-logo">Oryx<strong>OS</strong></span>
-          <span class="footer-tagline">{{ t('分布式 Agent Harness OS · 私有部署', 'Distributed Agent Harness OS · Self-hosted') }}</span>
+          <span class="footer-tagline">{{ t('企业 AI 应用的 Agent Harness OS · 私有部署', 'Agent Harness OS for enterprise AI applications · Self-hosted') }}</span>
         </div>
         <div class="footer-links">
           <a :href="withBase(t('/zh/docs/what', '/docs/what'))" class="footer-link">{{ t('文档', 'Docs') }}</a>

@@ -1,17 +1,19 @@
 # What is OryxOS
 
-***OryxOS is an open-source Agent Harness OS for enterprise AI applications. Applications bring their business rules, data, systems, and user experience; OryxOS provides the shared runtime and governance foundation for Agents and Tasks.***
+***OryxOS is an open-source Agent Harness OS for enterprise AI applications. Applications bring their business rules, data, systems, and user experience; OryxOS provides the shared runtime, governance, and operational optimization foundation for Agents and Tasks.***
 
-![enterprise AI applications connect to the OryxOS Agent Runtime and governance foundation](/images/runtime-governance-en.svg)
+![OryxOS architecture overview](/images/oryxos-overview-en.svg)
 
-![OryxOS Architecture](/images/architecture.svg)
+Application teams compose Agents, models, Knowledge, Tools, MCP servers, and Flows to solve business problems. OryxOS supplies the shared execution semantics that make those applications extensible, governable, and operable across the organization.
+
+The principle is simple: **applications can freely compose capabilities, but cannot bypass governance.** Identity, authorization, policy, approval, model routing, Tool execution, audit, trace, cost attribution, and state updates all belong to the execution path.
 
 ## Where we are on that road
 
 We distinguish the target platform model from what is available in the current runtime:
 
 - **Available today**: define an Agent in **one sentence** or one markdown directory and run it on your own infrastructure with model providers, Memory, Knowledge, built-in Tools, MCP, Skills, notifications, scheduling, sandbox controls, audit records, REST APIs, and a Web Manager.
-- **Evolving**: make a durable, governed **Task** the common unit for enterprise AI applications, with stronger checkpoint/recovery, approval, policy, cost, evaluation, distributed-runtime, and Control Plane capabilities.
+- **Evolving**: make a durable, governed **Task** the common unit for enterprise AI applications, with stronger checkpoint/recovery, approval, policy, model routing, cost optimization, evaluation, distributed-runtime, and Control Plane capabilities.
 - **Exploratory**: optimize models, capabilities, quality, cost, and risk across applications; support governed multi-Agent collaboration and broad ecosystem interoperability. See the [Roadmap](./roadmap).
 
 Every meaningful AI action should follow a consistent execution path:
@@ -24,13 +26,13 @@ Task -> Identity -> Authorization -> Policy -> Approval
 
 The path is the project direction. Individual capabilities are delivered incrementally and are labeled accordingly in this documentation.
 
-## The Agent formula
+## How applications use OryxOS
 
-Everything an agent needs is **built into the OS**. An agent is just a declaration of intent that references those capabilities by name:
+OryxOS gives applications a shared capability layer. An application chooses the Agents, models, knowledge, Tools, MCP servers, and Flows it needs; the platform supplies the Runtime and governance semantics around them.
 
-![natural language + Memory + Tools + MCP + Skills + Knowledge + Notify = a working Agent](/images/agent-formula-en.svg)
+This lets business teams build domain applications without rebuilding the underlying AI infrastructure. The same Runtime can serve R&amp;D automation, knowledge support, ticket collaboration, operations diagnostics, and other enterprise use cases.
 
-This is the practical starting point of OryxOS: **drive the cost of defining an Agent toward zero.** You write what you want; the runtime supplies capabilities, safety boundaries, and execution evidence.
+One directory = one Agent remains a practical entry point. You write intent; the Runtime supplies capabilities, safety boundaries, and execution evidence.
 
 Concretely, **one directory = one Agent**: a folder under `.oryxos/agents/<name>/` with an `AGENT.md` — YAML frontmatter as the agent's profile (identity, which LLM it talks to, which tools/skills it references) plus a body of task instructions. Drop the directory in and it goes live. Create, edit, and delete agents at runtime over the REST API or the web console — including generating a complete agent from a single sentence. Business systems integrate over HTTP. Data never leaves your infrastructure.
 
@@ -50,11 +52,11 @@ An enterprise needs more than one Agent, but the platform must also give every a
 
 A model generates text. A harness turns one model into one Agent that actually works. A Harness **OS** gives every Agent and application shared execution, capability, and governance semantics; multi-Agent teams are an evolving use case on top of that foundation.
 
-## Five Core Capabilities
+## Core platform capabilities
 
-### LLM Routing
+### Model routing and cost optimization
 
-Provider abstraction over mainstream models: DeepSeek, Qwen, Kimi, Zhipu, Hunyuan, Doubao, Anthropic, OpenAI, and any OpenAI-protocol-compatible endpoint. Agents are provider-agnostic — an agent declares which provider to use by name and never knows which vendor is behind the call. Providers live in a dynamic registry with full CRUD (over REST or the console) — seeded from config on first startup, then authoritative in the database, so you add or re-key a provider at runtime with no restart. Multiple providers co-exist via explicit name-to-model routing, and local inference via Ollama or vLLM is supported.
+OryxOS routes model use according to task requirements such as quality, latency, availability, cost, and data boundaries. Provider abstraction keeps applications independent of any one vendor, while a dynamic registry allows Providers to be added, changed, and switched at runtime. Fallback, budgets, quotas, and organization-wide cost optimization are evolving capabilities.
 
 ### ReAct Loop
 
@@ -87,6 +89,7 @@ On top of it sits a web console at `/admin/`: an overview dashboard, agent manag
 ## Design Principles
 
 - **Platform before Agent** — the most important deliverable is the environment that lets any agent run reliably, not any particular agent
+- **Applications compose; governance cannot be bypassed** — models and Tools remain flexible, while policy, approval, audit, and operational evidence follow every meaningful action
 - **Self-implement the core, reuse the plumbing** — the reasoning loop is written by hand; vendor protocol adapters are delegated to a mature adapter layer
 - **One directory = one Agent** — an agent is defined by a directory of markdown, not by code
 - **Open standards** — MCP for tools, A2A for agent-to-agent collaboration, open formats for skills

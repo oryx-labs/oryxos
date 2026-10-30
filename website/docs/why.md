@@ -27,7 +27,7 @@ OryxOS addresses all four barriers with a shared Agent Runtime and governance fo
 
 **So every company can build and run its own AI applications — with a shared, governable foundation.**
 
-## Why a team of agents, not one super-agent
+## Agent teams are an evolving application pattern
 
 Real work is rarely one skill. "Research the market, draft the report, have someone check the numbers, send it to the team" is a *team's* job — decompose, parallelize, review, deliver. OryxOS treats this as an evolving use case built on shared Tasks and governance, not as the definition of the current product:
 
@@ -43,15 +43,15 @@ The common assumption is that better agents need better models. In production, t
 
 A framework gives you one harness inside your own code. OryxOS ships the harness *as infrastructure* and shares it across applications — which changes who can use it: with a framework, engineers build Agents; with an OS, **anyone who can describe the work** can help deliver an enterprise AI application.
 
-## What OryxOS is not
+## The foundation OryxOS provides
 
-**Not a cloud platform.** No managed offering, no telemetry collection, no dependency on any external cloud service. It's a binary on your infrastructure.
+**Self-hosted execution.** OryxOS runs on your own infrastructure, keeping enterprise data and operations inside your environment.
 
-**Not a single-agent tool.** A tool that wraps one LLM call in a loop is a script — one harness, hard-coded. OryxOS provides a reusable harness to multiple applications and Agents: one directory per Agent, runtime lifecycle management, and shared capabilities across them.
+**A reusable application runtime.** OryxOS gives multiple applications and Agents a shared harness: runtime lifecycle management, common capability registries, and stable interfaces for enterprise integration.
 
-**Not another framework port.** OryxOS makes its own architectural bets: a self-implemented, fully inspectable ReAct loop instead of a framework-managed one; synchronous execution on virtual threads instead of async/reactive; explicit provider routing instead of auto-wiring; durable persistence over in-memory state.
+**A controllable execution kernel.** The ReAct loop is self-implemented and inspectable; provider routing is explicit; execution and persistence remain under OryxOS control.
 
-**Not production-complete on day one.** What's available is the single-node runtime kernel — Agent definitions, model providers, Memory, Knowledge, Tools, MCP, scheduling, sandbox controls, audit records, REST APIs, and the Web Manager. Durable Task recovery, approval workflows, cost and evaluation operations, distributed runtime, and governed multi-Agent teams remain evolving or exploratory work.
+**A platform evolving in public.** The single-node runtime kernel is available today: Agent definitions, model Providers, Memory, Knowledge, Tools, MCP, scheduling, sandbox controls, audit records, REST APIs, and the Web Manager. Durable Task recovery, approval workflows, model routing and cost operations, distributed runtime, and governed multi-Agent teams continue to evolve.
 
 ## Why now
 
@@ -59,4 +59,4 @@ A framework gives you one harness inside your own code. OryxOS ships the harness
 
 **Open standards just matured.** MCP has become the de facto standard for tool interoperability; A2A is emerging for cross-agent coordination. OryxOS builds on both from the start, so what plugs into OryxOS works in the broader ecosystem and vice versa.
 
-**The alternative is worse.** Without a purpose-built agent OS, teams bolt together controllers, hand-rolled prompt assembly, home-grown tool dispatch, log-only audit, and no shared memory. It works until it doesn't — and debugging it in production is archaeology. A runtime with clear contracts, persistent audit, and a defined extension model is the better foundation.
+**The practical reason is operational consistency.** When each application assembles its own prompt logic, tool dispatch, audit, and cost handling, every production incident becomes application-specific. A shared Runtime with explicit contracts, persistent audit, and a defined extension model lets the enterprise improve these concerns once and reuse the result everywhere.
