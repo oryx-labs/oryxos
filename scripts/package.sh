@@ -2,16 +2,11 @@
 # Package OryxOS changed files into a tar.gz and sync to remote server.
 # Usage: ./scripts/package.sh [output_dir]
 #
-# Deploy target is read from the environment (never hardcode server
-# addresses / credentials in version control):
-#   ORYXOS_DEPLOY_HOST  (required) SSH target, e.g. "deploy@example.com" or an ssh-config alias
-#   ORYXOS_DEPLOY_DIR   (optional) remote checkout directory, default "/opt/oryxos"
-
 set -euo pipefail
 
 # ── Configuration ─────────────────────────────────────────────────────────────
-REMOTE_HOST="${ORYXOS_DEPLOY_HOST:-}"
-REMOTE_DIR="${ORYXOS_DEPLOY_DIR:-/opt/oryxos}"
+REMOTE_HOST="root@117.72.92.117"
+REMOTE_DIR="/root/oryxos"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -21,56 +16,6 @@ OUTPUT_DIR="${1:-$PROJECT_ROOT}"
 info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; }
-
-# ── Validate deploy target ───────────────────────────────────────────────────────
-if [[ -z "$REMOTE_HOST" ]]; then
-  error "ORYXOS_DEPLOY_HOST is not set."
-  error "Set the deploy target first, e.g.:"
-  error "  export ORYXOS_DEPLOY_HOST=deploy@your-server"
-  error "  export ORYXOS_DEPLOY_DIR=/opt/oryxos   # optional, this is the default"
-  exit 1
-fi
-
-# ── Commit message builder ──────────────────────────────────────────────────────
-# Derive a meaningful commit message from the changed / deleted file lists:
-#   subject line summarises the affected top-level areas + file counts,
-#   body lists the files (capped to keep the message readable).
-build_commit_message() {
-  local changed="$1" deleted="$2"
-  local n_changed n_deleted areas subject
-  local -i cap=30
-
-  n_changed=$(printf '%s\n' "$changed" | grep -c '[^[:space:]]' || true)
-  n_deleted=$(printf '%s\n' "$deleted" | grep -c '[^[:space:]]' || true)
-  [[ "$n_changed" =~ ^[0-9]+$ ]] || n_changed=0
-  [[ "$n_deleted" =~ ^[0-9]+$ ]] || n_deleted=0
-
-  # Distinct top-level path segments touched (e.g. "docs, scripts, website")
-  areas=$(printf '%s\n%s\n' "$changed" "$deleted" \
-    | grep '[^[:space:]]' \
-    | sed 's#/.*##' \
-    | sort -u | paste -sd ', ' -)
-
-  if [[ "$n_changed" -gt 0 && "$n_deleted" -gt 0 ]]; then
-    subject="chore: sync ${areas:-changes} (${n_changed} changed, ${n_deleted} deleted)"
-  elif [[ "$n_deleted" -gt 0 ]]; then
-    subject="chore: remove ${n_deleted} file(s) in ${areas:-repo}"
-  else
-    subject="chore: update ${areas:-changes} (${n_changed} file(s))"
-  fi
-
-  printf '%s\n' "$subject"
-  if [[ "$n_changed" -gt 0 ]]; then
-    printf '\nChanged:\n'
-    printf '%s\n' "$changed" | grep '[^[:space:]]' | head -n "$cap" | sed 's/^/  - /'
-    [[ "$n_changed" -gt "$cap" ]] && printf '  - ... and %s more\n' "$((n_changed - cap))"
-  fi
-  if [[ "$n_deleted" -gt 0 ]]; then
-    printf '\nDeleted:\n'
-    printf '%s\n' "$deleted" | grep '[^[:space:]]' | head -n "$cap" | sed 's/^/  - /'
-    [[ "$n_deleted" -gt "$cap" ]] && printf '  - ... and %s more\n' "$((n_deleted - cap))"
-  fi
-}
 
 # ── Version / archive name ─────────────────────────────────────────────────────
 VERSION=$(git -C "$PROJECT_ROOT" describe --tags --always --dirty 2>/dev/null || echo "dev")
@@ -85,6 +30,8 @@ LOCAL_BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD)
 info "Local branch: ${LOCAL_BRANCH}"
 
 # ── Collect changed files ──────────────────────────────────────────────────────
+# --no-renames: treat a rename as a delete + add. The ACM/D filters below would
+# otherwise omit it because they do not include Git's R status.
 # 1. Committed locally but not yet pushed
 COMMITTED_FILES=$(git -C "$PROJECT_ROOT" -c core.quotepath=false diff --no-renames --name-only --diff-filter=ACM \
   "origin/${LOCAL_BRANCH}" HEAD 2>/dev/null || true)
@@ -113,14 +60,13 @@ while IFS= read -r f; do
 done <<< "$_DELETED_RAW"
 DELETED_FILES="${DELETED_FILES%$'\n'}"
 
-# Combine, deduplicate, exclude archives and target/ directories
+# Combine and deduplicate. Like RobustMQ, only generated archives are excluded;
+# every other unignored file is eligible for the incremental package.
 count_lines() { echo "${1}" | grep -c '[^[:space:]]' 2>/dev/null || echo 0; }
 
 ALL_FILES=$(printf '%s\n%s\n%s' \
     "$COMMITTED_FILES" "$WORKDIR_FILES" "$UNTRACKED_FILES" \
   | grep -v '\.tar\.gz$' \
-  | grep -v '^target/' \
-  | grep -v '/target/' \
   | grep '[^[:space:]]' \
   | sort -u || true)
 
@@ -150,27 +96,6 @@ else
   info "Archive created: $ARCHIVE ($(du -sh "$ARCHIVE" | cut -f1))"
 fi
 
-# ── Build commit message (base64-encoded to survive multi-line transport) ───────
-# Temporarily relax pipefail so diagnostic pipes don't abort the script.
-set +e
-COMMIT_MSG=$(build_commit_message "$ALL_FILES" "$DELETED_FILES")
-[[ -z "$COMMIT_MSG" ]] && COMMIT_MSG="chore: sync local changes"
-COMMIT_MSG_B64=$(printf '%s' "$COMMIT_MSG" | base64 | tr -d '\n')
-[[ -z "$COMMIT_MSG_B64" ]] && COMMIT_MSG_B64=$(printf '%s' "$COMMIT_MSG" | openssl base64 | tr -d '\n')
-info "Commit message:"
-printf '%s\n' "$COMMIT_MSG" | sed 's/^/  | /'
-set -e
-
-# ── Local commit first: 网络/远端任何一步失败，本地工作也已留痕 ────────────────
-info "Committing local changes ..."
-git -C "$PROJECT_ROOT" add -A
-if git -C "$PROJECT_ROOT" diff --cached --quiet; then
-  info "Nothing to commit locally."
-else
-  git -C "$PROJECT_ROOT" commit -m "$COMMIT_MSG"
-  info "Local commit done."
-fi
-
 # ── Upload archive ─────────────────────────────────────────────────────────────
 ARCHIVE_NAME="$(basename "$ARCHIVE")"
 if [[ "${SKIP_ARCHIVE}" -eq 0 ]]; then
@@ -192,8 +117,7 @@ ssh "${REMOTE_HOST}" \
   ARCHIVE_NAME="${ARCHIVE_NAME}" \
   SKIP_ARCHIVE="${SKIP_ARCHIVE}" \
   DELETED_LIST_B64="${DELETED_LIST_B64}" \
-  COMMIT_MSG_B64="${COMMIT_MSG_B64}" \
-  'bash -s' <<'REMOTE_SCRIPT' || true
+  'bash -s' <<'REMOTE_SCRIPT'
 set -euo pipefail
 
 info()  { echo "[INFO]  $*"; }
@@ -201,19 +125,33 @@ error() { echo "[ERROR] $*" >&2; }
 
 cd "${REMOTE_DIR}"
 
-# Switch branch if needed
+# Switch to the same branch as local, creating it if it does not exist on a
+# remote yet. This permits syncing a new branch and a branch known only upstream.
 REMOTE_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 info "Remote branch: ${REMOTE_BRANCH}"
 if [[ "${REMOTE_BRANCH}" != "${LOCAL_BRANCH}" ]]; then
   info "Switching to branch ${LOCAL_BRANCH} ..."
-  git fetch origin
-  git checkout "${LOCAL_BRANCH}" 2>/dev/null \
-    || git checkout -b "${LOCAL_BRANCH}" "origin/${LOCAL_BRANCH}"
+  git fetch origin --prune || true
+  git fetch upstream --prune 2>/dev/null || true
+  if git rev-parse --verify --quiet "refs/heads/${LOCAL_BRANCH}" >/dev/null; then
+    git checkout "${LOCAL_BRANCH}"
+  elif git rev-parse --verify --quiet "refs/remotes/origin/${LOCAL_BRANCH}" >/dev/null; then
+    git checkout -b "${LOCAL_BRANCH}" "origin/${LOCAL_BRANCH}"
+  elif git rev-parse --verify --quiet "refs/remotes/upstream/${LOCAL_BRANCH}" >/dev/null; then
+    info "Branch only on upstream; basing ${LOCAL_BRANCH} on upstream/${LOCAL_BRANCH}."
+    git checkout -b "${LOCAL_BRANCH}" "upstream/${LOCAL_BRANCH}"
+  else
+    info "Branch ${LOCAL_BRANCH} not found on any remote; creating from current HEAD."
+    git checkout -b "${LOCAL_BRANCH}"
+  fi
 fi
 
-# Pull latest before extracting so conflicts are resolved in order
-info "Pulling origin/${LOCAL_BRANCH} ..."
-git pull origin "${LOCAL_BRANCH}"
+# Pull only after the branch exists on origin; a new local branch has no remote
+# ref to pull yet and will be created by the push below.
+if git rev-parse --verify --quiet "refs/remotes/origin/${LOCAL_BRANCH}" >/dev/null; then
+  info "Pulling origin/${LOCAL_BRANCH} ..."
+  git pull --no-rebase origin "${LOCAL_BRANCH}"
+fi
 
 # Extract the uploaded archive (overwrites pulled content with local changes)
 if [[ "${SKIP_ARCHIVE}" -eq 0 && -f "${ARCHIVE_NAME}" ]]; then
@@ -242,9 +180,7 @@ git add -A
 if git diff --cached --quiet; then
   info "Nothing to commit on remote."
 else
-  COMMIT_MSG=$(printf '%s' "${COMMIT_MSG_B64:-}" | base64 -d 2>/dev/null || true)
-  [[ -z "${COMMIT_MSG}" ]] && COMMIT_MSG="chore: sync local changes"
-  git commit -m "${COMMIT_MSG}"
+  git commit -m 'dev'
 
   MAX_RETRIES=3
   RETRY=0
@@ -278,20 +214,26 @@ REMOTE_SCRIPT
 
 info "Remote sync complete."
 
-# ── Converge with origin: 远端替我们 commit+push 的是同内容的另一个 SHA，
-#    不收敛的话本地和 origin 会永久分叉（曾累积到 5:5）。──────────────────────
-info "Converging local history with origin/${LOCAL_BRANCH} ..."
-if ! git -C "$PROJECT_ROOT" fetch origin "${LOCAL_BRANCH}" --quiet; then
-  warn "fetch origin failed; skip converge (local commit kept)."
-elif git -C "$PROJECT_ROOT" diff --quiet "origin/${LOCAL_BRANCH}" HEAD; then
-  git -C "$PROJECT_ROOT" reset --hard "origin/${LOCAL_BRANCH}" >/dev/null
-  info "Local branch now matches origin/${LOCAL_BRANCH} (adopted remote history)."
-else
-  if git -C "$PROJECT_ROOT" rebase "origin/${LOCAL_BRANCH}"; then
-    info "Rebased local commits onto origin/${LOCAL_BRANCH}."
+# ── Local commit: stage exactly the packaged files ────────────────────────────
+# This deliberately runs after remote sync. Unpackaged changes remain unstaged,
+# matching RobustMQ's incremental-sync semantics.
+if [[ "${SKIP_ARCHIVE}" -eq 0 && -n "$ALL_FILES" ]]; then
+  info "Committing packaged files locally ..."
+  while IFS= read -r f; do
+    [[ -n "$f" ]] && git -C "$PROJECT_ROOT" add -- "$f" 2>/dev/null || true
+  done <<< "$ALL_FILES"
+
+  if [[ -n "$DELETED_FILES" ]]; then
+    while IFS= read -r f; do
+      [[ -n "$f" ]] && git -C "$PROJECT_ROOT" rm --cached -- "$f" 2>/dev/null || true
+    done <<< "$DELETED_FILES"
+  fi
+
+  if git -C "$PROJECT_ROOT" diff --cached --quiet; then
+    info "Nothing to commit locally."
   else
-    git -C "$PROJECT_ROOT" rebase --abort || true
-    warn "origin 与本地内容不同且 rebase 冲突，保留本地提交，请人工处理。"
+    git -C "$PROJECT_ROOT" commit -m 'dev'
+    info "Local commit done. Unpackaged files remain unstaged."
   fi
 fi
 
