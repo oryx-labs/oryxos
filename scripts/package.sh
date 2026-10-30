@@ -17,6 +17,46 @@ info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; }
 
+# ── Pull request helpers ─────────────────────────────────────────────────────
+# The repository's origin is GitHub, where merge requests are represented as
+# pull requests. A branch may have at most one relevant PR in this workflow:
+# if one already exists (open, closed, or merged), leave it untouched; otherwise
+# create an open PR against main after a successful package sync.
+ensure_pull_request() {
+  local branch="$1" existing_pr pr_title
+
+  # The default branch is not merged into itself.
+  if [[ "$branch" == "main" ]]; then
+    info "Current branch is main; skipping pull request check."
+    return 0
+  fi
+
+  if ! command -v gh >/dev/null 2>&1; then
+    warn "GitHub CLI (gh) is unavailable; skipping pull request check."
+    return 0
+  fi
+
+  if ! existing_pr=$(gh pr list --head "$branch" --state all --limit 1 \
+      --json url --jq '.[0].url' 2>/dev/null); then
+    warn "Unable to check pull requests for ${branch}; package sync already completed."
+    return 0
+  fi
+
+  if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
+    info "Pull request already exists for ${branch}: ${existing_pr}"
+    return 0
+  fi
+
+  pr_title="dev: sync ${branch}"
+  info "Creating pull request: ${pr_title}"
+  if gh pr create --base main --head "$branch" --title "$pr_title" \
+      --body "Automated pull request created by scripts/package.sh for branch ${branch}."; then
+    info "Pull request created."
+  else
+    warn "Unable to create pull request for ${branch}; package sync already completed."
+  fi
+}
+
 # ── Version / archive name ─────────────────────────────────────────────────────
 VERSION=$(git -C "$PROJECT_ROOT" describe --tags --always --dirty 2>/dev/null || echo "dev")
 TIMESTAMP=$(date +%Y%m%d%H%M%S)_$$
@@ -236,6 +276,9 @@ if [[ "${SKIP_ARCHIVE}" -eq 0 && -n "$ALL_FILES" ]]; then
     info "Local commit done. Unpackaged files remain unstaged."
   fi
 fi
+
+# ── Pull request: create only when this branch has never had one ──────────────
+ensure_pull_request "$LOCAL_BRANCH"
 
 # Trap handles archive cleanup — no explicit rm needed here
 info "All done."
