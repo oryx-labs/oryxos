@@ -7,6 +7,7 @@ set -euo pipefail
 # ── Configuration ─────────────────────────────────────────────────────────────
 REMOTE_HOST="root@117.72.92.117"
 REMOTE_DIR="/root/oryxos"
+PR_REPOSITORY="oryx-labs/oryxos"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -18,12 +19,13 @@ warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; }
 
 # ── Pull request helpers ─────────────────────────────────────────────────────
-# The repository's origin is GitHub, where merge requests are represented as
-# pull requests. A branch may have at most one relevant PR in this workflow:
+# GitHub calls merge requests pull requests. A branch may have at most one
+# relevant PR in this workflow:
 # if one already exists (open, closed, or merged), leave it untouched; otherwise
-# create an open PR against main after a successful package sync.
+# create an open PR against main in the OryxOS upstream repository after a
+# successful package sync.
 ensure_pull_request() {
-  local branch="$1" existing_pr origin_url repository pr_title
+  local branch="$1" existing_pr origin_url source_repository source_owner pr_head pr_title
 
   # The default branch is not merged into itself.
   if [[ "$branch" == "main" ]]; then
@@ -44,15 +46,18 @@ ensure_pull_request() {
   fi
 
   origin_url=$(git -C "$PROJECT_ROOT" remote get-url origin)
-  repository=${origin_url#https://github.com/}
-  repository=${repository#git@github.com:}
-  repository=${repository%.git}
-  if [[ "$repository" == "$origin_url" || "$repository" != */* ]]; then
+  source_repository=${origin_url#https://github.com/}
+  source_repository=${source_repository#git@github.com:}
+  source_repository=${source_repository%.git}
+  if [[ "$source_repository" == "$origin_url" || "$source_repository" != */* ]]; then
     warn "Origin is not a GitHub owner/repository URL; skipping pull request check."
     return 0
   fi
+  source_owner=${source_repository%%/*}
+  pr_head="$branch"
+  [[ "$source_repository" != "$PR_REPOSITORY" ]] && pr_head="${source_owner}:${branch}"
 
-  if ! existing_pr=$(gh pr list --repo "$repository" --head "$branch" --state all --limit 1 \
+  if ! existing_pr=$(gh pr list --repo "$PR_REPOSITORY" --head "$pr_head" --state all --limit 1 \
       --json url --jq '.[0].url' 2>/dev/null); then
     warn "Unable to check pull requests for ${branch}; package sync already completed."
     return 0
@@ -65,7 +70,7 @@ ensure_pull_request() {
 
   pr_title="dev: sync ${branch}"
   info "Creating pull request: ${pr_title}"
-  if gh pr create --repo "$repository" --base main --head "$branch" --title "$pr_title" \
+  if gh pr create --repo "$PR_REPOSITORY" --base main --head "$pr_head" --title "$pr_title" \
       --body "Automated pull request created by scripts/package.sh for branch ${branch}."; then
     info "Pull request created."
   else
