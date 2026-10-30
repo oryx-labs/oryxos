@@ -221,7 +221,7 @@ const flowColumns = computed(() => [
         </p>
 
         <h1 class="hero-headline">
-          <span class="headline-tag">{{ t('企业 AI 应用的 Agent Harness OS', 'The Agent Harness OS for Enterprise AI') }}</span><br>
+          <span class="headline-tag">{{ t('企业 AI 应用的开源 Agent Harness OS', 'The Open-Source Agent Harness OS for Enterprise AI') }}</span><br>
           <span class="headline-white">{{ t('构建企业 AI 应用，', 'Build enterprise AI applications.') }}</span><br>
           <span class="headline-amber">{{ t('统一治理每一次 AI 行动。', 'Govern every AI action.') }}</span>
         </h1>
@@ -434,7 +434,7 @@ const flowColumns = computed(() => [
       <div class="footer-inner">
         <div class="footer-brand">
           <span class="footer-logo">Oryx<strong>OS</strong></span>
-          <span class="footer-tagline">{{ t('企业 AI 应用的 Agent Harness OS · 私有部署', 'Agent Harness OS for enterprise AI applications · Self-hosted') }}</span>
+          <span class="footer-tagline">{{ t('企业 AI 应用的开源 Agent Harness OS · 私有部署', 'Open-source Agent Harness OS for enterprise AI applications · Self-hosted') }}</span>
         </div>
         <div class="footer-links">
           <a :href="withBase(t('/zh/docs/what', '/docs/what'))" class="footer-link">{{ t('文档', 'Docs') }}</a>

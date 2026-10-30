@@ -1,8 +1,8 @@
 # Why OryxOS
 
-## Agents shouldn't belong only to big tech
+## Enterprises need an Agent Harness OS, not isolated Agents
 
-Every company has work an agent should be doing right now: the daily report someone compiles by hand, the alert that needs triaging at 3am, the PR digest, the customer question answered for the hundredth time. The models are ready. Yet in most companies, agents are still demos.
+Every company has work an AI application should be doing right now: the daily report someone compiles by hand, the alert that needs triaging at 3am, the PR digest, the customer question answered for the hundredth time. The models and Agent frameworks are ready. Yet in most companies, applications are still demos.
 
 Why? Four barriers, none of which is the model:
 
@@ -12,18 +12,18 @@ Why? Four barriers, none of which is the model:
 
 **It's a black box.** An agent that can run shell commands, write files, and call external APIs — with no record of what it did, no whitelist on what it *can* do, and no one approving the dangerous steps — is not something an enterprise can put into production.
 
-**One agent is easy. A fleet is not.** A single wrapped LLM loop is a script. Running dozens of agents — with shared providers, shared tools, schedules, lifecycle, and governance — is an operating-systems problem, and almost nobody hands you that layer.
+**One application is easy. A portfolio is not.** A single wrapped LLM loop is a script. Running many business applications — with shared models, Tools, MCP servers, identities, budgets, lifecycle, and governance — is a platform problem, and almost nobody hands you that layer.
 
 ## Our answer
 
-OryxOS addresses all four barriers with a shared Agent Runtime and governance foundation:
+OryxOS addresses all four barriers as an open-source, self-hosted Agent Harness OS: one operating foundation to **build, run, govern, and optimize** enterprise AI applications.
 
 ![natural language + Memory + Tools + MCP + Skills + Knowledge + Notify = a working Agent](/images/agent-formula-en.svg)
 
 - **Plain language instead of code.** One sentence — or one markdown directory — defines an Agent. The Runtime supplies Memory, built-in Tools, MCP connectors, Skills, notifications, and scheduling. The cost of defining an Agent trends toward zero.
 - **Your infrastructure, your data.** One self-hosted binary on your own servers or K8s. No managed service, no telemetry, no cloud lock-in.
 - **Glass box, not black box.** Every Tool call and every LLM call is persisted to audit tables from day one — what was invoked, with what arguments, what came back, and how long it took. Sandbox whitelists gate files, shell, and HTTP. Governance is part of the execution path, not a bolt-on.
-- **A shared runtime for applications.** OryxOS provides common Agent and Task semantics, provider routing, capability registries, scheduling, administration, and APIs across enterprise applications. Durable recovery, approval, cost, evaluation, and broader Control Plane features are evolving.
+- **A shared platform for applications.** OryxOS provides common Agent and Task semantics, capability registries, model routing, cost optimization, scheduling, administration, and APIs across enterprise applications. Durable recovery, approval, evaluation, and broader Control Plane features are evolving.
 
 **So every company can build and run its own AI applications — with a shared, governable foundation.**
 

@@ -6,7 +6,7 @@ const siteUrl = 'https://oryx-labs.github.io/oryxos/'
 export default defineConfig({
   title: 'OryxOS',
   titleTemplate: ':title — OryxOS',
-  description: 'The open-source Agent Harness OS for enterprise AI applications — build applications on a shared runtime and govern every AI action',
+  description: 'The open-source, self-hosted Agent Harness OS for enterprise AI applications — build, run, govern, and optimize every AI application',
   base,
   cleanUrls: true,
   appearance: 'force-light',

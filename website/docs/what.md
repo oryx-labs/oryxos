@@ -1,10 +1,12 @@
 # What is OryxOS
 
-***OryxOS is an open-source Agent Harness OS for enterprise AI applications. Applications bring their business rules, data, systems, and user experience; OryxOS provides the shared runtime, governance, and operational optimization foundation for Agents and Tasks.***
+***OryxOS is an open-source, self-hosted Agent Harness OS for enterprise AI applications. Applications bring their business rules, data, systems, and user experience; OryxOS provides the shared runtime, governance, and operational optimization foundation for Agents and Tasks.***
 
 ![OryxOS architecture overview](/images/oryxos-overview-en.svg)
 
-Application teams compose Agents, models, Knowledge, Tools, MCP servers, and Flows to solve business problems. OryxOS supplies the shared execution semantics that make those applications extensible, governable, and operable across the organization.
+OryxOS is building one operating foundation where enterprises can **build, run, govern, and optimize** their own AI applications. Application teams compose Agents, models, Knowledge, Tools, MCP servers, and Flows to solve business problems; OryxOS supplies the shared execution semantics that make those applications extensible, governable, and operable across the organization.
+
+**Agent Harness OS** describes the shared Runtime and governance semantics around every Agent and Task.
 
 The principle is simple: **applications can freely compose capabilities, but cannot bypass governance.** Identity, authorization, policy, approval, model routing, Tool execution, audit, trace, cost attribution, and state updates all belong to the execution path.
 

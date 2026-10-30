@@ -1,10 +1,12 @@
 # OryxOS 是什么
 
-***OryxOS 是面向企业 AI 应用的开源 Agent Harness OS。应用带来自己的业务规则、数据、系统和用户体验；OryxOS 为 Agent 与 Task 提供共享 Runtime、治理与运行优化底座。***
+***OryxOS 是面向企业 AI 应用的开源、自托管 Agent Harness OS。应用带来自己的业务规则、数据、系统和用户体验；OryxOS 为 Agent 与 Task 提供共享 Runtime、治理与运行优化底座。***
 
 ![OryxOS 整体架构](/images/oryxos-overview-zh.svg)
 
-应用团队可以组合 Agent、模型、Knowledge、Tool、MCP Server 和 Flow，构建面向具体业务的问题解决方案；OryxOS 则提供统一的执行语义，让这些应用能够在企业中稳定运行、持续扩展并被统一管理。
+OryxOS 正在建设一套运行底座，让企业可以在同一底座上**构建、运行、治理并持续优化**自己的 AI 应用。应用团队可以组合 Agent、模型、Knowledge、Tool、MCP Server 和 Flow，构建面向具体业务的问题解决方案；OryxOS 则提供统一的执行语义，让这些应用能够在企业中稳定运行、持续扩展并被统一管理。
+
+**Agent Harness OS** 描述围绕每一个 Agent 与 Task 的共享 Runtime 和治理语义。
 
 核心原则很简单：**应用可以自由组合能力，但不能绕过治理。** 身份、权限、策略、审批、模型路由、Tool 执行、审计、Trace、成本归集和状态更新，都属于执行路径的一部分。
 

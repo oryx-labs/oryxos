@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Build enterprise AI applications. Govern every AI action.</strong><br/>
-  <em>The open-source Agent Harness OS for the enterprise.</em>
+  <em>An open-source, self-hosted Agent Harness OS for the enterprise.</em>
 </p>
 
 <p align="center">
@@ -19,11 +19,13 @@
 
 ---
 
-**OryxOS is an open-source Agent Harness OS for enterprise AI applications.** Build R&amp;D automation, knowledge support, ticket collaboration, operations diagnostics, and other domain applications on a shared runtime. Applications own their business rules, data, integrations, and user experience; OryxOS provides the shared runtime, governance, and operational optimization beneath them.
+**OryxOS is an open-source, self-hosted Agent Harness OS for enterprise AI applications.** Build R&amp;D automation, knowledge support, ticket collaboration, operations diagnostics, and other domain applications on a shared runtime. Applications own their business rules, data, integrations, and user experience; OryxOS provides the shared runtime, governance, and operational optimization beneath them.
 
 ## What is OryxOS
 
-OryxOS is the operating foundation for enterprise AI applications. Application teams compose Agents, models, Knowledge, Tools, MCP servers, and Flows to solve business problems. OryxOS supplies the execution semantics that make those applications consistent, extensible, and operable across the organization.
+OryxOS is the operating foundation for enterprise AI applications. Its direction is to give enterprises one place to **build, run, govern, and optimize** their own AI applications. Application teams compose Agents, models, Knowledge, Tools, MCP servers, and Flows to solve business problems; OryxOS supplies the execution semantics that make those applications consistent, extensible, and operable across the organization.
+
+**Agent Harness OS** describes the shared Runtime and governance semantics around every Agent and Task.
 
 Its core principle is simple: applications can freely compose capabilities, but they cannot bypass governance. Every Task runs through a common path for identity, authorization, policy, approval, model routing, Tool execution, audit, trace, cost attribution, and state updates.
 
