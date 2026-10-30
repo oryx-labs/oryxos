@@ -235,7 +235,7 @@ const flowColumns = computed(() => [
         </p>
 
         <div class="hero-ctas">
-          <a class="btn-primary" :href="t('/zh/docs/what', '/docs/what')">
+          <a class="btn-primary" :href="withBase(t('/zh/docs/what', '/docs/what'))">
             {{ t('快速开始', 'Get Started') }}
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h10M8 3l4 4-4 4"/></svg>
           </a>
@@ -406,7 +406,7 @@ const flowColumns = computed(() => [
             <h2 class="cta-h2">{{ t('从一个 Agent 到一群 Agent 的运行底座。', 'From one agent to a fleet.') }}</h2>
             <p class="cta-sub">{{ t('初始化工作区、配置 LLM Provider、开始对话。5 分钟搭起你的第一个 Agent，随时扩展到一群。', 'Initialize the workspace, configure an LLM provider, and start chatting. Your first agent in under 5 minutes — scale to a fleet whenever you\'re ready.') }}</p>
             <div class="cta-btns">
-              <a class="btn-dark" :href="t('/zh/docs/what', '/docs/what')">{{ t('查看文档', 'Read the Docs') }}</a>
+              <a class="btn-dark" :href="withBase(t('/zh/docs/what', '/docs/what'))">{{ t('查看文档', 'Read the Docs') }}</a>
               <a class="btn-dark-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">GitHub</a>
             </div>
           </div>
@@ -442,7 +442,7 @@ const flowColumns = computed(() => [
           <span class="footer-tagline">{{ t('分布式 Agent Harness OS · 私有部署', 'Distributed Agent Harness OS · Self-hosted') }}</span>
         </div>
         <div class="footer-links">
-          <a :href="t('/zh/docs/what', '/docs/what')" class="footer-link">{{ t('文档', 'Docs') }}</a>
+          <a :href="withBase(t('/zh/docs/what', '/docs/what'))" class="footer-link">{{ t('文档', 'Docs') }}</a>
           <a href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener" class="footer-link">GitHub</a>
         </div>
       </div>

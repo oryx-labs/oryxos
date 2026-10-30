@@ -365,7 +365,7 @@ You are a professional DevOps assistant. When triggered, ... (task instructions)
 
 ## Contributing
 
-欢迎提交第一个 PR，请先阅读[贡献指南](https://oryxos.robustmq.com/docs/contributing)和 [GitHub 工作流入门](https://oryxos.robustmq.com/docs/github-workflow)。
+欢迎提交第一个 PR，请先阅读[贡献指南](https://oryx-labs.github.io/oryxos/zh/docs/contributing)和 [GitHub 工作流入门](https://oryx-labs.github.io/oryxos/zh/docs/github-workflow)。
 
 ## Contact group
 

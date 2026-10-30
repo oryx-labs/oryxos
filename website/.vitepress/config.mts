@@ -1,15 +1,18 @@
 import { defineConfig } from 'vitepress'
 
+const base = '/oryxos/'
+const siteUrl = 'https://oryx-labs.github.io/oryxos/'
+
 export default defineConfig({
   title: 'OryxOS',
   titleTemplate: ':title — OryxOS',
   description: 'The self-hosted Agent OS for the enterprise — describe a task in plain language, a team of agents delivers the result',
-  base: '/oryxos/',
+  base,
   cleanUrls: true,
   appearance: 'force-light',
 
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }],
     ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
     ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
     ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap' }],
@@ -18,13 +21,7 @@ export default defineConfig({
     ['meta', { name: 'robots', content: 'index, follow' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'OryxOS' }],
-    ['meta', { property: 'og:title', content: 'OryxOS — Enterprise Agent OS' }],
-    ['meta', { property: 'og:description', content: 'The self-hosted Agent OS for the enterprise — describe a task in plain language, a team of agents delivers the result' }],
-    ['meta', { property: 'og:url', content: 'https://oryxos.robustmq.com' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
-    ['meta', { name: 'twitter:title', content: 'OryxOS — Enterprise Agent OS' }],
-    ['meta', { name: 'twitter:description', content: 'The self-hosted Agent OS for the enterprise — describe a task in plain language, a team of agents delivers the result' }],
-    ['link', { rel: 'canonical', href: 'https://oryxos.robustmq.com' }],
   ],
 
   locales: {
@@ -156,6 +153,20 @@ export default defineConfig({
   },
 
   sitemap: {
-    hostname: 'https://oryxos.robustmq.com',
+    hostname: siteUrl,
+  },
+
+  transformHead({ page, title, description }) {
+    const pagePath = page.replace(/index\.md$/, '').replace(/\.md$/, '')
+    const canonicalUrl = new URL(pagePath || './', siteUrl).href
+
+    return [
+      ['meta', { property: 'og:title', content: title }],
+      ['meta', { property: 'og:description', content: description }],
+      ['meta', { property: 'og:url', content: canonicalUrl }],
+      ['meta', { name: 'twitter:title', content: title }],
+      ['meta', { name: 'twitter:description', content: description }],
+      ['link', { rel: 'canonical', href: canonicalUrl }],
+    ]
   },
 })
