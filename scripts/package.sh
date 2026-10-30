@@ -23,7 +23,7 @@ error() { echo "[ERROR] $*" >&2; }
 # if one already exists (open, closed, or merged), leave it untouched; otherwise
 # create an open PR against main after a successful package sync.
 ensure_pull_request() {
-  local branch="$1" existing_pr pr_title
+  local branch="$1" existing_pr origin_url repository pr_title
 
   # The default branch is not merged into itself.
   if [[ "$branch" == "main" ]]; then
@@ -36,7 +36,23 @@ ensure_pull_request() {
     return 0
   fi
 
-  if ! existing_pr=$(gh pr list --head "$branch" --state all --limit 1 \
+  # The remote sync creates its commit on the deployment host, so refresh the
+  # local tracking ref before gh resolves the branch name.
+  if ! git -C "$PROJECT_ROOT" fetch origin "$branch" --quiet; then
+    warn "Unable to refresh origin/${branch}; skipping pull request check."
+    return 0
+  fi
+
+  origin_url=$(git -C "$PROJECT_ROOT" remote get-url origin)
+  repository=${origin_url#https://github.com/}
+  repository=${repository#git@github.com:}
+  repository=${repository%.git}
+  if [[ "$repository" == "$origin_url" || "$repository" != */* ]]; then
+    warn "Origin is not a GitHub owner/repository URL; skipping pull request check."
+    return 0
+  fi
+
+  if ! existing_pr=$(gh pr list --repo "$repository" --head "$branch" --state all --limit 1 \
       --json url --jq '.[0].url' 2>/dev/null); then
     warn "Unable to check pull requests for ${branch}; package sync already completed."
     return 0
@@ -49,7 +65,7 @@ ensure_pull_request() {
 
   pr_title="dev: sync ${branch}"
   info "Creating pull request: ${pr_title}"
-  if gh pr create --base main --head "$branch" --title "$pr_title" \
+  if gh pr create --repo "$repository" --base main --head "$branch" --title "$pr_title" \
       --body "Automated pull request created by scripts/package.sh for branch ${branch}."; then
     info "Pull request created."
   else
