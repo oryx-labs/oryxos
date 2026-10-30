@@ -90,12 +90,12 @@ EOF
 }
 
 # GitHub calls merge requests pull requests. A branch may have at most one
-# relevant PR in this workflow. If an open PR already exists, update its title
+# relevant open PR in this workflow. If one already exists, update its title
 # from this invocation's file list; otherwise create one against main in the
-# OryxOS upstream repository.
+# OryxOS upstream repository. Closed or merged PRs do not block a new PR.
 ensure_pull_request() {
   local branch="$1" changed="$2" deleted="$3"
-  local existing_pr existing_url existing_state existing_title origin_url source_repository source_owner pr_head pr_title
+  local existing_pr existing_url existing_title origin_url source_repository source_owner pr_head pr_title
 
   # The default branch is not merged into itself.
   if [[ "$branch" == "main" ]]; then
@@ -128,16 +128,16 @@ ensure_pull_request() {
   [[ "$source_repository" != "$PR_REPOSITORY" ]] && pr_head="${source_owner}:${branch}"
 
   pr_title=$(build_pr_title "$changed" "$deleted")
-  if ! existing_pr=$(gh pr list --repo "$PR_REPOSITORY" --head "$pr_head" --state all --limit 1 \
-      --json url,state,title --jq '.[0] | [.url, .state, .title] | @tsv' 2>/dev/null); then
+  if ! existing_pr=$(gh pr list --repo "$PR_REPOSITORY" --head "$pr_head" --state open --limit 1 \
+      --json url,title --jq 'if length == 0 then "" else .[0].url + "|" + .[0].title end' 2>/dev/null); then
     warn "Unable to check pull requests for ${branch}; package sync already completed."
     return 0
   fi
 
   if [[ -n "$existing_pr" && "$existing_pr" != "null" ]]; then
-    IFS=$'\t' read -r existing_url existing_state existing_title <<< "$existing_pr"
+    IFS='|' read -r existing_url existing_title <<< "$existing_pr"
     info "Pull request already exists for ${branch}: ${existing_url}"
-    if [[ "$existing_state" == "OPEN" && "$existing_title" != "$pr_title" ]]; then
+    if [[ "$existing_title" != "$pr_title" ]]; then
       info "Updating pull request title: ${pr_title}"
       if gh pr edit "$existing_url" --title "$pr_title"; then
         info "Pull request title updated."
