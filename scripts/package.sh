@@ -128,8 +128,10 @@ ensure_pull_request() {
   [[ "$source_repository" != "$PR_REPOSITORY" ]] && pr_head="${source_owner}:${branch}"
 
   pr_title=$(build_pr_title "$changed" "$deleted")
-  if ! existing_pr=$(gh pr list --repo "$PR_REPOSITORY" --head "$pr_head" --state open --limit 1 \
-      --json url,title --jq 'if length == 0 then "" else .[0].url + "|" + .[0].title end' 2>/dev/null); then
+  # gh pr list does not consistently match fork-qualified heads. Query the
+  # GitHub pulls endpoint directly so `socutes:branch` is honoured.
+  if ! existing_pr=$(gh api "repos/${PR_REPOSITORY}/pulls?state=open&head=${pr_head}" \
+      --jq 'if length == 0 then "" else .[0].html_url + "|" + .[0].title end' 2>/dev/null); then
     warn "Unable to check pull requests for ${branch}; package sync already completed."
     return 0
   fi
