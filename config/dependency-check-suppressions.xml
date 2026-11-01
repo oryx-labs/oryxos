@@ -242,4 +242,22 @@
         <cve>CVE-2026-47842</cve>
         <cve>CVE-2026-59276</cve>
     </suppress>
+    <!-- Temporary for 0.1.9 release gate. Remove when frontend DOMPurify >= 3.4.17
+         and swagger-ui >= 5.34.1 land (tracks separate fix PR). -->
+    <suppress until="2026-12-01Z">
+        <notes><![CDATA[
+        Temporary acceptance for 0.1.9 release only — NOT a patched claim.
+        CVSS 10.0 findings CVE-2026-116803 / CVE-2026-116804 (GHSA-cg2g-xh64-v4q7 and sibling)
+        on RetireJS/npm DOMPurify embedded in:
+          - admin UI bundle (resolved 3.4.15 via oryxos-web frontend)
+          - swagger-ui 5.34.0 webjar (ships 3.4.16)
+        First patched DOMPurify is 3.4.17; swagger-ui 5.34.1 depends on ^3.4.17.
+        Current admin usage is DOMPurify.sanitize(marked.parse(...)) for markdown preview
+        (no IN_PLACE / SAFE_FOR_TEMPLATES). Swagger UI is optional docs surface.
+        Maintainers must merge the upgrade PR and delete this rule before until=2026-12-01.
+        ]]></notes>
+        <packageUrl regex="true">^pkg:javascript/DOMPurify@3\.4\.(15|16)$</packageUrl>
+        <cve>CVE-2026-116803</cve>
+        <cve>CVE-2026-116804</cve>
+    </suppress>
 </suppressions>
