@@ -56,7 +56,7 @@ Helm Chart 会为数据库和 `ORYXOS_MASTER_KEY` 配置 Secret；目前没有�
 ## 升级与回滚
 
 ```bash
-helm upgrade oryxos charts/oryxos --reuse-values --set image.tag=v0.1.8-RELEASE
+helm upgrade oryxos charts/oryxos --reuse-values --set image.tag=v0.1.9-RELEASE
 helm rollback oryxos            # 回上一版
 ```
 

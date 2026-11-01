@@ -5,6 +5,29 @@
 
 ## [Unreleased]
 
+## [0.1.9-RELEASE] - 2026-11-01
+
+### Added
+- 贡献流程以 Issue 为中心：六种结构化 Issue 表单、提案与任务标签，并禁用空白 Issue（#1054）。
+- Provider 凭证默认走无密钥 mock；落库 API key 在管理台掩码展示，留空替换字段则保留原凭证（#1052）。
+
+### Changed
+- 官网与文档重排为企业级 Agent Harness OS 定位；README 精简，详细说明迁入 `docs/README-reference*`（#1058/#1059/#1063）。
+- `package.sh` 打包脚本整理（#1061）。
+- 依赖升级：Spring Boot 4.1.1 → 4.1.2、Spring AI 2.0.1 → 2.0.2、Swagger UI 5.33.2 → 5.34.0、Apache POI OOXML 5.5.1 → 6.0.0；GitHub Actions 补丁升级（#1047/#1048/#1049）。
+
+### Fixed
+- 飞书通知渠道可编辑签名密钥；同类型更新时省略或未改的掩码敏感项保留，清空则删除（#1050）。
+- 授权审计：`request_method` / `resource_type` 按列宽截断，避免超长写入失败后拒绝记录丢失（#1042）。
+- 无 scheme 的 webhook URL 在渠道视图中按凭证掩码（#1038）。
+- Pages 文档链接修正（#1060）。
+
+### Tests
+- 补齐确定性拒绝映射、SSE 断开与心跳、SSE 监听载荷、版本化资产指针、跨库约束冲突、CLI init 幂等、知识库协调语义等契约覆盖（#1039~#1046）。
+
+### Docs
+- README 版本徽章升级至 0.1.9；Helm `appVersion`、健康检查契约示例与 A2A Agent Card 默认版本对齐 `0.1.9-RELEASE`。
+
 ## [0.1.8-RELEASE] - 2026-10-19
 
 ### Added
