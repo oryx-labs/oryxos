@@ -23,7 +23,7 @@
         <java.version>21</java.version>
         <spring-ai.version>2.0.2</spring-ai.version>
         <picocli.version>4.7.7</picocli.version>
-        <sqlite-jdbc.version>3.53.4.0</sqlite-jdbc.version>
+        <sqlite-jdbc.version>3.54.1.0</sqlite-jdbc.version>
         <!-- 025：覆盖 Boot BOM 的 42.7.11——CVE-2026-54291（CVSS 8.2）修复于 42.7.12（OSV 实证），OWASP 门禁线 8.0 -->
         <postgresql.version>42.7.12</postgresql.version>
         <pdfbox.version>3.0.8</pdfbox.version>
@@ -61,7 +61,7 @@
         <!-- #453：CycloneDX SBOM；CI 显式调用 makeAggregateBom，不绑 package 以免拖慢本地 verify -->
         <cyclonedx-maven-plugin.version>2.9.3</cyclonedx-maven-plugin.version>
         <!-- #453：JaCoCo UT coverage; LINE COVEREDRATIO gate (aggregate report on boot) -->
-        <jacoco.version>0.8.15</jacoco.version>
+        <jacoco.version>0.8.16</jacoco.version>
         <!-- Tip measured aggregate LINE ~66.93% (2026-09-21); floor slightly below. Override: -Djacoco.line.coverage.minimum= -->
         <jacoco.line.coverage.minimum>0.65</jacoco.line.coverage.minimum>
         <nvd.datafeed.url>https://dependency-check.github.io/DependencyCheck_Builder/nvd_cache/</nvd.datafeed.url>
@@ -374,7 +374,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-enforcer-plugin</artifactId>
-                    <version>3.6.3</version>
+                    <version>3.7.0</version>
                     <executions>
                         <execution>
                             <id>enforce-environment</id>
