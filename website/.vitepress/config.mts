@@ -6,7 +6,7 @@ const siteUrl = 'https://oryx-labs.github.io/oryxos/'
 export default defineConfig({
   title: 'OryxOS',
   titleTemplate: ':title — OryxOS',
-  description: 'The open-source, self-hosted Agent Harness OS for enterprise AI applications — build, run, govern, and optimize every AI application',
+  description: 'The open-source, self-hosted Agent Harness OS for enterprise AI applications — controlled execution, governance, evidence, and operational optimization',
   base,
   cleanUrls: true,
   appearance: 'force-light',
@@ -17,7 +17,7 @@ export default defineConfig({
     ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
     ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap' }],
     ['meta', { name: 'author', content: 'OryxOS' }],
-    ['meta', { name: 'keywords', content: 'OryxOS, Agent Harness OS, enterprise AI applications, AI runtime, AI governance, model routing, cost optimization, Agent runtime, Task runtime, MCP, self-hosted AI' }],
+    ['meta', { name: 'keywords', content: 'OryxOS, Agent Harness OS, enterprise AI applications, AI runtime, controlled execution, AI governance, evidence, model routing, cost optimization, Task runtime, MCP, self-hosted AI' }],
     ['meta', { name: 'robots', content: 'index, follow' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: 'OryxOS' }],

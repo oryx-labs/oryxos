@@ -1,62 +1,43 @@
 # Why OryxOS
 
-## Enterprises need an Agent Harness OS, not isolated Agents
+## The hard part starts after an Agent can write an answer
 
-Every company has work an AI application should be doing right now: the daily report someone compiles by hand, the alert that needs triaging at 3am, the PR digest, the customer question answered for the hundredth time. The models and Agent frameworks are ready. Yet in most companies, applications are still demos.
+It is increasingly easy to connect a model to a prompt and a few Tools. The hard work begins when that Agent needs to act inside a company: read internal knowledge, touch production systems, operate under a budget, prove what it did, and improve without creating a different stack for every application.
 
-Why? Four barriers, none of which is the model:
+That work does not belong inside every application. It belongs in a shared Harness.
 
-**Defining an agent requires engineers.** Today's mainstream path is code — a framework, a runtime, glue logic, a deployment. The people who best understand the work (ops, support, HR, finance) can describe it perfectly in one sentence, and can't ship an agent at all.
+## What companies need to control
 
-**The data has to leave.** Cloud agent platforms solve infrastructure by taking your data with it. For any company with data-residency, network-perimeter, or audit obligations, that's a non-starter.
+An enterprise AI application needs more than a capable model:
 
-**It's a black box.** An agent that can run shell commands, write files, and call external APIs — with no record of what it did, no whitelist on what it *can* do, and no one approving the dangerous steps — is not something an enterprise can put into production.
+- **Context** — the right business knowledge, current data, and task history;
+- **Environment** — a controlled place to execute work and connect to enterprise systems;
+- **Capability** — Models, Tools, MCP servers, Skills, and credentials that can be extended without being exposed without limit;
+- **Governance** — identity, authorization, policy, approval, sandboxing, audit, and cost boundaries;
+- **Proof and learning** — artifacts, acceptance evidence, trace, evaluation, and feedback.
 
-**One application is easy. A portfolio is not.** A single wrapped LLM loop is a script. Running many business applications — with shared models, Tools, MCP servers, identities, budgets, lifecycle, and governance — is a platform problem, and almost nobody hands you that layer.
+When every team implements these alone, the enterprise gets a collection of demos and scripts. Rules drift, costs are opaque, and an incident in one application teaches nothing to the next.
 
-## Our answer
+## OryxOS makes the shared layer explicit
 
-OryxOS addresses all four barriers as an open-source, self-hosted Agent Harness OS: one operating foundation to **build, run, govern, and optimize** enterprise AI applications.
+OryxOS is the open-source, self-hosted Agent Harness OS for that layer. It lets teams focus on the business application while the Runtime handles the common execution path: Task lifecycle, governed capabilities, model routing, cost attribution, audit, and operations.
 
-![natural language + Memory + Tools + MCP + Skills + Knowledge + Notify = a working Agent](/images/agent-formula-en.svg)
+The point is not to replace the best Agent. It is to make any Agent useful within an enterprise, without making the enterprise surrender control of its data, tools, and operating rules.
 
-- **Plain language instead of code.** One sentence — or one markdown directory — defines an Agent. The Runtime supplies Memory, built-in Tools, MCP connectors, Skills, notifications, and scheduling. The cost of defining an Agent trends toward zero.
-- **Your infrastructure, your data.** One self-hosted binary on your own servers or K8s. No managed service, no telemetry, no cloud lock-in.
-- **Glass box, not black box.** Every Tool call and every LLM call is persisted to audit tables from day one — what was invoked, with what arguments, what came back, and how long it took. Sandbox whitelists gate files, shell, and HTTP. Governance is part of the execution path, not a bolt-on.
-- **A shared platform for applications.** OryxOS provides common Agent and Task semantics, capability registries, model routing, cost optimization, scheduling, administration, and APIs across enterprise applications. Durable recovery, approval, evaluation, and broader Control Plane features are evolving.
+## A common foundation, different Harnesses
 
-**So every company can build and run its own AI applications — with a shared, governable foundation.**
+The same OS can support different applications because the business layer stays outside the kernel:
 
-## Agent teams are an evolving application pattern
+| Application Harness | Adds on top of OryxOS |
+| --- | --- |
+| Engineering | Code repositories, Coding Agents, CI, review, and test evidence |
+| Support | Knowledge, CRM, ticketing, approval, and human handoff |
+| Operations | Runbooks, observability, controlled actions, and incident evidence |
 
-Real work is rarely one skill. "Research the market, draft the report, have someone check the numbers, send it to the team" is a *team's* job — decompose, parallelize, review, deliver. OryxOS treats this as an evolving use case built on shared Tasks and governance, not as the definition of the current product:
+OryxOS supplies the Runtime and governance semantics they share. Each Harness owns the business workflow and acceptance standard that makes it useful.
 
-> **You publish a task in one sentence → OryxOS decomposes it → assembles a team of agents → they collaborate → the result is delivered.**
+## The direction
 
-![How an agent team delivers a task](/images/agent-team-en.svg)
+The current Runtime is a starting point, not the full destination. OryxOS is evolving durable Tasks, recovery, approval, policy, model routing, cost operations, evaluation, and distributed execution in public.
 
-The industry has proven the pattern works (planner–worker–reviewer crews, agent-to-agent protocols). OryxOS is building the runtime semantics needed to make that pattern trustworthy: auditable actions, policy and approval gates, cost attribution, bounded iterations, and recoverable Tasks. See the [Roadmap](./roadmap).
-
-## Why an OS, not another framework
-
-The common assumption is that better agents need better models. In production, the bottleneck is the **harness** — the scaffolding between the model and the real world: the right context assembled before every call, tools that are whitelisted rather than open-ended, execution that is isolated and audited, and messages that reliably reach their destination.
-
-A framework gives you one harness inside your own code. OryxOS ships the harness *as infrastructure* and shares it across applications — which changes who can use it: with a framework, engineers build Agents; with an OS, **anyone who can describe the work** can help deliver an enterprise AI application.
-
-## The foundation OryxOS provides
-
-**Self-hosted execution.** OryxOS runs on your own infrastructure, keeping enterprise data and operations inside your environment.
-
-**A reusable application runtime.** OryxOS gives multiple applications and Agents a shared harness: runtime lifecycle management, common capability registries, and stable interfaces for enterprise integration.
-
-**A controllable execution kernel.** The ReAct loop is self-implemented and inspectable; provider routing is explicit; execution and persistence remain under OryxOS control.
-
-**A platform evolving in public.** The single-node runtime kernel is available today: Agent definitions, model Providers, Memory, Knowledge, Tools, MCP, scheduling, sandbox controls, audit records, REST APIs, and the Web Manager. Durable Task recovery, approval workflows, model routing and cost operations, distributed runtime, and governed multi-Agent teams continue to evolve.
-
-## Why now
-
-**AI programming changed the economics.** A small, focused team can now build and maintain what used to take an engineering organization — and OryxOS itself is built that way, with AI, by contributors who own the result.
-
-**Open standards just matured.** MCP has become the de facto standard for tool interoperability; A2A is emerging for cross-agent coordination. OryxOS builds on both from the start, so what plugs into OryxOS works in the broader ecosystem and vice versa.
-
-**The practical reason is operational consistency.** When each application assembles its own prompt logic, tool dispatch, audit, and cost handling, every production incident becomes application-specific. A shared Runtime with explicit contracts, persistent audit, and a defined extension model lets the enterprise improve these concerns once and reuse the result everywhere.
+The direction is straightforward: enterprises should be able to build their own AI applications, use the best available Agents, and govern every meaningful action through one extensible operating foundation.
