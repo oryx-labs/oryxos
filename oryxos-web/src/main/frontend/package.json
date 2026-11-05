@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "dompurify": "^3.4.15",
+    "dompurify": "^3.4.17",
     "marked": "^18.0.7",
     "vue": "^3.5.13"
   },

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -20,12 +21,17 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 /** notify-channels 端点切片：CRUD 薄转发（冲突/非法→400、不存在→404，统一 ApiResponse）。 */
 class NotifyChannelApiControllerTest {
+
+  private static final String FEISHU_URL = "https://open.feishu.cn/open-apis/bot/v2/hook/test-hook";
+  private static final String FEISHU_SECRET = "feishu-signing-secret";
 
   private NotifyChannelRegistry registry;
   private MockMvc mvc;
@@ -54,6 +60,192 @@ class NotifyChannelApiControllerTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.data.name").value("team-lark"))
         .andExpect(jsonPath("$.data.type").value("feishu"));
+  }
+
+  @Test
+  @DisplayName("create 飞书签名密钥传入注册表_响应仅返回掩码")
+  void create_feishuSigningSecret_isSavedAndMasked() throws Exception {
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            post("/api/v1/notify-channels")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"name\":\"signed-feishu\",\"type\":\"feishu\",\"url\":\""
+                        + FEISHU_URL
+                        + "\",\"config\":{\"secret\":\""
+                        + FEISHU_SECRET
+                        + "\"}}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.config.secret").value("****cret"));
+
+    org.mockito.ArgumentCaptor<NotifyChannelDef> captor =
+        org.mockito.ArgumentCaptor.forClass(NotifyChannelDef.class);
+    verify(registry).save(captor.capture());
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().config())
+        .containsEntry("secret", FEISHU_SECRET);
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "",
+        ",\"config\":{}",
+        ",\"config\":{\"format\":\"text\"}",
+        ",\"config\":{\"secret\":\"****cret\"}"
+      })
+  @DisplayName("update 同类型飞书_未提交或未修改签名密钥时保留原值")
+  void update_feishuUnchangedSecret_keepsOriginal(String configJson) throws Exception {
+    when(registry.find("signed-feishu"))
+        .thenReturn(
+            Optional.of(
+                new NotifyChannelDef(
+                    "signed-feishu",
+                    "feishu",
+                    FEISHU_URL,
+                    "旧描述",
+                    java.util.Map.of("secret", FEISHU_SECRET))));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            put("/api/v1/notify-channels/signed-feishu")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"type\":\"feishu\",\"url\":\"https://open.feishu.cn/open-apis/bot/v2/hook/****\","
+                        + "\"description\":\"新描述\""
+                        + configJson
+                        + "}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.config.secret").value("****cret"));
+
+    org.mockito.ArgumentCaptor<NotifyChannelDef> captor =
+        org.mockito.ArgumentCaptor.forClass(NotifyChannelDef.class);
+    verify(registry).save(captor.capture());
+    NotifyChannelDef saved = captor.getValue();
+    org.assertj.core.api.Assertions.assertThat(saved.config())
+        .containsEntry("secret", FEISHU_SECRET);
+    org.assertj.core.api.Assertions.assertThat(saved.url()).isEqualTo(FEISHU_URL);
+    org.assertj.core.api.Assertions.assertThat(saved.description()).isEqualTo("新描述");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "   "})
+  @DisplayName("update 飞书签名密钥显式留空_移除原密钥_普通配置按提交内容替换")
+  void update_feishuExplicitBlankSecret_removesOriginal(String secret) throws Exception {
+    when(registry.find("signed-feishu"))
+        .thenReturn(
+            Optional.of(
+                new NotifyChannelDef(
+                    "signed-feishu",
+                    "feishu",
+                    FEISHU_URL,
+                    "旧描述",
+                    java.util.Map.of("secret", FEISHU_SECRET, "format", "post", "title", "日报"))));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            put("/api/v1/notify-channels/signed-feishu")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"type\":\"feishu\",\"url\":\""
+                        + FEISHU_URL
+                        + "\",\"description\":\"新描述\",\"config\":{\"secret\":\""
+                        + secret
+                        + "\",\"format\":\"text\"}}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.config.secret").doesNotExist())
+        .andExpect(jsonPath("$.data.config.format").value("text"));
+
+    org.mockito.ArgumentCaptor<NotifyChannelDef> captor =
+        org.mockito.ArgumentCaptor.forClass(NotifyChannelDef.class);
+    verify(registry).save(captor.capture());
+    NotifyChannelDef saved = captor.getValue();
+    org.assertj.core.api.Assertions.assertThat(saved.config())
+        .containsExactlyEntriesOf(java.util.Map.of("format", "text"));
+    org.assertj.core.api.Assertions.assertThat(saved.description()).isEqualTo("新描述");
+  }
+
+  @Test
+  @DisplayName("update 未配置签名的飞书渠道_空密钥保持未配置状态")
+  void update_unsignedFeishu_blankSecretStaysAbsent() throws Exception {
+    when(registry.find("signed-feishu"))
+        .thenReturn(Optional.of(new NotifyChannelDef("signed-feishu", "feishu", FEISHU_URL, null)));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            put("/api/v1/notify-channels/signed-feishu")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"type\":\"feishu\",\"url\":\""
+                        + FEISHU_URL
+                        + "\",\"config\":{\"secret\":\"\"}}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.config.secret").doesNotExist());
+
+    org.mockito.ArgumentCaptor<NotifyChannelDef> captor =
+        org.mockito.ArgumentCaptor.forClass(NotifyChannelDef.class);
+    verify(registry).save(captor.capture());
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().config()).isEmpty();
+  }
+
+  @Test
+  @DisplayName("update 飞书签名密钥新值生效_响应不泄露明文")
+  void update_feishuNewSecret_replacesOriginal() throws Exception {
+    when(registry.find("signed-feishu"))
+        .thenReturn(
+            Optional.of(
+                new NotifyChannelDef(
+                    "signed-feishu",
+                    "feishu",
+                    FEISHU_URL,
+                    null,
+                    java.util.Map.of("secret", FEISHU_SECRET))));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            put("/api/v1/notify-channels/signed-feishu")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"type\":\"feishu\",\"url\":\""
+                        + FEISHU_URL
+                        + "\",\"config\":{\"secret\":\"updated-signing-value\"}}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.config.secret").value("****alue"));
+
+    org.mockito.ArgumentCaptor<NotifyChannelDef> captor =
+        org.mockito.ArgumentCaptor.forClass(NotifyChannelDef.class);
+    verify(registry).save(captor.capture());
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().config())
+        .containsEntry("secret", "updated-signing-value");
+  }
+
+  @Test
+  @DisplayName("update 切换渠道类型_不沿用原飞书签名密钥")
+  void update_changedType_doesNotCarryOverSecret() throws Exception {
+    when(registry.find("signed-feishu"))
+        .thenReturn(
+            Optional.of(
+                new NotifyChannelDef(
+                    "signed-feishu",
+                    "feishu",
+                    FEISHU_URL,
+                    null,
+                    java.util.Map.of("secret", FEISHU_SECRET))));
+    when(registry.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+    mvc.perform(
+            put("/api/v1/notify-channels/signed-feishu")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"type\":\"wecom\",\"url\":\"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test-key\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.config.secret").doesNotExist());
+
+    org.mockito.ArgumentCaptor<NotifyChannelDef> captor =
+        org.mockito.ArgumentCaptor.forClass(NotifyChannelDef.class);
+    verify(registry).save(captor.capture());
+    org.assertj.core.api.Assertions.assertThat(captor.getValue().config())
+        .doesNotContainKey("secret");
   }
 
   @Test
