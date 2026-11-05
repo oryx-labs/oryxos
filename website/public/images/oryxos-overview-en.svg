@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 610" role="img" aria-labelledby="title desc">
   <title id="title">OryxOS architecture overview</title>
-  <desc id="desc">Enterprise AI applications build on OryxOS, which provides runtime, governance, and model routing and cost optimization across enterprise resources.</desc>
+  <desc id="desc">Enterprise AI applications build on OryxOS, which provides shared runtime, controlled environments, governance, evidence, and model routing and cost optimization across enterprise resources.</desc>
   <defs>
     <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#f97316"/></marker>
     <style>text{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}.title{font-size:18px;font-weight:700}.label{font-size:15px;font-weight:700}.body{font-size:13px}.small{font-size:12px}</style>
@@ -15,11 +15,11 @@
   <text x="540" y="221" text-anchor="middle" fill="#fb923c" class="title">OryxOS · Agent Harness OS</text>
   <rect x="162" y="244" width="756" height="67" rx="10" fill="#2b1909" stroke="#fb923c"/>
   <text x="540" y="272" text-anchor="middle" fill="#fdba74" class="label">Agent &amp; Task Runtime</text>
-  <text x="540" y="295" text-anchor="middle" fill="#fed7aa" class="small">context · memory · knowledge · flows · state · artifacts</text>
+  <text x="540" y="295" text-anchor="middle" fill="#fed7aa" class="small">context · environment · memory · knowledge · state · artifacts / evidence</text>
   <rect x="162" y="333" width="360" height="116" rx="10" fill="#17102a" stroke="#a855f7"/>
   <text x="342" y="361" text-anchor="middle" fill="#d8b4fe" class="label">Governance &amp; Operations</text>
   <text x="342" y="387" text-anchor="middle" fill="#e9d5ff" class="small">identity · authorization · policy · approval</text>
-  <text x="342" y="410" text-anchor="middle" fill="#e9d5ff" class="small">sandbox · audit · trace · evaluation · reliability</text>
+  <text x="342" y="410" text-anchor="middle" fill="#e9d5ff" class="small">sandbox · audit · trace · evidence · evaluation · reliability</text>
   <text x="342" y="433" text-anchor="middle" fill="#c4b5fd" class="small">governance is part of execution</text>
   <rect x="558" y="333" width="360" height="116" rx="10" fill="#10263a" stroke="#38bdf8"/>
   <text x="738" y="361" text-anchor="middle" fill="#7dd3fc" class="label">Extensible Capabilities</text>

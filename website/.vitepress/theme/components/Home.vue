@@ -11,8 +11,8 @@ const capabilities = computed(() => [
     num: '01',
     title: t('Agent 与 Task Runtime', 'Agent & Task Runtime'),
     desc: t(
-      '为企业应用提供一致的 Agent 执行、Task 生命周期、上下文、记忆、状态与交付物语义。应用关注业务，运行底座负责把工作可靠地跑起来。',
-      'Gives enterprise applications consistent semantics for Agent execution, Task lifecycle, context, memory, state, and artifacts. Applications focus on business work; the platform runs it reliably.'
+      '为企业应用提供一致的 Agent 执行、Task 生命周期、上下文、受控环境、状态、交付物与证据语义。应用关注业务，运行底座负责把工作可靠地跑起来。',
+      'Gives enterprise applications consistent semantics for Agent execution, Task lifecycle, context, controlled environments, state, artifacts, and evidence. Applications focus on business work; the platform runs it reliably.'
     ),
     code: `.oryxos/agents/ops-agent/
 ├── AGENT.md        # frontmatter + task body
@@ -92,8 +92,8 @@ POST /api/v1/sandbox/whitelist/SHELL
     num: '06',
     title: t('运行、成本与可靠性', 'Operations, Cost & Reliability'),
     desc: t(
-      '将 Trace、成本归集、评测、重试、恢复与可观测性放在统一底座中，让企业能够运行、观察并持续优化生产中的 AI 应用。',
-      'Places traceability, cost attribution, evaluation, retries, recovery, and observability in one foundation so enterprises can run, observe, and continuously optimize production AI applications.'
+      '将验收证据、Trace、成本归集、评测、重试、恢复与可观测性放在统一底座中，让企业能够运行、观察并持续优化生产中的 AI 应用。',
+      'Places acceptance evidence, traceability, cost attribution, evaluation, retries, recovery, and observability in one foundation so enterprises can run, observe, and continuously optimize production AI applications.'
     ),
     code: `❯ oryxos serve --port 8080
 
@@ -228,8 +228,8 @@ const flowColumns = computed(() => [
 
         <p class="hero-sub">
           {{ t(
-            '企业团队在 OryxOS 上组合 Agent、模型、知识、Tool、MCP 与 Flow，构建自己的研发自动化、知识支持、工单协同和运维应用。OryxOS 提供共享 Runtime、治理、模型路由与成本优化；应用自由组合能力，但不能绕过治理。',
-            'Enterprise teams compose Agents, models, knowledge, Tools, MCP, and Flows on OryxOS to build their own engineering automation, knowledge support, ticketing, and operations applications. OryxOS provides the shared Runtime, governance, model routing, and cost optimization; applications compose freely, but cannot bypass governance.'
+            '企业在 OryxOS 上构建自己的 AI 应用，把任意 Agent 放进受控的上下文、执行环境、Tool、权限、验收与治理体系中运行。应用自由组合能力，但不能绕过治理。',
+            'Enterprises build their own AI applications on OryxOS, running any Agent in controlled context, execution environments, Tools, permissions, acceptance, and governance. Applications compose freely, but cannot bypass governance.'
           ) }}
         </p>
 
@@ -324,7 +324,7 @@ const flowColumns = computed(() => [
       <div class="section-inner">
         <div class="section-header">
           <span class="section-label">{{ t('整体架构', 'ARCHITECTURE') }}</span>
-          <h2 class="section-h2">{{ t('企业应用构建在统一运行与治理底座之上。', 'Enterprise applications, one shared runtime and governance foundation.') }}</h2>
+          <h2 class="section-h2">{{ t('企业应用在同一套 Harness Runtime 中运行。', 'Enterprise applications run on one shared Harness Runtime.') }}</h2>
         </div>
 
         <div class="arch-diagram">
@@ -338,7 +338,7 @@ const flowColumns = computed(() => [
       <div class="section-inner">
         <div class="section-header">
           <span class="section-label">{{ t('核心能力', 'CORE CAPABILITIES') }}</span>
-          <h2 class="section-h2">{{ t('应用负责业务，OryxOS 负责让能力可组合、行动可治理。', 'Applications own the business. OryxOS makes capabilities composable and actions governable.') }}</h2>
+          <h2 class="section-h2">{{ t('应用负责业务；OryxOS 负责上下文、环境、能力与治理。', 'Applications own the business; OryxOS provides context, environment, capabilities, and governance.') }}</h2>
         </div>
 
         <div class="caps-grid">
@@ -401,7 +401,7 @@ const flowColumns = computed(() => [
           <div class="cta-left">
             <span class="section-label label-dark">{{ t('立即开始', 'GET STARTED') }}</span>
             <h2 class="cta-h2">{{ t('为企业构建自己的 AI 应用运行底座。', 'Build the operating foundation for your enterprise AI applications.') }}</h2>
-            <p class="cta-sub">{{ t('从一个受治理的应用开始，将模型、知识、Tool 与企业系统组合起来；治理、成本与运行证据由底座统一承接。', 'Start with one governed application. Compose models, knowledge, Tools, and enterprise systems while the platform carries governance, cost, and execution evidence.') }}</p>
+            <p class="cta-sub">{{ t('从一个应用开始，接入合适的 Agent、模型、知识与企业系统；运行环境、治理、成本与执行证据由底座统一承接。', 'Start with one application and connect the right Agents, models, knowledge, and enterprise systems; the platform carries the environment, governance, cost, and execution evidence.') }}</p>
             <div class="cta-btns">
               <a class="btn-dark" :href="withBase(t('/zh/docs/what', '/docs/what'))">{{ t('查看文档', 'Read the Docs') }}</a>
               <a class="btn-dark-ghost" href="https://github.com/oryx-labs/oryxos" target="_blank" rel="noopener">GitHub</a>
