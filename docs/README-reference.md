@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/public/images/logo.svg" alt="OryxOS" width="256"/>
+  <img src="../website/public/images/logo.svg" alt="OryxOS" width="256"/>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · <a href="README.zh-CN.md">中文</a>
+  <a href="README-reference.md">English</a> · <a href="README-reference.zh-CN.md">中文</a>
 </p>
 
 ---
@@ -22,7 +22,7 @@
 **OryxOS is an open-source Agent Harness OS for enterprise AI applications.** Build R&D automation, knowledge support, ticket collaboration, operations diagnostics, and other domain applications on a shared runtime. Applications bring their business rules, data, systems, and user experience; OryxOS provides the execution, governance, and optimization foundation.
 
 <p align="center">
-  <img src="website/public/images/runtime-governance-en.svg" alt="enterprise AI applications connect to the OryxOS Agent Runtime and governance foundation" width="100%"/>
+  <img src="../website/public/images/runtime-governance-en.svg" alt="enterprise AI applications connect to the OryxOS Agent Runtime and governance foundation" width="100%"/>
 </p>
 
 OryxOS lets application teams focus on domain outcomes while the platform organizes how AI Tasks run, how Agents access capabilities, and how every action is governed, observed, and improved. The application composes Agents, models, Knowledge, Tools, MCP servers, and Flows; OryxOS supplies the shared runtime semantics that make those capabilities safe and operable across the organization.
@@ -37,7 +37,7 @@ OryxOS lets application teams focus on domain outcomes while the platform organi
 Everything an agent needs is **built into the OS** — an agent just references what it wants:
 
 <p align="center">
-  <img src="website/public/images/agent-formula-en.svg" alt="natural language (md) + Memory + Tools + MCP + Skills + Knowledge + Notify = a working Agent" width="100%"/>
+  <img src="../website/public/images/agent-formula-en.svg" alt="natural language (md) + Memory + Tools + MCP + Skills + Knowledge + Notify = a working Agent" width="100%"/>
 </p>
 
 This is the practical starting point: **drive the cost of defining an Agent toward zero.** You write intent; the runtime supplies capabilities, safety boundaries, and execution evidence.
@@ -61,7 +61,7 @@ Task -> Identity -> Authorization -> Policy -> Approval
 The current agent-team pipeline remains useful as an example of how a Task can be decomposed and delivered. Team orchestration and broader multi-agent coordination are evolving capabilities, not the definition of the current product:
 
 <p align="center">
-  <img src="website/public/images/pipeline-en.svg" alt="a task can be decomposed into collaborating agents and delivered with audit and human approval" width="100%"/>
+  <img src="../website/public/images/pipeline-en.svg" alt="a task can be decomposed into collaborating agents and delivered with audit and human approval" width="100%"/>
 </p>
 
 ## Model → Harness → OS
@@ -102,7 +102,7 @@ Tools are available through a three-tier extension model: zero-code `SKILL.md` �
 ## Architecture
 
 <p align="center">
-  <img src="website/public/images/architecture.svg" alt="OryxOS Architecture" width="100%"/>
+  <img src="../website/public/images/architecture.svg" alt="OryxOS Architecture" width="100%"/>
 </p>
 
 The current implementation diagram shows the single-node runtime. The target platform model separates enterprise applications from shared OryxOS services: the **Agent Runtime** executes Context, Session, model turns, and Tools; the **Task Runtime** manages durable work and Artifacts; **model routing and cost optimization** select and account for model use; and the **Control Plane** coordinates identity, policy, approval, audit, cost, and evaluation. These layers are evolving at different speeds, so the roadmap below distinguishes what is available from what is still being built.
@@ -236,7 +236,7 @@ java -jar $JAR chat --profile default      # interactive multi-turn chat
 java -jar $JAR serve --port 8080           # REST API + Web Manager (same as start.sh)
 ```
 
-The workspace defaults to `.oryxos/` but is configurable — set `ORYXOS_ROOT` (or `-Doryxos.root=`, or `oryxos.root` in `application.yml`) to point OryxOS at a custom workspace directory. The selected workspace root and its checked native execution view are auto-added to the file sandbox whitelist. Shared deployments use the `shared-posix` provider with a pre-provisioned `.workspace-id`; see the [shared workspace guide](docs/SharedVolumeGuide.md) for plugin requirements, conflict handling, output isolation and recovery.
+The workspace defaults to `.oryxos/` but is configurable — set `ORYXOS_ROOT` (or `-Doryxos.root=`, or `oryxos.root` in `application.yml`) to point OryxOS at a custom workspace directory. The selected workspace root and its checked native execution view are auto-added to the file sandbox whitelist. Shared deployments use the `shared-posix` provider with a pre-provisioned `.workspace-id`; see the [shared workspace guide](SharedVolumeGuide.md) for plugin requirements, conflict handling, output isolation and recovery.
 
 ### Docker alternative
 
@@ -249,7 +249,7 @@ curl http://localhost:8080/api/v1/health      # → {"code":0,…}
 
 The container boots keyless (configure providers in the web console afterwards) and keeps **all state** — `config/`, the `.oryxos/` workspace, `oryxos.db`, logs — in the `/data` volume, so upgrading means pulling a new tag and recreating the container. The image runs as a non-root user and carries a built-in healthcheck against `/api/v1/health`; see `docker-compose.yml` at the repo root for a ready-to-use compose stack. To build the image locally from source: `make docker` (after `make build`).
 
-> The example above uses default SQLite — run **one** container. Multi-replica deployments require shared PostgreSQL and a shared workspace. See the [K8s deployment guide](docs/K8sDeployGuide.md) and [shared-volume requirements](docs/SharedVolumeGuide.md). Local kind validation does not establish cross-host storage HA; the [042 acceptance record](specs/042-workspace-storage/acceptance.md) keeps that verification pending.
+> The example above uses default SQLite — run **one** container. Multi-replica deployments require shared PostgreSQL and a shared workspace. See the [K8s deployment guide](K8sDeployGuide.md) and [shared-volume requirements](SharedVolumeGuide.md). Local kind validation does not establish cross-host storage HA; the [042 acceptance record](../specs/042-workspace-storage/acceptance.md) keeps that verification pending.
 
 ### Web Service & Web Manager
 
@@ -264,7 +264,7 @@ The container boots keyless (configure providers in the web console afterwards) 
 The Web Manager is a Vue 3 + Vite console (same stack and dark-orange theme as the site) with pages for **agent management** (create, one-sentence LLM generation, file editor, per-agent session and memory views), **provider and notify-channel CRUD**, **scheduled tasks**, **sessions, tools, sandbox whitelist**, and a **workspace file browser**. It is built to `oryxos-web/src/main/resources/static/admin/` and served by Spring at `/admin`, so the fat JAR ships it — no separate frontend process.
 
 <p align="center">
-  <img src="website/public/images/manager.jpg" alt="OryxOS Web Manager console" width="100%"/>
+  <img src="../website/public/images/manager.jpg" alt="OryxOS Web Manager console" width="100%"/>
 </p>
 
 #### Manager dev mode (hot reload)
@@ -381,4 +381,4 @@ First PRs are welcome — see the [Contributing Guide](https://oryx-labs.github.
 
 ## License
 
-[Apache License 2.0](LICENSE) · [oryx-labs](https://github.com/oryx-labs) · Goal: Apache Software Foundation top-level project
+[Apache License 2.0](../LICENSE) · [oryx-labs](https://github.com/oryx-labs) · Goal: Apache Software Foundation top-level project
