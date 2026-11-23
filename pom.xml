@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.2</version>
+        <version>4.2.0</version>
         <relativePath/>
     </parent>
 
@@ -21,7 +21,7 @@
 
     <properties>
         <java.version>21</java.version>
-        <spring-ai.version>2.0.2</spring-ai.version>
+        <spring-ai.version>2.1.0</spring-ai.version>
         <picocli.version>4.7.7</picocli.version>
         <sqlite-jdbc.version>3.54.1.0</sqlite-jdbc.version>
         <!-- 025：覆盖 Boot BOM 的 42.7.11——CVE-2026-54291（CVSS 8.2）修复于 42.7.12（OSV 实证），OWASP 门禁线 8.0 -->
@@ -30,7 +30,7 @@
         <poi.version>6.0.0</poi.version>
         <commons-io.version>2.22.0</commons-io.version>
         <commons-compress.version>1.28.0</commons-compress.version>
-        <oapi-sdk.version>2.8.7</oapi-sdk.version>
+        <oapi-sdk.version>2.9.0</oapi-sdk.version>
 
         <!-- Infrastructure libraries -->
         <!-- Boot4: jackson-bom.version => tools.jackson (3.x). Jackson2 pin uses jackson-2-bom.version -->
@@ -45,10 +45,10 @@
         <!-- Boot 3.5.x line; 2.9+/3.x need Boot 4 -->
         <springdoc.version>3.2.0</springdoc.version>
         <!-- springdoc 2.8.17 still ships older swagger-ui; override for DOMPurify CVEs -->
-        <swagger-ui.version>5.34.1</swagger-ui.version>
+        <swagger-ui.version>5.35.1</swagger-ui.version>
 
         <!-- Quality / format / security plugins -->
-        <spotless.version>3.10.4</spotless.version>
+        <spotless.version>3.11.0</spotless.version>
         <!-- PMD 7 requires maven-pmd-plugin 3.22+; 3.28 ships 7.17, we override to 7.27. -->
         <maven-pmd-plugin.version>3.28.0</maven-pmd-plugin.version>
         <pmd.version>7.29.0</pmd.version>
