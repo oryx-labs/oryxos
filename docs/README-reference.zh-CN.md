@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/public/images/logo.svg" alt="OryxOS" width="256"/>
+  <img src="../website/public/images/logo.svg" alt="OryxOS" width="256"/>
 </p>
 
 <p align="center">
@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · <a href="README.zh-CN.md">中文</a>
+  <a href="README-reference.md">English</a> · <a href="README-reference.zh-CN.md">中文</a>
 </p>
 
 ---
@@ -22,13 +22,13 @@
 **OryxOS 是面向企业 AI 应用的开源 Agent Harness OS。** 企业可以在共享运行时上构建研发自动化、知识支持、工单协同、运维诊断和其他领域应用。应用负责业务规则、数据、系统集成和用户体验；OryxOS 提供统一的执行与治理底座。
 
 <p align="center">
-  <img src="website/public/images/runtime-governance-zh.svg" alt="企业 AI 应用连接 OryxOS Agent Runtime 与治理底座" width="100%"/>
+  <img src="../website/public/images/runtime-governance-zh.svg" alt="企业 AI 应用连接 OryxOS Agent Runtime 与治理底座" width="100%"/>
 </p>
 
 OryxOS 让应用团队专注业务结果，平台负责 AI Task 如何运行、Agent 如何获得能力，以及行动如何被治理、观察和持续改进。
 
 - **当前可用**：通过一句话或一个 Markdown 目录定义 Agent，并在自己的基础设施上使用模型 Provider、Memory、Knowledge、内置 Tool、MCP、Skill、通知、调度、沙箱控制、审计记录、REST API 和 Web Manager。
-- **发展方向**：让持久、受治理的 Task 成为企业 AI 应用的共同执行单元，持续增强恢复、审批、成本、评测和跨应用优化能力。参见[路线图](docs/VisionAndRoadmap.md)。
+- **发展方向**：让持久、受治理的 Task 成为企业 AI 应用的共同执行单元，持续增强恢复、审批、成本、评测和跨应用优化能力。参见[路线图](VisionAndRoadmap.md)。
 
 > 长期愿景：进入 Apache Software Foundation，发展为顶级项目。
 
@@ -37,7 +37,7 @@ OryxOS 让应用团队专注业务结果，平台负责 AI Task 如何运行、A
 Agent 所需的能力由 **OS 统一提供**，Agent 只需要声明要使用什么：
 
 <p align="center">
-  <img src="website/public/images/agent-formula-zh.svg" alt="自然语言（md）+ Memory + Tools + MCP + Skills + Knowledge + Notify = 可运行的 Agent" width="100%"/>
+  <img src="../website/public/images/agent-formula-zh.svg" alt="自然语言（md）+ Memory + Tools + MCP + Skills + Knowledge + Notify = 可运行的 Agent" width="100%"/>
 </p>
 
 这是一种务实的起点：**让定义 Agent 的成本趋近于零。** 你描述意图，Runtime 提供能力、安全边界和执行证据。
@@ -61,7 +61,7 @@ Task -> Identity -> Authorization -> Policy -> Approval
 当前的 Agent 团队流程仍然可以用来说明 Task 如何拆解和交付。团队编排和更广泛的多 Agent 协作属于持续演进能力，不是当前产品定义的全部：
 
 <p align="center">
-  <img src="website/public/images/pipeline-zh.svg" alt="Task 可以拆解为协作 Agent，并在审计和人工审批下交付" width="100%"/>
+  <img src="../website/public/images/pipeline-zh.svg" alt="Task 可以拆解为协作 Agent，并在审计和人工审批下交付" width="100%"/>
 </p>
 
 ## Model → Harness → OS
@@ -102,7 +102,7 @@ Tool 调用经过文件路径、命令和域名白名单检查。每次 Tool 调
 ## Architecture
 
 <p align="center">
-  <img src="website/public/images/architecture.svg" alt="OryxOS 架构" width="100%"/>
+  <img src="../website/public/images/architecture.svg" alt="OryxOS 架构" width="100%"/>
 </p>
 
 当前架构图展示的是单节点 Runtime。目标平台模型将企业应用与 OryxOS 共享服务分开：Agent Runtime 执行 Context、Session、模型轮次和 Tool；Task Runtime 管理持久工作与交付物；Control Plane 协调身份、策略、审批、审计、成本和评测。这些层的建设进度不同，因此下面的路线图会区分可用能力和仍在建设中的能力。
@@ -123,7 +123,7 @@ Tool 调用经过文件路径、命令和域名白名单检查。每次 Tool 调
 **可用 — 单节点 Runtime Kernel** ✅
 通过一句话或一个目录定义 Agent，无需重启即可生效。单节点已经支持 Memory、内置 Tool、MCP、Skill、通知、调度、沙箱控制、审计记录、REST API 和 Web Manager。
 
-**演进中 — 共享 Task Runtime 与 Control Plane**（参见 [Vision & Roadmap](docs/VisionAndRoadmap.md)）
+**演进中 — 共享 Task Runtime 与 Control Plane**（参见 [Vision & Roadmap](VisionAndRoadmap.md)）
 
 - **A · 持久 Task**：稳定的 Task 生命周期、Checkpoint、交付物、等待、取消、重试和恢复语义
 - **B · 治理 Control Plane**：身份上下文、策略分发、审批流程、组织边界和管理生命周期
@@ -231,7 +231,7 @@ java -jar $JAR chat --profile default      # 交互式多轮聊天
 java -jar $JAR serve --port 8080           # REST API + Web Manager（与 start.sh 相同）
 ```
 
-工作区默认为 `.oryxos/`，也可以通过 `ORYXOS_ROOT`（或 `-Doryxos.root=`、`application.yml` 中的 `oryxos.root`）指定其他目录。选定的工作区根目录及其检查过的原生执行视图会自动加入文件沙箱白名单。共享部署使用 `shared-posix` Provider 和预置的 `.workspace-id`；插件要求、冲突处理、输出隔离和恢复流程见[共享工作区指南](docs/SharedVolumeGuide.md)。
+工作区默认为 `.oryxos/`，也可以通过 `ORYXOS_ROOT`（或 `-Doryxos.root=`、`application.yml` 中的 `oryxos.root`）指定其他目录。选定的工作区根目录及其检查过的原生执行视图会自动加入文件沙箱白名单。共享部署使用 `shared-posix` Provider 和预置的 `.workspace-id`；插件要求、冲突处理、输出隔离和恢复流程见[共享工作区指南](SharedVolumeGuide.md)。
 
 ### Docker 替代方式
 
@@ -244,7 +244,7 @@ curl http://localhost:8080/api/v1/health      # -> {"code":0,...}
 
 容器无需 Key 即可启动（之后在 Web Manager 中配置 Provider），并将 `config/`、`.oryxos/` 工作区、`oryxos.db` 和日志全部保存在 `/data` 卷中。镜像以非 root 用户运行，并内置访问 `/api/v1/health` 的 healthcheck。仓库根目录的 `docker-compose.yml` 提供可直接使用的 compose 配置。本地构建镜像可执行 `make docker`（先执行 `make build`）。
 
-> 上例使用默认 SQLite，请只运行一个容器。多副本部署需要共享 PostgreSQL 和共享工作区，参见 [K8s 部署指南](docs/K8sDeployGuide.md) 与[共享卷要求](docs/SharedVolumeGuide.md)。本地 kind 验证不代表跨主机存储 HA；[042 验收记录](specs/042-workspace-storage/acceptance.md)仍保留该验证项。
+> 上例使用默认 SQLite，请只运行一个容器。多副本部署需要共享 PostgreSQL 和共享工作区，参见 [K8s 部署指南](K8sDeployGuide.md) 与[共享卷要求](SharedVolumeGuide.md)。本地 kind 验证不代表跨主机存储 HA；[042 验收记录](../specs/042-workspace-storage/acceptance.md)仍保留该验证项。
 
 ### Web Service 与 Web Manager
 
@@ -259,7 +259,7 @@ curl http://localhost:8080/api/v1/health      # -> {"code":0,...}
 Web Manager 是 Vue 3 + Vite 管理台（与官网使用相同技术栈和深橙色主题），包含 **Agent 管理**（创建、用一句话生成、文件编辑、Agent 会话和记忆）、**Provider 和通知渠道 CRUD**、**定时任务**、**Session、Tool、沙箱白名单**以及**工作区文件浏览器**。它会构建到 `oryxos-web/src/main/resources/static/admin/`，由 Spring 在 `/admin` 提供，因此 fat JAR 不需要单独的前端进程即可包含管理台。
 
 <p align="center">
-  <img src="website/public/images/manager.jpg" alt="OryxOS Web Manager 管理台" width="100%"/>
+  <img src="../website/public/images/manager.jpg" alt="OryxOS Web Manager 管理台" width="100%"/>
 </p>
 
 #### Manager 开发模式（热更新）
@@ -373,4 +373,4 @@ You are a professional DevOps assistant. When triggered, ... (task instructions)
 
 ## License
 
-[Apache License 2.0](LICENSE) · [oryx-labs](https://github.com/oryx-labs) · 目标：Apache Software Foundation 顶级项目
+[Apache License 2.0](../LICENSE) · [oryx-labs](https://github.com/oryx-labs) · 目标：Apache Software Foundation 顶级项目
